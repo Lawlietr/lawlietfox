@@ -1,0 +1,32 @@
+# HG changeset patch
+# User Blair McBride <bmcbride@mozilla.com>
+# Date 1317876287 -46800
+# Node ID 7fe33bd2cabe66624276906f646e2d0adcf6f9e9
+# Parent  90575e23ea935ef05fd9a6c9f4e8c872d05e4c67
+Bug 690699 - Addon Manager severely broken if autoUpdateDefault preference is missing.
+
+diff --git a/toolkit/mozapps/extensions/AddonManager.jsm b/toolkit/mozapps/extensions/AddonManager.jsm
+--- a/toolkit/mozapps/extensions/AddonManager.jsm
++++ b/toolkit/mozapps/extensions/AddonManager.jsm
+@@ -1086,17 +1086,20 @@ var AddonManagerInternal = {
+     }
+   },
+ 
+   get addonTypes() {
+     return this.typesProxy;
+   },
+ 
+   get autoUpdateDefault() {
+-    return Services.prefs.getBoolPref(PREF_EM_AUTOUPDATE_DEFAULT);
++    try {
++      return Services.prefs.getBoolPref(PREF_EM_AUTOUPDATE_DEFAULT);
++    } catch(e) { }
++    return true;
+   }
+ };
+ 
+ /**
+  * Should not be used outside of core Mozilla code. This is a private API for
+  * the startup and platform integration code to use. Refer to the methods on
+  * AddonManagerInternal for documentation however note that these methods are
+  * subject to change at any time.
