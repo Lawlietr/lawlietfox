@@ -1,0 +1,29 @@
+# HG changeset patch
+# Parent 1c505df9f2d5d508cb81dd5d248f45526d15a99d
+# User Matheus Kerschbaum <matjk7@gmail.com>
+Bug 609976 - Make the ENABLE_SHARED_JS hack check for VS2005 r=khuey
+
+diff --git a/configure.in b/configure.in
+--- a/configure.in
++++ b/configure.in
+@@ -7851,18 +7851,18 @@ AC_SUBST(CXX_WRAPPER)
+ 
+ dnl ========================================================
+ dnl =
+ dnl = Static Build Options
+ dnl =
+ dnl ========================================================
+ MOZ_ARG_HEADER(Static build options)
+ 
+-# split JS out by default to avoid VS2005 PGO crash (bug 591836).
+-if test "$OS_ARCH" = "WINNT" -a "$CPU_ARCH" != "x86_64" ; then
++# split JS out on VS2005 to avoid PGO crash (bug 591836).
++if test "$OS_ARCH" = "WINNT" -a "$CPU_ARCH" != "x86_64" -a "$_MSC_VER" = "1400" ; then
+   ENABLE_SHARED_JS=1
+ fi
+ 
+ MOZ_ARG_ENABLE_BOOL(shared-js,
+ [  --enable-shared-js
+                           Create a shared JavaScript library.],
+     ENABLE_SHARED_JS=1,
+     ENABLE_SHARED_JS=)
