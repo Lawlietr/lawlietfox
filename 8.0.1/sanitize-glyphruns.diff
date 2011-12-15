@@ -1,0 +1,30 @@
+diff -urN mozilla-release.orig/gfx/thebes/gfxFont.cpp mozilla-release/gfx/thebes/gfxFont.cpp
+--- mozilla-release.orig/gfx/thebes/gfxFont.cpp	2011-08-21 07:56:09 +0900
++++ mozilla-release/gfx/thebes/gfxFont.cpp	2011-08-24 22:46:01 +0900
+@@ -2460,6 +2460,12 @@
+                       runStart, runLimit, runScript);
+     }
+ 
++    // It's possible for CoreText to omit glyph runs if it decides they contain
++    // only invisibles (e.g., U+FEFF, see reftest 474417-1). In this case, we
++    // need to eliminate them from the glyph run array to avoid drawing "partial
++    // ligatures" with the wrong font.
++    aTextRun->SanitizeGlyphRuns();
++
+     aTextRun->SortGlyphRuns();
+ }
+ 
+@@ -2536,13 +2542,6 @@
+ 
+         runStart += matchedLength;
+     }
+-
+-    // It's possible for CoreText to omit glyph runs if it decides they contain
+-    // only invisibles (e.g., U+FEFF, see reftest 474417-1). In this case, we
+-    // need to eliminate them from the glyph run array to avoid drawing "partial
+-    // ligatures" with the wrong font.
+-    aTextRun->SanitizeGlyphRuns();
+-
+ }
+ 
+ 
