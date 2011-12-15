@@ -1,0 +1,26 @@
+# HG changeset patch
+# Parent 1d21c3b637f812cbeada13a8e6ec2b838ad26b2f
+Bug 657141 - Part 2: Only optimize away clip levels when using solid alpha masks. r=jrmuizel
+
+diff --git a/gfx/cairo/cairo/src/cairo-d2d-surface.cpp b/gfx/cairo/cairo/src/cairo-d2d-surface.cpp
+--- a/gfx/cairo/cairo/src/cairo-d2d-surface.cpp
++++ b/gfx/cairo/cairo/src/cairo-d2d-surface.cpp
+@@ -3182,17 +3182,17 @@ _cairo_d2d_mask(void			*surface,
+ 	    isSolidAlphaMask = true;
+ 	    solidAlphaValue = solidPattern->color.alpha;
+ 	}
+     }
+ 
+     cairo_box_t box;
+     _cairo_box_from_rectangle(&box, &extents);
+ 
+-    if (clip) {
++    if (clip && isSolidAlphaMask) {
+ 	// We do some work here to try and avoid pushing and popping clips for rectangular areas,
+ 	// if we do this fill rects will occur without rectangular clips being pushed and popped.
+ 	// This is faster for non-axis aligned clips in general and allows more efficient batching
+ 	// of the pop-clip calls.
+ 	int num_boxes = 1;
+ 	cairo_box_t box_stack;
+ 	cairo_box_t *boxes;
+ 	boxes = &box_stack;
