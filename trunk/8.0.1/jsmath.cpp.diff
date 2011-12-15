@@ -1,0 +1,23 @@
+--- mozilla-release/js/src/jsmath.cpp	2011-01-01 11:47:10 +0900
++++ mozilla-release/js/src/jsmath.cpp	2011-01-01 11:51:19 +0900
+@@ -51,16 +51,20 @@
+ #include "jscntxt.h"
+ #include "jsversion.h"
+ #include "jslock.h"
+ #include "jsmath.h"
+ #include "jsnum.h"
+ #include "jslibmath.h"
+ #include "jscompartment.h"
+ 
++#if (_M_IX86_FP >= 2)
++#pragma function(floor)
++#endif
++
+ using namespace js;
+ 
+ #ifndef M_E
+ #define M_E             2.7182818284590452354
+ #endif
+ #ifndef M_LOG2E
+ #define M_LOG2E         1.4426950408889634074
+ #endif
