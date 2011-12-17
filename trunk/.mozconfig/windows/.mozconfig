@@ -3,15 +3,15 @@ ac_add_options --enable-application=browser
 ac_add_options --disable-debug
 ac_add_options --disable-tests
 ac_add_options --disable-installer --disable-updater --disable-update-channel --disable-update-packaging
-ac_add_options --enable-official-branding
+#ac_add_options --enable-official-branding
 #ac_add_options --with-branding=browser/branding/unofficial
-#ac_add_options --with-branding=browser/branding/aurora
-#ac_add_options --disable-accessibility
+ac_add_options --with-branding=browser/branding/aurora
+ac_add_options --disable-accessibility
 export MOZ_OPTIMIZE_LDFLAGS="-opt:ref,icf"
 mk_add_options MOZ_OPTIMIZE_LDFLAGS="-opt:ref,icf"
 #
 ## optimize options
-#ac_add_options --enable-optimize="-O2 -Ot -Oy -GT -Gy -GF -GL -GR- -GS- -arch:SSE2"
+#ac_add_options --enable-optimize="-O2 -Ot -Oy -GT -Gy -GF -GL -GR -GS -arch:SSE2"
 ac_add_options --enable-optimize="-O2 -Ot -Oy -GT -Gy -GF -GL -arch:SSE2"
 #ac_add_options --enable-optimize="-O2 -Ot -Oy -GT -Gy -GF -GL -favor:AMD64 -arch:AVX'
 #ac_add_options --enable-optimize="-O2 -Ot -Oy -GT -Gy -GF -GL -favor:INTEL64 -arch:AVX'
@@ -26,7 +26,7 @@ ac_add_options --disable-ipdl-tests
 ac_add_options --enable-extensions=default
 ac_add_options --enable-strip
 ac_add_options --enable-debugger-info-modules=no
-ac_add_options --disable-debug-symbols
+#ac_add_options --disable-debug-symbols
 #ac_add_options --enable-shared-js
 #ac_add_options --enable-crypto
 #ac_add_options --enable-image-decoders=icon,png,gif,jpeg,bmp
@@ -49,6 +49,6 @@ mk_add_options PROFILE_GEN_SCRIPT='cscript E:/SystemTools/win32_Firefox/PgoMsg.v
 #ac_add_options --with-windows-version=601
 #
 ## crt dir
-WIN32_REDIST_DIR=$VCINSTALLDIR/redist/x86/Microsoft.VC100.CRT
+#WIN32_REDIST_DIR=$VCINSTALLDIR/redist/x86/Microsoft.VC100.CRT
 #WIN32_REDIST_DIR=$VCINSTALLDIR/redist/x64/Microsoft.VC100.CRT
 
