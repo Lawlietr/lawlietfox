@@ -1,0 +1,124 @@
+diff --git a/editor/libeditor/base/nsEditorCommands.cpp b/editor/libeditor/base/nsEditorCommands.cpp
+--- a/editor/libeditor/base/nsEditorCommands.cpp	2011-12-21 07:28:16 +0800
++++ b/editor/libeditor/base/nsEditorCommands.cpp	2011-12-30 22:11:36 +0800
+@@ -320,13 +320,7 @@
+   NS_ENSURE_ARG_POINTER(outCmdEnabled);
+   nsCOMPtr<nsIEditor> editor = do_QueryInterface(aCommandRefCon);
+   if (editor)
+-  {
+-    PRBool isEditable = PR_FALSE;
+-    nsresult rv = editor->GetIsSelectionEditable(&isEditable);
+-    NS_ENSURE_SUCCESS(rv, rv);
+-    if (isEditable)
+-      return editor->CanCopy(outCmdEnabled);
+-  }
++    return editor->CanCopy(outCmdEnabled);
+ 
+   *outCmdEnabled = PR_FALSE;
+   return NS_OK;
+@@ -663,19 +657,14 @@
+ 
+   nsresult rv = NS_OK;
+   *outCmdEnabled = PR_FALSE;
+-  PRBool docIsEmpty, selectionIsEditable;
++  PRBool docIsEmpty;
+  
+   // you can select all if there is an editor which is non-empty
+   nsCOMPtr<nsIEditor> editor = do_QueryInterface(aCommandRefCon);
+   if (editor) {
+-    rv = editor->GetIsSelectionEditable(&selectionIsEditable);
++    rv = editor->GetDocumentIsEmpty(&docIsEmpty);
+     NS_ENSURE_SUCCESS(rv, rv);
+-
+-    if (selectionIsEditable) {
+-      rv = editor->GetDocumentIsEmpty(&docIsEmpty);
+-      NS_ENSURE_SUCCESS(rv, rv);
+-      *outCmdEnabled = !docIsEmpty;
+-    }
++*outCmdEnabled = !docIsEmpty;
+   } 
+ 
+   return rv;
+diff --git a/editor/libeditor/html/tests/test_bug676401.html b/editor/libeditor/html/tests/test_bug676401.html
+--- a/editor/libeditor/html/tests/test_bug676401.html
++++ b/editor/libeditor/html/tests/test_bug676401.html
+@@ -27,23 +27,23 @@ https://bugzilla.mozilla.org/show_bug.cg
+ <script type="application/javascript">
+ 
+ /** Test for Bug 676401 **/
+ SimpleTest.waitForExplicitFinish();
+ SimpleTest.waitForFocus(runTests);
+ 
+ var gBlock1, gBlock2;
+ 
+-function IsCommandEnabled(command) {
++function IsCommandEnabled(command, alwaysEnabled) {
+   var enabled;
+ 
+-  // non-editable div: should return false
++  // non-editable div: should return false unless alwaysEnabled
+   window.getSelection().selectAllChildren(gBlock1);
+   enabled = document.queryCommandEnabled(command);
+-  is(enabled, false, "'" + command + "' should not be enabled on a non-editable block.");
++  is(enabled, alwaysEnabled, "'" + command + "' should not be enabled on a non-editable block.");
+ 
+   // editable div: should return true
+   window.getSelection().selectAllChildren(gBlock2);
+   enabled = document.queryCommandEnabled(command);
+   is(enabled, true, "'" + command + "' should be enabled on an editable block.");
+ }
+ 
+ function runTests() {
+@@ -62,47 +62,47 @@ function runTests() {
+     "heading", "formatBlock",
+     "contentReadOnly", "createLink",
+     "decreaseFontSize", "increaseFontSize",
+     "insertHTML", "insertHorizontalRule", "insertImage",
+     "removeFormat", "selectAll", "styleWithCSS"
+   ];
+   document.execCommand("styleWithCSS", false, false);
+   for (i = 0; i < commands.length; i++)
+-    IsCommandEnabled(commands[i]);
++    IsCommandEnabled(commands[i], commands[i] == "selectAll");
+   document.execCommand("styleWithCSS", false, true);
+   for (i = 0; i < commands.length; i++)
+-    IsCommandEnabled(commands[i]);
++    IsCommandEnabled(commands[i], commands[i] == "selectAll");
+ 
+   // Mozilla-specific stuff
+   commands = ["enableInlineTableEditing", "enableObjectResizing", "insertBrOnReturn"];
+   for (i = 0; i < commands.length; i++)
+-    IsCommandEnabled(commands[i]);
++    IsCommandEnabled(commands[i], false);
+ 
+   // cut/copy/paste -- SpecialPowers required
+   SpecialPowers.setCharPref("capability.policy.policynames",                      "allowclipboard");
+   SpecialPowers.setCharPref("capability.policy.allowclipboard.sites",             "http://mochi.test:8888");
+   SpecialPowers.setCharPref("capability.policy.allowclipboard.Clipboard.cutcopy", "allAccess");
+   SpecialPowers.setCharPref("capability.policy.allowclipboard.Clipboard.paste",   "allAccess");
+   commands = ["cut", "paste", "copy"];
+   for (i = 0; i < commands.length; i++) {
+-    IsCommandEnabled(commands[i]);
++    IsCommandEnabled(commands[i], commands[i] == "copy");
+     document.execCommand(commands[i], false, false);
+   }
+   SpecialPowers.clearUserPref("capability.policy.policynames");
+   SpecialPowers.clearUserPref("capability.policy.allowclipboard.sites");
+   SpecialPowers.clearUserPref("capability.policy.allowclipboard.Clipboard.cutcopy");
+   SpecialPowers.clearUserPref("capability.policy.allowclipboard.Clipboard.paste");
+ 
+   // delete/undo/redo -- we have to execute this commands because:
+   //  * there's nothing to undo if we haven't modified the selection first
+   //  * there's nothing to redo if we haven't undone something first
+   commands = ["delete", "undo", "redo"];
+   for (i = 0; i < commands.length; i++) {
+-    IsCommandEnabled(commands[i]);
++    IsCommandEnabled(commands[i], false);
+     document.execCommand(commands[i], false, false);
+   }
+ 
+   // done
+   SimpleTest.finish();
+ }
+ 
+ </script>
