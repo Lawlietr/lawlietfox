@@ -1,0 +1,11 @@
+--- mozilla-beta/toolkit/mozapps/installer/windows/nsis/makensis.mk~	2011-12-28 22:50:11 +0900
++++ mozilla-beta/toolkit/mozapps/installer/windows/nsis/makensis.mk	2011-12-29 02:06:42 +0900
+@@ -73,7 +73,7 @@
+ endif
+ 
+ $(CONFIG_DIR)/7zSD.sfx:
+-	$(CYGWIN_WRAPPER) upx --best -o $(CONFIG_DIR)/7zSD.sfx $(SFX_MODULE)
++	$(CYGWIN_WRAPPER) upx --best --ultra-brute -o $(CONFIG_DIR)/7zSD.sfx $(SFX_MODULE)
+ 
+ installer::
+ 	$(INSTALL) $(CONFIG_DIR)/setup.exe $(DEPTH)/installer-stage
