@@ -1,0 +1,18 @@
+diff --git a/nsprpub/pr/src/io/prsocket.c b/nsprpub/pr/src/io/prsocket.c
+--- a/nsprpub/pr/src/io/prsocket.c	2012-01-04 11:14:12 +0800
++++ b/nsprpub/pr/src/io/prsocket.c	2012-01-04 15:58:11 +0800
+@@ -320,14 +320,6 @@
+ 
+ #elif defined(WIN32) || defined(WIN16)
+ 
+-#if defined(WIN32)
+-    /*
+-     * The sleep circumvents a bug in Win32 WinSock.
+-     * See Microsoft Knowledge Base article ID: Q165989.
+-     */
+-    Sleep(0);
+-#endif /* WIN32 */
+-
+     if (out_flags & PR_POLL_EXCEPT) {
+         int len = sizeof(err);
+         if (getsockopt(osfd, (int)SOL_SOCKET, SO_ERROR, (char *) &err, &len)
