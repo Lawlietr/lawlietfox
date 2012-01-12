@@ -1,0 +1,33 @@
+diff --git a/browser/branding/unofficial/branding.nsi b/browser/branding/unofficial/branding.nsi
+--- a/browser/branding/unofficial/branding.nsi
++++ b/browser/branding/unofficial/branding.nsi
+@@ -35,12 +35,12 @@
+ # ***** END LICENSE BLOCK *****
+ 
+ # NSIS branding defines for unofficial builds.
+ # The official release build branding.nsi is located in other-license/branding/firefox/
+ # The nightly build branding.nsi is located in browser/installer/windows/nsis/
+ 
+ # BrandFullNameInternal is used for some registry and file system values
+ # instead of BrandFullName and typically should not be modified.
+-!define BrandFullNameInternal "Mozilla Developer Preview"
++!define BrandFullNameInternal "Firefox Community Edition"
+ !define CompanyName           "mozilla.org"
+ !define URLInfoAbout          "http://www.mozilla.org"
+ !define URLUpdateInfo         "http://www.mozilla.org/projects/firefox"
+diff --git a/browser/branding/unofficial/configure.sh b/browser/branding/unofficial/configure.sh
+--- a/browser/branding/unofficial/configure.sh
++++ b/browser/branding/unofficial/configure.sh
+@@ -1,1 +1,1 @@
+-MOZ_APP_DISPLAYNAME=MozillaDeveloperPreview
++MOZ_APP_DISPLAYNAME=FirefoxCommunityEdition
+diff --git a/browser/branding/unofficial/locales/en-US/brand.dtd b/browser/branding/unofficial/locales/en-US/brand.dtd
+--- a/browser/branding/unofficial/locales/en-US/brand.dtd
++++ b/browser/branding/unofficial/locales/en-US/brand.dtd
+@@ -1,4 +1,4 @@
+-<!ENTITY  brandShortName        "Mozilla Developer Preview">
+-<!ENTITY  brandFullName         "Mozilla Developer Preview">
++<!ENTITY  brandShortName        "Lawlietfox">
++<!ENTITY  brandFullName         "Firefox Community Edition">
+ <!ENTITY  vendorShortName       "mozilla.org">
+ <!ENTITY  trademarkInfo.part1   " ">
