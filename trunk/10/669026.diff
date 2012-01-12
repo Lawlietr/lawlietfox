@@ -1,0 +1,1065 @@
+diff --git a/content/html/content/src/nsHTMLInputElement.cpp b/content/html/content/src/nsHTMLInputElement.cpp
+--- a/content/html/content/src/nsHTMLInputElement.cpp
++++ b/content/html/content/src/nsHTMLInputElement.cpp
+@@ -2631,16 +2631,22 @@ nsHTMLInputElement::GetControllers(nsICo
+       NS_ENSURE_SUCCESS(rv, rv);
+ 
+       nsCOMPtr<nsIController>
+         controller(do_CreateInstance("@mozilla.org/editor/editorcontroller;1",
+                                      &rv));
+       NS_ENSURE_SUCCESS(rv, rv);
+ 
+       mControllers->AppendController(controller);
++
++      controller = do_CreateInstance("@mozilla.org/editor/editingcontroller;1",
++                                     &rv);
++      NS_ENSURE_SUCCESS(rv, rv);
++
++      mControllers->AppendController(controller);
+     }
+   }
+ 
+   *aResult = mControllers;
+   NS_IF_ADDREF(*aResult);
+ 
+   return NS_OK;
+ }
+diff --git a/content/html/content/src/nsHTMLTextAreaElement.cpp b/content/html/content/src/nsHTMLTextAreaElement.cpp
+--- a/content/html/content/src/nsHTMLTextAreaElement.cpp
++++ b/content/html/content/src/nsHTMLTextAreaElement.cpp
+@@ -791,16 +791,22 @@ nsHTMLTextAreaElement::GetControllers(ns
+     mControllers = do_CreateInstance(kXULControllersCID, &rv);
+     NS_ENSURE_SUCCESS(rv, rv);
+ 
+     nsCOMPtr<nsIController> controller = do_CreateInstance("@mozilla.org/editor/editorcontroller;1", &rv);
+     if (NS_FAILED(rv))
+       return rv;
+ 
+     mControllers->AppendController(controller);
++
++    controller = do_CreateInstance("@mozilla.org/editor/editingcontroller;1", &rv);
++    if (NS_FAILED(rv))
++      return rv;
++
++    mControllers->AppendController(controller);
+   }
+ 
+   *aResult = mControllers;
+   NS_IF_ADDREF(*aResult);
+ 
+   return NS_OK;
+ }
+ 
+diff --git a/content/xbl/builtin/browser-base.inc b/content/xbl/builtin/browser-base.inc
+--- a/content/xbl/builtin/browser-base.inc
++++ b/content/xbl/builtin/browser-base.inc
+@@ -1,15 +1,15 @@
+       <handler event="keypress" key=" " modifiers="shift" command="cmd_scrollPageUp" />
+       <handler event="keypress" key=" " command="cmd_scrollPageDown" />
+ 
+-      <handler event="keypress" keycode="VK_UP" command="cmd_scrollLineUp" />
+-      <handler event="keypress" keycode="VK_DOWN" command="cmd_scrollLineDown" />
+-      <handler event="keypress" keycode="VK_LEFT" command="cmd_scrollLeft" />
+-      <handler event="keypress" keycode="VK_RIGHT" command="cmd_scrollRight" />
++      <handler event="keypress" keycode="VK_UP" command="cmd_linePrevious" />
++      <handler event="keypress" keycode="VK_DOWN" command="cmd_lineNext" />
++      <handler event="keypress" keycode="VK_LEFT" command="cmd_charPrevious" />
++      <handler event="keypress" keycode="VK_RIGHT" command="cmd_charNext" />
+ 
+       <handler event="keypress" key="x" command="cmd_cut" modifiers="accel"/>
+       <handler event="keypress" key="c" command="cmd_copy" modifiers="accel"/>
+       <handler event="keypress" key="v" command="cmd_paste" modifiers="accel"/>
+       <handler event="keypress" key="z" command="cmd_undo" modifiers="accel"/>
+       <handler event="keypress" key="z" command="cmd_redo" modifiers="accel,shift" />
+       <handler event="keypress" key="a" command="cmd_selectAll" modifiers="accel"/>
+ 
+diff --git a/content/xbl/builtin/emacs/platformHTMLBindings.xml b/content/xbl/builtin/emacs/platformHTMLBindings.xml
+--- a/content/xbl/builtin/emacs/platformHTMLBindings.xml
++++ b/content/xbl/builtin/emacs/platformHTMLBindings.xml
+@@ -164,18 +164,18 @@
+       <handler event="keypress" keycode="VK_PAGE_UP" modifiers="shift" command="cmd_selectPageUp"/>
+       <handler event="keypress" keycode="VK_PAGE_DOWN" modifiers="shift" command="cmd_selectPageDown"/>
+ 
+       <handler event="keypress" keycode="VK_DELETE" modifiers="shift" command="cmd_cut" /> 
+       <handler event="keypress" keycode="VK_DELETE" modifiers="control" command="cmd_copy" /> 
+       <handler event="keypress" keycode="VK_INSERT" modifiers="control" command="cmd_copy" /> 
+       <handler event="keypress" keycode="VK_HOME" command="cmd_beginLine"/>
+       <handler event="keypress" keycode="VK_END" command="cmd_endLine"/>
+-      <handler event="keypress" keycode="VK_HOME" modifiers="control" command="cmd_scrollTop"/>
+-      <handler event="keypress" keycode="VK_END" modifiers="control" command="cmd_scrollBottom"/>
++      <handler event="keypress" keycode="VK_HOME" modifiers="control" command="cmd_moveTop"/>
++      <handler event="keypress" keycode="VK_END" modifiers="control" command="cmd_moveBottom"/>
+       <handler event="keypress" keycode="VK_HOME" modifiers="shift,control" command="cmd_selectTop" /> 
+       <handler event="keypress" keycode="VK_END" modifiers="shift,control" command="cmd_selectBottom" /> 
+ 
+       <handler event="keypress" keycode="VK_LEFT" modifiers="control" command="cmd_wordPrevious" />
+       <handler event="keypress" keycode="VK_RIGHT" modifiers="control" command="cmd_wordNext" />
+       <handler event="keypress" keycode="VK_LEFT" modifiers="control,shift" command="cmd_selectWordPrevious" />
+       <handler event="keypress" keycode="VK_RIGHT" modifiers="control,shift" command="cmd_selectWordNext" />
+       <handler event="keypress" keycode="VK_LEFT" modifiers="shift" command="cmd_selectCharPrevious" />
+diff --git a/content/xbl/builtin/mac/platformHTMLBindings.xml b/content/xbl/builtin/mac/platformHTMLBindings.xml
+--- a/content/xbl/builtin/mac/platformHTMLBindings.xml
++++ b/content/xbl/builtin/mac/platformHTMLBindings.xml
+@@ -41,20 +41,20 @@
+       <handler event="keypress" key="v" modifiers="control" command="cmd_scrollPageDown"/>
+     </handlers>
+   </binding>
+ 
+   <binding id="textAreas">
+     <handlers>
+ #include ../textareas-base.inc
+       <handler event="keypress" key="a" modifiers="accel" command="cmd_selectAll"/>
+-      <handler event="keypress" keycode="VK_HOME" command="cmd_scrollTop"/>
+-      <handler event="keypress" keycode="VK_END"  command="cmd_scrollBottom"/>
+-      <handler event="keypress" keycode="VK_HOME" modifiers="shift" command="cmd_scrollTop"/>
+-      <handler event="keypress" keycode="VK_END" modifiers="shift" command="cmd_scrollBottom"/>
++      <handler event="keypress" keycode="VK_HOME" command="cmd_moveTop"/>
++      <handler event="keypress" keycode="VK_END"  command="cmd_moveBottom"/>
++      <handler event="keypress" keycode="VK_HOME" modifiers="shift" command="cmd_moveTop"/>
++      <handler event="keypress" keycode="VK_END" modifiers="shift" command="cmd_moveBottom"/>
+       
+       <handler event="keypress" keycode="VK_PAGE_UP" command="cmd_scrollPageUp"/>
+       <handler event="keypress" keycode="VK_PAGE_DOWN" command="cmd_scrollPageDown"/>
+       <handler event="keypress" keycode="VK_PAGE_UP" modifiers="shift" command="cmd_selectPageUp"/>
+       <handler event="keypress" keycode="VK_PAGE_DOWN" modifiers="shift" command="cmd_selectPageDown"/>
+       <handler event="keypress" keycode="VK_PAGE_UP" modifiers="alt" command="cmd_movePageUp"/>
+       <handler event="keypress" keycode="VK_PAGE_DOWN" modifiers="alt" command="cmd_movePageDown"/>
+ 
+@@ -90,40 +90,40 @@
+     </handlers>
+   </binding>
+ 
+   <binding id="browser">
+     <handlers>
+ #include ../browser-base.inc
+       <handler event="keypress" keycode="VK_PAGE_UP" command="cmd_scrollPageUp"/>
+       <handler event="keypress" keycode="VK_PAGE_DOWN" command="cmd_scrollPageDown"/>
+-      <handler event="keypress" keycode="VK_HOME" command="cmd_scrollTop" /> 
+-      <handler event="keypress" keycode="VK_END"  command="cmd_scrollBottom" /> 
++      <handler event="keypress" keycode="VK_HOME" command="cmd_moveTop" /> 
++      <handler event="keypress" keycode="VK_END"  command="cmd_moveBottom" /> 
+ 
+       <handler event="keypress" keycode="VK_LEFT" modifiers="alt" command="cmd_wordPrevious" />
+       <handler event="keypress" keycode="VK_RIGHT" modifiers="alt" command="cmd_wordNext" />
+       <handler event="keypress" keycode="VK_LEFT" modifiers="alt,shift" command="cmd_selectWordPrevious" />
+       <handler event="keypress" keycode="VK_RIGHT" modifiers="alt,shift" command="cmd_selectWordNext" />
+       <handler event="keypress" keycode="VK_LEFT" modifiers="shift" command="cmd_selectCharPrevious" />
+       <handler event="keypress" keycode="VK_RIGHT" modifiers="shift" command="cmd_selectCharNext" />
+       <handler event="keypress" keycode="VK_UP" modifiers="shift" command="cmd_selectLinePrevious" />
+       <handler event="keypress" keycode="VK_DOWN" modifiers="shift" command="cmd_selectLineNext" />
+-      <handler event="keypress" keycode="VK_UP" modifiers="accel" command="cmd_scrollTop"/>
+-      <handler event="keypress" keycode="VK_DOWN" modifiers="accel" command="cmd_scrollBottom"/>      
++      <handler event="keypress" keycode="VK_UP" modifiers="accel" command="cmd_moveTop"/>
++      <handler event="keypress" keycode="VK_DOWN" modifiers="accel" command="cmd_moveBottom"/>      
+ 	</handlers>
+   </binding>
+ 
+   <binding id="editor">
+     <handlers>
+ #include ../editor-base.inc
+       <handler event="keypress" key="a" command="cmd_selectAll" modifiers="accel"/>
+-      <handler event="keypress" keycode="VK_HOME" command="cmd_scrollTop" /> 
+-      <handler event="keypress" keycode="VK_END"  command="cmd_scrollBottom" /> 
+-      <handler event="keypress" keycode="VK_HOME" modifiers="shift" command="cmd_scrollTop"/>
+-      <handler event="keypress" keycode="VK_END" modifiers="shift" command="cmd_scrollBottom"/>
++      <handler event="keypress" keycode="VK_HOME" command="cmd_moveTop" /> 
++      <handler event="keypress" keycode="VK_END"  command="cmd_moveBottom" /> 
++      <handler event="keypress" keycode="VK_HOME" modifiers="shift" command="cmd_moveTop"/>
++      <handler event="keypress" keycode="VK_END" modifiers="shift" command="cmd_moveBottom"/>
+ 
+       <handler event="keypress" keycode="VK_PAGE_UP" command="cmd_scrollPageUp"/>
+       <handler event="keypress" keycode="VK_PAGE_DOWN" command="cmd_scrollPageDown"/>
+       <handler event="keypress" keycode="VK_PAGE_UP" modifiers="shift" command="cmd_selectPageUp"/>
+       <handler event="keypress" keycode="VK_PAGE_DOWN" modifiers="shift" command="cmd_selectPageDown"/>
+       <handler event="keypress" keycode="VK_PAGE_UP" modifiers="alt" command="cmd_movePageUp"/>
+       <handler event="keypress" keycode="VK_PAGE_DOWN" modifiers="alt" command="cmd_movePageDown"/>
+ 
+diff --git a/content/xbl/builtin/unix/platformHTMLBindings.xml b/content/xbl/builtin/unix/platformHTMLBindings.xml
+--- a/content/xbl/builtin/unix/platformHTMLBindings.xml
++++ b/content/xbl/builtin/unix/platformHTMLBindings.xml
+@@ -36,18 +36,18 @@
+       <handler event="keypress" keycode="VK_PAGE_UP" modifiers="shift" command="cmd_selectPageUp"/>
+       <handler event="keypress" keycode="VK_PAGE_DOWN" modifiers="shift" command="cmd_selectPageDown"/>
+ 
+       <handler event="keypress" keycode="VK_DELETE" modifiers="shift" command="cmd_cut" /> 
+       <handler event="keypress" keycode="VK_DELETE" modifiers="control" command="cmd_copy" /> 
+       <handler event="keypress" keycode="VK_INSERT" modifiers="control" command="cmd_copy" /> 
+       <handler event="keypress" keycode="VK_HOME" command="cmd_beginLine"/>
+       <handler event="keypress" keycode="VK_END" command="cmd_endLine"/>
+-      <handler event="keypress" keycode="VK_HOME" modifiers="control" command="cmd_scrollTop"/>
+-      <handler event="keypress" keycode="VK_END" modifiers="control" command="cmd_scrollBottom"/>
++      <handler event="keypress" keycode="VK_HOME" modifiers="control" command="cmd_moveTop"/>
++      <handler event="keypress" keycode="VK_END" modifiers="control" command="cmd_moveBottom"/>
+       <handler event="keypress" keycode="VK_HOME" modifiers="shift,control" command="cmd_selectTop" /> 
+       <handler event="keypress" keycode="VK_END" modifiers="shift,control" command="cmd_selectBottom" /> 
+ 
+       <handler event="keypress" keycode="VK_LEFT" modifiers="control" command="cmd_wordPrevious" />
+       <handler event="keypress" keycode="VK_RIGHT" modifiers="control" command="cmd_wordNext" />
+       <handler event="keypress" keycode="VK_LEFT" modifiers="control,shift" command="cmd_selectWordPrevious" />
+       <handler event="keypress" keycode="VK_RIGHT" modifiers="control,shift" command="cmd_selectWordNext" />
+       <handler event="keypress" keycode="VK_LEFT" modifiers="shift" command="cmd_selectCharPrevious" />
+diff --git a/content/xbl/builtin/win/platformHTMLBindings.xml b/content/xbl/builtin/win/platformHTMLBindings.xml
+--- a/content/xbl/builtin/win/platformHTMLBindings.xml
++++ b/content/xbl/builtin/win/platformHTMLBindings.xml
+@@ -96,18 +96,18 @@
+       <handler event="keypress" keycode="VK_PAGE_UP" modifiers="shift" command="cmd_selectPageUp"/>
+       <handler event="keypress" keycode="VK_PAGE_DOWN" modifiers="shift" command="cmd_selectPageDown"/>
+ 
+       <handler event="keypress" keycode="VK_DELETE" modifiers="shift" command="cmd_cut"/>
+       <handler event="keypress" keycode="VK_DELETE" modifiers="control" command="cmd_deleteWordForward"/>
+       <handler event="keypress" keycode="VK_INSERT" modifiers="control" command="cmd_copy"/>
+       <handler event="keypress" keycode="VK_HOME" command="cmd_beginLine"/>
+       <handler event="keypress" keycode="VK_END" command="cmd_endLine"/>
+-      <handler event="keypress" keycode="VK_HOME" modifiers="control" command="cmd_scrollTop"/>
+-      <handler event="keypress" keycode="VK_END" modifiers="control" command="cmd_scrollBottom"/>
++      <handler event="keypress" keycode="VK_HOME" modifiers="control" command="cmd_moveTop"/>
++      <handler event="keypress" keycode="VK_END" modifiers="control" command="cmd_moveBottom"/>
+       <handler event="keypress" keycode="VK_HOME" modifiers="shift,control" command="cmd_selectTop" />
+       <handler event="keypress" keycode="VK_END" modifiers="shift,control" command="cmd_selectBottom" />
+ 
+       <handler event="keypress" keycode="VK_LEFT" modifiers="control" command="cmd_wordPrevious" />
+       <handler event="keypress" keycode="VK_RIGHT" modifiers="control" command="cmd_wordNext" />
+       <handler event="keypress" keycode="VK_LEFT" modifiers="control,shift" command="cmd_selectWordPrevious" />
+       <handler event="keypress" keycode="VK_RIGHT" modifiers="control,shift" command="cmd_selectWordNext" />
+       <handler event="keypress" keycode="VK_LEFT" modifiers="shift" command="cmd_selectCharPrevious" />
+diff --git a/dom/base/nsFocusManager.cpp b/dom/base/nsFocusManager.cpp
+--- a/dom/base/nsFocusManager.cpp
++++ b/dom/base/nsFocusManager.cpp
+@@ -2420,24 +2420,16 @@ nsFocusManager::DetermineElementToMoveFo
+         nsCOMPtr<nsIContent> endSelectionContent;
+         GetSelectionLocation(doc, presShell,
+                              getter_AddRefs(startContent),
+                              getter_AddRefs(endSelectionContent));
+         // If the selection is on the rootContent, then there is no selection
+         if (startContent == rootContent) {
+           startContent = nsnull;
+         }
+-        else if (startContent && startContent->HasFlag(NODE_IS_EDITABLE)) {
+-          // Don't start from the selection if the selection is in a
+-          // contentEditable region.
+-          nsCOMPtr<nsIHTMLDocument> htmlDoc = do_QueryInterface(doc);
+-          if (htmlDoc &&
+-              htmlDoc->GetEditingState() == nsIHTMLDocument::eContentEditable)
+-            startContent = nsnull;
+-        }
+ 
+         if (aType == MOVEFOCUS_CARET) {
+           // GetFocusInSelection finds a focusable link near the caret.
+           // If there is no start content though, don't do this to avoid
+           // focusing something unexpected.
+           if (startContent) {
+             GetFocusInSelection(aWindow, startContent,
+                                 endSelectionContent, aNextContent);
+diff --git a/dom/base/nsGlobalWindowCommands.cpp b/dom/base/nsGlobalWindowCommands.cpp
+--- a/dom/base/nsGlobalWindowCommands.cpp
++++ b/dom/base/nsGlobalWindowCommands.cpp
+@@ -67,26 +67,26 @@
+ using namespace mozilla;
+ 
+ const char * const sSelectAllString = "cmd_selectAll";
+ const char * const sSelectNoneString = "cmd_selectNone";
+ const char * const sCopyImageLocationString = "cmd_copyImageLocation";
+ const char * const sCopyImageContentsString = "cmd_copyImageContents";
+ const char * const sCopyImageString = "cmd_copyImage";
+ 
+-const char * const sScrollTopString = "cmd_scrollTop";
+-const char * const sScrollBottomString = "cmd_scrollBottom";
++const char * const sMoveTopString = "cmd_moveTop";
++const char * const sMoveBottomString = "cmd_moveBottom";
+ const char * const sScrollPageUpString = "cmd_scrollPageUp";
+ const char * const sScrollPageDownString = "cmd_scrollPageDown";
+ const char * const sMovePageUpString = "cmd_movePageUp";
+ const char * const sMovePageDownString = "cmd_movePageDown";
+-const char * const sScrollLineUpString = "cmd_scrollLineUp";
+-const char * const sScrollLineDownString = "cmd_scrollLineDown";
+-const char * const sScrollLeftString = "cmd_scrollLeft";
+-const char * const sScrollRightString = "cmd_scrollRight";
++const char * const sLinePreviousString = "cmd_linePrevious";
++const char * const sLineNextString = "cmd_lineNext";
++const char * const sCharPreviousString = "cmd_charPrevious";
++const char * const sCharNextString = "cmd_charNext";
+ 
+ // These are so the browser can use editor navigation key bindings
+ // helps with accessibility (boolean pref accessibility.browsewithcaret)
+ 
+ const char * const sSelectCharPreviousString = "cmd_selectCharPrevious";
+ const char * const sSelectCharNextString = "cmd_selectCharNext";
+ 
+ const char * const sWordPreviousString = "cmd_wordPrevious";
+@@ -97,18 +97,18 @@
+ const char * const sBeginLineString = "cmd_beginLine";
+ const char * const sEndLineString = "cmd_endLine";
+ const char * const sSelectBeginLineString = "cmd_selectBeginLine";
+ const char * const sSelectEndLineString = "cmd_selectEndLine";
+ 
+ const char * const sSelectLinePreviousString = "cmd_selectLinePrevious";
+ const char * const sSelectLineNextString = "cmd_selectLineNext";
+ 
+-const char * const sSelectPagePreviousString = "cmd_selectPagePrevious";
+-const char * const sSelectPageNextString = "cmd_selectPageNext";
++const char * const sSelectPageUpString = "cmd_selectPageUp";
++const char * const sSelectPageDownString = "cmd_selectPageDown";
+ 
+ const char * const sSelectTopString = "cmd_selectTop";
+ const char * const sSelectBottomString = "cmd_selectBottom";
+ 
+ 
+ #if 0
+ #pragma mark -
+ #endif
+@@ -272,43 +272,43 @@
+ }
+ 
+ nsresult
+ nsSelectMoveScrollCommand::DoCommandBrowseWithCaretOn(const char *aCommandName,
+                   nsIDOMWindow *aWindow, nsISelectionController *aSelectionController)
+ {
+   nsresult rv = NS_ERROR_NOT_IMPLEMENTED;
+ 
+-  if (!nsCRT::strcmp(aCommandName, sScrollTopString))
++  if (!nsCRT::strcmp(aCommandName, sMoveTopString))
+     rv = aSelectionController->CompleteMove(false, false);
+-  else if (!nsCRT::strcmp(aCommandName,sScrollBottomString))
++  else if (!nsCRT::strcmp(aCommandName,sMoveBottomString))
+     rv = aSelectionController->CompleteMove(true, false);
+   // cmd_MovePageUp/Down are used on Window/Unix. They move the caret
+   // in caret browsing mode.
+   else if (!nsCRT::strcmp(aCommandName, sMovePageUpString))
+     rv = aSelectionController->PageMove(false, false);
+   else if (!nsCRT::strcmp(aCommandName, sMovePageDownString))
+     rv = aSelectionController->PageMove(true, false);
+   // cmd_ScrollPageUp/Down are used on Mac, and for the spacebar on all platforms.
+   // They do not move the caret in caret browsing mode.
+   else if (!nsCRT::strcmp(aCommandName, sScrollPageUpString))
+     rv = aSelectionController->ScrollPage(false);
+   else if (!nsCRT::strcmp(aCommandName, sScrollPageDownString))
+     rv = aSelectionController->ScrollPage(true);
+-  else if (!nsCRT::strcmp(aCommandName, sScrollLineUpString))
++  else if (!nsCRT::strcmp(aCommandName, sLinePreviousString))
+     rv = aSelectionController->LineMove(false, false);
+-  else if (!nsCRT::strcmp(aCommandName, sScrollLineDownString))
++  else if (!nsCRT::strcmp(aCommandName, sLineNextString))
+     rv = aSelectionController->LineMove(true, false);
+   else if (!nsCRT::strcmp(aCommandName, sWordPreviousString))
+     rv = aSelectionController->WordMove(false, false);
+   else if (!nsCRT::strcmp(aCommandName, sWordNextString))
+     rv = aSelectionController->WordMove(true, false);
+-  else if (!nsCRT::strcmp(aCommandName, sScrollLeftString))
++  else if (!nsCRT::strcmp(aCommandName, sCharPreviousString))
+     rv = aSelectionController->CharacterMove(false, false);
+-  else if (!nsCRT::strcmp(aCommandName, sScrollRightString))
++  else if (!nsCRT::strcmp(aCommandName, sCharNextString))
+     rv = aSelectionController->CharacterMove(true, false);
+   else if (!nsCRT::strcmp(aCommandName, sBeginLineString))
+     rv = aSelectionController->IntraLineMove(false, false);
+   else if (!nsCRT::strcmp(aCommandName, sEndLineString))
+     rv = aSelectionController->IntraLineMove(true, false);
+ 
+   if (NS_SUCCEEDED(rv))
+   {
+@@ -325,44 +325,44 @@
+   return rv;
+ }
+ 
+ nsresult
+ nsSelectMoveScrollCommand::DoCommandBrowseWithCaretOff(const char *aCommandName, nsISelectionController *aSelectionController)
+ {
+   nsresult rv = NS_ERROR_NOT_IMPLEMENTED;
+ 
+-  if (!nsCRT::strcmp(aCommandName, sScrollTopString))   
++  if (!nsCRT::strcmp(aCommandName, sMoveTopString))   
+     rv = aSelectionController->CompleteScroll(false);
+-  else if (!nsCRT::strcmp(aCommandName,sScrollBottomString))
++  else if (!nsCRT::strcmp(aCommandName,sMoveBottomString))
+     rv = aSelectionController->CompleteScroll(true);
+ 
+   // cmd_MovePageUp/Down are used on Window/Unix. They move the caret
+   // in caret browsing mode.
+   else if (!nsCRT::strcmp(aCommandName, sMovePageUpString))
+     rv = aSelectionController->ScrollPage(false);
+   else if (!nsCRT::strcmp(aCommandName, sMovePageDownString))
+     rv = aSelectionController->ScrollPage(true);
+   // cmd_ScrollPageUp/Down are used on Mac. They do not move the
+   // caret in caret browsing mode.
+   else if (!nsCRT::strcmp(aCommandName, sScrollPageUpString))
+     rv = aSelectionController->ScrollPage(false);
+   else if (!nsCRT::strcmp(aCommandName, sScrollPageDownString))
+     rv = aSelectionController->ScrollPage(true);
+ 
+-  else if (!nsCRT::strcmp(aCommandName, sScrollLineUpString))
++  else if (!nsCRT::strcmp(aCommandName, sLinePreviousString))
+     rv = aSelectionController->ScrollLine(false);
+-  else if (!nsCRT::strcmp(aCommandName, sScrollLineDownString))
++  else if (!nsCRT::strcmp(aCommandName, sLineNextString))
+     rv = aSelectionController->ScrollLine(true);
+-  else if (!nsCRT::strcmp(aCommandName, sScrollLeftString))
++  else if (!nsCRT::strcmp(aCommandName, sCharPreviousString))
+     rv = aSelectionController->ScrollHorizontal(true);
+-  else if (!nsCRT::strcmp(aCommandName, sScrollRightString))
++  else if (!nsCRT::strcmp(aCommandName, sCharNextString))
+     rv = aSelectionController->ScrollHorizontal(false);
+   // cmd_beginLine/endLine with caret browsing off
+-  // will act as cmd_scrollTop/Bottom
++  // will act as cmd_moveTop/Bottom
+   else if (!nsCRT::strcmp(aCommandName, sBeginLineString))
+     rv = aSelectionController->CompleteScroll(false);
+   else if (!nsCRT::strcmp(aCommandName, sEndLineString))
+     rv = aSelectionController->CompleteScroll(true);
+ 
+   return rv;
+ }
+ 
+@@ -393,16 +393,20 @@ nsSelectCommand::DoSelectCommand(const c
+   else if (!nsCRT::strcmp(aCommandName, sSelectBeginLineString))
+     rv = selCont->IntraLineMove(false, true);
+   else if (!nsCRT::strcmp(aCommandName, sSelectEndLineString))
+     rv = selCont->IntraLineMove(true, true);
+   else if (!nsCRT::strcmp(aCommandName, sSelectLinePreviousString))
+     rv = selCont->LineMove(false, true);
+   else if (!nsCRT::strcmp(aCommandName, sSelectLineNextString))
+     rv = selCont->LineMove(true, true);
++  else if (!nsCRT::strcmp(aCommandName, sSelectPageUpString))
++    rv = selCont->PageMove(false, true);
++  else if (!nsCRT::strcmp(aCommandName, sSelectPageDownString))
++    rv = selCont->PageMove(true, true);
+   else if (!nsCRT::strcmp(aCommandName, sSelectTopString))
+     rv = selCont->CompleteMove(false, true);
+   else if (!nsCRT::strcmp(aCommandName, sSelectBottomString))
+     rv = selCont->CompleteMove(true, true);
+ 
+   return rv;
+ }
+ 
+@@ -939,42 +943,41 @@ nsresult
+ nsWindowCommandRegistration::RegisterWindowCommands(
+                                nsIControllerCommandTable *inCommandTable)
+ {
+   nsresult rv;
+ 
+   // XXX rework the macros to use a loop is possible, reducing code size
+   
+   // this set of commands is affected by the 'browse with caret' setting
+-  NS_REGISTER_FIRST_COMMAND(nsSelectMoveScrollCommand, sScrollTopString);
+-  NS_REGISTER_NEXT_COMMAND(nsSelectMoveScrollCommand, sScrollBottomString);
++  NS_REGISTER_FIRST_COMMAND(nsSelectMoveScrollCommand, sMoveTopString);
++  NS_REGISTER_NEXT_COMMAND(nsSelectMoveScrollCommand, sMoveBottomString);
+   NS_REGISTER_NEXT_COMMAND(nsSelectMoveScrollCommand, sWordPreviousString);
+   NS_REGISTER_NEXT_COMMAND(nsSelectMoveScrollCommand, sWordNextString);
+   NS_REGISTER_NEXT_COMMAND(nsSelectMoveScrollCommand, sBeginLineString);
+   NS_REGISTER_NEXT_COMMAND(nsSelectMoveScrollCommand, sEndLineString);
+   NS_REGISTER_NEXT_COMMAND(nsSelectMoveScrollCommand, sMovePageUpString);
+   NS_REGISTER_NEXT_COMMAND(nsSelectMoveScrollCommand, sMovePageDownString);
+   NS_REGISTER_NEXT_COMMAND(nsSelectMoveScrollCommand, sScrollPageUpString);
+   NS_REGISTER_NEXT_COMMAND(nsSelectMoveScrollCommand, sScrollPageDownString);
+-  NS_REGISTER_NEXT_COMMAND(nsSelectMoveScrollCommand, sScrollLineUpString);
+-  NS_REGISTER_NEXT_COMMAND(nsSelectMoveScrollCommand, sScrollLineDownString);
+-  NS_REGISTER_NEXT_COMMAND(nsSelectMoveScrollCommand, sScrollLeftString);
+-  NS_REGISTER_LAST_COMMAND(nsSelectMoveScrollCommand, sScrollRightString);
++  NS_REGISTER_NEXT_COMMAND(nsSelectMoveScrollCommand, sLinePreviousString);
++  NS_REGISTER_NEXT_COMMAND(nsSelectMoveScrollCommand, sLineNextString);
++  NS_REGISTER_NEXT_COMMAND(nsSelectMoveScrollCommand, sCharPreviousString);
++  NS_REGISTER_LAST_COMMAND(nsSelectMoveScrollCommand, sCharNextString);
+ 
+   NS_REGISTER_FIRST_COMMAND(nsSelectCommand, sSelectCharPreviousString);
+   NS_REGISTER_NEXT_COMMAND(nsSelectCommand, sSelectCharNextString);
+   NS_REGISTER_NEXT_COMMAND(nsSelectCommand, sSelectWordPreviousString);
+   NS_REGISTER_NEXT_COMMAND(nsSelectCommand, sSelectWordNextString);
+   NS_REGISTER_NEXT_COMMAND(nsSelectCommand, sSelectBeginLineString);
+   NS_REGISTER_NEXT_COMMAND(nsSelectCommand, sSelectEndLineString);
+   NS_REGISTER_NEXT_COMMAND(nsSelectCommand, sSelectLinePreviousString);
+   NS_REGISTER_NEXT_COMMAND(nsSelectCommand, sSelectLineNextString);
+-  // XXX these commands were never implemented. fix me.
+-  // NS_REGISTER_NEXT_COMMAND(nsSelectCommand, sSelectPagePreviousString);
+-  // NS_REGISTER_NEXT_COMMAND(nsSelectCommand, sSelectPageNextString);
++  NS_REGISTER_NEXT_COMMAND(nsSelectCommand, sSelectPageUpString);
++  NS_REGISTER_NEXT_COMMAND(nsSelectCommand, sSelectPageDownString);
+   NS_REGISTER_NEXT_COMMAND(nsSelectCommand, sSelectTopString);
+   NS_REGISTER_LAST_COMMAND(nsSelectCommand, sSelectBottomString);
+ 
+   NS_REGISTER_ONE_COMMAND(nsClipboardCommand, "cmd_cut");
+   NS_REGISTER_ONE_COMMAND(nsClipboardCommand, "cmd_copy");
+   NS_REGISTER_ONE_COMMAND(nsClipboardCommand, "cmd_paste");
+   NS_REGISTER_ONE_COMMAND(nsClipboardCopyLinkCommand, "cmd_copyLink");
+   NS_REGISTER_FIRST_COMMAND(nsClipboardImageCommands, sCopyImageLocationString);
+diff --git a/editor/composer/src/nsEditingSession.cpp b/editor/composer/src/nsEditingSession.cpp
+--- a/editor/composer/src/nsEditingSession.cpp
++++ b/editor/composer/src/nsEditingSession.cpp
+@@ -179,18 +179,18 @@ nsEditingSession::MakeWindowEditable(nsI
+   NS_ENSURE_SUCCESS(rv, rv);  
+   
+   // set the flag on the docShell to say that it's editable
+   rv = editorDocShell->MakeEditable(aDoAfterUriLoad);
+   NS_ENSURE_SUCCESS(rv, rv);  
+ 
+   // Setup commands common to plaintext and html editors,
+   //  including the document creation observers
+-  // the first is an editor controller
+-  rv = SetupEditorCommandController("@mozilla.org/editor/editorcontroller;1",
++  // the first is an editing controller
++  rv = SetupEditorCommandController("@mozilla.org/editor/editingcontroller;1",
+                                     aWindow,
+                                     static_cast<nsIEditingSession*>(this),
+                                     &mBaseCommandControllerId);
+   NS_ENSURE_SUCCESS(rv, rv);
+ 
+   // The second is a controller to monitor doc state,
+   // such as creation and "dirty flag"
+   rv = SetupEditorCommandController("@mozilla.org/editor/editordocstatecontroller;1",
+@@ -1429,17 +1429,17 @@ nsEditingSession::ReattachToWindow(nsIDO
+   // Tells embedder that startup is in progress.
+   mEditorStatus = eEditorCreationInProgress;
+ 
+   // Adds back web progress listener.
+   rv = PrepareForEditing(aWindow);
+   NS_ENSURE_SUCCESS(rv, rv);
+ 
+   // Setup the command controllers again.
+-  rv = SetupEditorCommandController("@mozilla.org/editor/editorcontroller;1",
++  rv = SetupEditorCommandController("@mozilla.org/editor/editingcontroller;1",
+                                     aWindow,
+                                     static_cast<nsIEditingSession*>(this),
+                                     &mBaseCommandControllerId);
+   NS_ENSURE_SUCCESS(rv, rv);
+ 
+   rv = SetupEditorCommandController("@mozilla.org/editor/editordocstatecontroller;1",
+                                     aWindow,
+                                     static_cast<nsIEditingSession*>(this),
+diff --git a/editor/libeditor/base/nsEditorController.cpp b/editor/libeditor/base/nsEditorController.cpp
+--- a/editor/libeditor/base/nsEditorController.cpp
++++ b/editor/libeditor/base/nsEditorController.cpp
+@@ -66,17 +66,17 @@
+ 
+ #define NS_REGISTER_LAST_COMMAND(_cmdClass, _cmdName)                                     \
+     rv = inCommandTable->RegisterCommand(_cmdName,                                        \
+                                    static_cast<nsIControllerCommand *>(theCmd));          \
+   }
+ 
+ 
+ // static
+-nsresult nsEditorController::RegisterEditorCommands(nsIControllerCommandTable *inCommandTable)
++nsresult nsEditorController::RegisterEditingCommands(nsIControllerCommandTable *inCommandTable)
+ {
+   nsresult rv;
+  
+   // now register all our commands
+   // These are commands that will be used in text widgets, and in composer
+   
+   NS_REGISTER_ONE_COMMAND(nsUndoCommand, "cmd_undo");
+   NS_REGISTER_ONE_COMMAND(nsRedoCommand, "cmd_redo");
+@@ -96,16 +96,31 @@ nsresult nsEditorController::RegisterEdi
+   NS_REGISTER_FIRST_COMMAND(nsDeleteCommand, "cmd_delete");
+   NS_REGISTER_NEXT_COMMAND(nsDeleteCommand, "cmd_deleteCharBackward");
+   NS_REGISTER_NEXT_COMMAND(nsDeleteCommand, "cmd_deleteCharForward");
+   NS_REGISTER_NEXT_COMMAND(nsDeleteCommand, "cmd_deleteWordBackward");
+   NS_REGISTER_NEXT_COMMAND(nsDeleteCommand, "cmd_deleteWordForward");
+   NS_REGISTER_NEXT_COMMAND(nsDeleteCommand, "cmd_deleteToBeginningOfLine");
+   NS_REGISTER_LAST_COMMAND(nsDeleteCommand, "cmd_deleteToEndOfLine");
+ 
++  // Insert content
++  NS_REGISTER_ONE_COMMAND(nsInsertPlaintextCommand, "cmd_insertText");
++  NS_REGISTER_ONE_COMMAND(nsPasteQuotationCommand,  "cmd_pasteQuote");
++
++  return NS_OK;
++}
++
++
++// static
++nsresult nsEditorController::RegisterEditorCommands(nsIControllerCommandTable *inCommandTable)
++{
++  nsresult rv;
++
++  // These are commands that will be used in text widgets only.
++
+   NS_REGISTER_FIRST_COMMAND(nsSelectionMoveCommands, "cmd_scrollTop");
+   NS_REGISTER_NEXT_COMMAND(nsSelectionMoveCommands, "cmd_scrollBottom");
+   NS_REGISTER_NEXT_COMMAND(nsSelectionMoveCommands, "cmd_moveTop");
+   NS_REGISTER_NEXT_COMMAND(nsSelectionMoveCommands, "cmd_moveBottom");
+   NS_REGISTER_NEXT_COMMAND(nsSelectionMoveCommands, "cmd_selectTop");
+   NS_REGISTER_NEXT_COMMAND(nsSelectionMoveCommands, "cmd_selectBottom");
+   NS_REGISTER_NEXT_COMMAND(nsSelectionMoveCommands, "cmd_lineNext");
+   NS_REGISTER_NEXT_COMMAND(nsSelectionMoveCommands, "cmd_linePrevious");
+@@ -126,17 +141,12 @@ nsresult nsEditorController::RegisterEdi
+   NS_REGISTER_NEXT_COMMAND(nsSelectionMoveCommands, "cmd_scrollPageUp");
+   NS_REGISTER_NEXT_COMMAND(nsSelectionMoveCommands, "cmd_scrollPageDown");
+   NS_REGISTER_NEXT_COMMAND(nsSelectionMoveCommands, "cmd_scrollLineUp");
+   NS_REGISTER_NEXT_COMMAND(nsSelectionMoveCommands, "cmd_scrollLineDown");
+   NS_REGISTER_NEXT_COMMAND(nsSelectionMoveCommands, "cmd_movePageUp");
+   NS_REGISTER_NEXT_COMMAND(nsSelectionMoveCommands, "cmd_movePageDown");
+   NS_REGISTER_NEXT_COMMAND(nsSelectionMoveCommands, "cmd_selectPageUp");
+   NS_REGISTER_LAST_COMMAND(nsSelectionMoveCommands, "cmd_selectPageDown");
+-    
+-  // Insert content
+-  NS_REGISTER_ONE_COMMAND(nsInsertPlaintextCommand, "cmd_insertText");
+-  NS_REGISTER_ONE_COMMAND(nsPasteQuotationCommand,  "cmd_pasteQuote");
+-
+ 
+   return NS_OK;
+ }
+ 
+diff --git a/editor/libeditor/base/nsEditorController.h b/editor/libeditor/base/nsEditorController.h
+--- a/editor/libeditor/base/nsEditorController.h
++++ b/editor/libeditor/base/nsEditorController.h
+@@ -36,22 +36,26 @@
+  * ***** END LICENSE BLOCK ***** */
+ 
+ #ifndef nsEditorController_h__
+ #define nsEditorController_h__
+ 
+ #define NS_EDITORCONTROLLER_CID \
+ { 0x26fb965c, 0x9de6, 0x11d3, { 0xbc, 0xcc, 0x0, 0x60, 0xb0, 0xfc, 0x76, 0xbd } }
+ 
++#define NS_EDITINGCONTROLLER_CID \
++{ 0x2c5a5cdd, 0xe742, 0x4dfe, { 0x86, 0xb8, 0x06, 0x93, 0x09, 0xbf, 0x6c, 0x91 } }
++
+ class nsIControllerCommandTable;
+ 
+ 
+ // the editor controller is used for both text widgets, and basic text editing
+ // commands in composer. The refCon that gets passed to its commands is an nsIEditor.
+ 
+ class nsEditorController 
+ {
+ public:
+   static nsresult RegisterEditorCommands(nsIControllerCommandTable* inCommandTable);
++  static nsresult RegisterEditingCommands(nsIControllerCommandTable* inCommandTable);
+ };
+ 
+ #endif /* nsEditorController_h__ */
+ 
+diff --git a/editor/libeditor/html/tests/test_bug549262.html b/editor/libeditor/html/tests/test_bug549262.html
+--- a/editor/libeditor/html/tests/test_bug549262.html
++++ b/editor/libeditor/html/tests/test_bug549262.html
+@@ -16,17 +16,17 @@
+ </div>
+ <pre id="test">
+ <script type="application/javascript">
+ 
+ /** Test for Bug 549262 **/
+ 
+ SimpleTest.waitForExplicitFinish();
+ var win = window.open("file_bug549262.html", "_blank", 
+-                      "width=600,height=600");
++                      "width=600,height=600,scrollbars=yes");
+ SimpleTest.waitForFocus(function() {
+   // Make sure that pressing Space when a contenteditable element is not focused
+   // will scroll the page.
+   var ed = win.document.getElementById("editor");
+   var sc = win.document.querySelector("a");
+   sc.focus();
+   is(win.scrollY, 0, "Sanity check");
+   synthesizeKey(" ", {}, win);
+@@ -53,18 +53,54 @@
+           is(ed.textContent, "a bc", "The content of the editable element has not changed");
+           ed.focus();
+           win.getSelection().collapse(ed.firstChild, 3);
+           synthesizeKey(" ", {shiftKey: true}, win);
+           setTimeout(function() {
+             isnot(win.scrollY, 0, "Page is not scrolled up");
+             is(ed.textContent, "a b c", "The content of the editable element has changed");
+ 
+-            win.close();
+-            SimpleTest.finish();
++            // Now let's test the down/up keys
++            sc = document.body;
++            setTimeout(function() {
++              ed.blur();
++              sc.focus();
++              var oldY = win.scrollY;
++              synthesizeKey("VK_UP", {}, win);
++              setTimeout(function() {
++                ok(win.scrollY < oldY, "Page is scrolled up");
++                oldY = win.scrollY;
++                ed.focus();
++                win.getSelection().collapse(ed.firstChild, 3);
++                synthesizeKey("VK_UP", {}, win);
++                setTimeout(function() {
++                  is(win.scrollY, oldY, "Page is not scrolled up");
++                  is(win.getSelection().focusNode, ed.firstChild, "Correct element selected");
++                  is(win.getSelection().focusOffset, 0, "Selection should be moved to the beginning");
++                  win.getSelection().removeAllRanges();
++                  synthesizeMouse(sc, 300, 300, {}, win);
++                  synthesizeKey("VK_DOWN", {}, win);
++                  setTimeout(function() {
++                    ok(win.scrollY > oldY, "Page is scrolled down");
++                    ed.focus();
++                    win.getSelection().collapse(ed.firstChild, 3);
++                    oldY = win.scrollY;
++                    synthesizeKey("VK_DOWN", {}, win);
++                    setTimeout(function() {
++                      is(win.scrollY, oldY, "Page is not scrolled down");
++                      is(win.getSelection().focusNode, ed.firstChild, "Correct element selected");
++                      is(win.getSelection().focusOffset, ed.textContent.length, "Selection should be moved to the end");
++
++                      win.close();
++                      SimpleTest.finish();
++                    }, 0);
++                  }, 0);
++                }, 0);
++              }, 0);
++            }, 0);
+           }, 0);
+         }, 0);
+       }, 0);
+     }, 0);
+   }, 0);
+ }, win);
+ 
+ </script>
+diff --git a/layout/build/nsLayoutModule.cpp b/layout/build/nsLayoutModule.cpp
+--- a/layout/build/nsLayoutModule.cpp
++++ b/layout/build/nsLayoutModule.cpp
+@@ -150,70 +150,25 @@
+ #include "nsINodeInfo.h"
+ #if defined(ANDROID) || defined(MOZ_PLATFORM_MAEMO)
+ #include "nsHapticFeedback.h"
+ #endif
+ 
+ #define NS_EDITORCOMMANDTABLE_CID \
+ { 0x4f5e62b8, 0xd659, 0x4156, { 0x84, 0xfc, 0x2f, 0x60, 0x99, 0x40, 0x03, 0x69 }}
+ 
++#define NS_EDITINGCOMMANDTABLE_CID \
++{ 0xcb38a746, 0xbeb8, 0x43f3, { 0x94, 0x29, 0x77, 0x96, 0xe1, 0xa9, 0x3f, 0xb4 }}
++
+ #define NS_HAPTICFEEDBACK_CID \
+ { 0x1f15dbc8, 0xbfaa, 0x45de, \
+ { 0x8a, 0x46, 0x08, 0xe2, 0xe2, 0x63, 0x26, 0xb0 } }
+ 
+-static NS_DEFINE_CID(kEditorCommandTableCID, NS_EDITORCOMMANDTABLE_CID);
+-
+ NS_GENERIC_FACTORY_CONSTRUCTOR(nsPlaintextEditor)
+ 
+-// Constructor of a controller which is set up to use, internally, a
+-// singleton command-table pre-filled with editor commands.
+-static nsresult
+-nsEditorControllerConstructor(nsISupports *aOuter, REFNSIID aIID,
+-                                            void **aResult)
+-{
+-  nsresult rv;
+-  nsCOMPtr<nsIController> controller = do_CreateInstance("@mozilla.org/embedcomp/base-command-controller;1", &rv);
+-  if (NS_FAILED(rv)) return rv;
+-
+-  nsCOMPtr<nsIControllerCommandTable> editorCommandTable = do_GetService(kEditorCommandTableCID, &rv);
+-  if (NS_FAILED(rv)) return rv;
+-  
+-  // this guy is a singleton, so make it immutable
+-  editorCommandTable->MakeImmutable();
+-  
+-  nsCOMPtr<nsIControllerContext> controllerContext = do_QueryInterface(controller, &rv);
+-  if (NS_FAILED(rv)) return rv;
+-  
+-  rv = controllerContext->Init(editorCommandTable);
+-  if (NS_FAILED(rv)) return rv;
+-  
+-  return controller->QueryInterface(aIID, aResult);
+-}
+-
+-
+-// Constructor for a command-table pref-filled with editor commands
+-static nsresult
+-nsEditorCommandTableConstructor(nsISupports *aOuter, REFNSIID aIID,
+-                                            void **aResult)
+-{
+-  nsresult rv;
+-  nsCOMPtr<nsIControllerCommandTable> commandTable =
+-      do_CreateInstance(NS_CONTROLLERCOMMANDTABLE_CONTRACTID, &rv);
+-  if (NS_FAILED(rv)) return rv;
+-  
+-  rv = nsEditorController::RegisterEditorCommands(commandTable);
+-  if (NS_FAILED(rv)) return rv;
+-  
+-  // we don't know here whether we're being created as an instance,
+-  // or a service, so we can't become immutable
+-
+-  return commandTable->QueryInterface(aIID, aResult);
+-}
+-
+-
+ NS_GENERIC_FACTORY_CONSTRUCTOR(nsTextServicesDocument)
+ #ifdef ENABLE_EDITOR_API_LOG
+ #include "nsHTMLEditorLog.h"
+ NS_GENERIC_FACTORY_CONSTRUCTOR(nsHTMLEditorLog)
+ #else
+ NS_GENERIC_FACTORY_CONSTRUCTOR(nsHTMLEditor)
+ #endif
+ 
+@@ -240,18 +195,16 @@
+ /* 0ddf4df8-4dbb-4133-8b79-9afb966514f5 */
+ #define NS_PLUGINDOCLOADERFACTORY_CID \
+ { 0x0ddf4df8, 0x4dbb, 0x4133, { 0x8b, 0x79, 0x9a, 0xfb, 0x96, 0x65, 0x14, 0xf5 } }
+ 
+ #define NS_WINDOWCOMMANDTABLE_CID \
+  { /* 0DE2FBFA-6B7F-11D7-BBBA-0003938A9D96 */        \
+   0x0DE2FBFA, 0x6B7F, 0x11D7, {0xBB, 0xBA, 0x00, 0x03, 0x93, 0x8A, 0x9D, 0x96} }
+ 
+-static NS_DEFINE_CID(kWindowCommandTableCID, NS_WINDOWCOMMANDTABLE_CID);
+-
+ #include "nsIBoxObject.h"
+ 
+ #ifdef MOZ_XUL
+ #include "inDOMView.h"
+ #endif /* MOZ_XUL */
+ 
+ #include "inDeepTreeWalker.h"
+ #include "inFlasher.h"
+@@ -633,56 +586,16 @@
+     return NS_ERROR_NO_AGGREGATION;
+   // Note! NS_NewHTMLAudioElement is special cased to handle a null nodeinfo
+   nsCOMPtr<nsINodeInfo> ni;
+   nsCOMPtr<nsIContent> inst(NS_NewHTMLAudioElement(ni.forget()));
+   return inst ? inst->QueryInterface(aIID, aResult) : NS_ERROR_OUT_OF_MEMORY;
+ }
+ #endif
+ 
+-static nsresult
+-CreateWindowCommandTableConstructor(nsISupports *aOuter,
+-                                    REFNSIID aIID, void **aResult)
+-{
+-  nsresult rv;
+-  nsCOMPtr<nsIControllerCommandTable> commandTable =
+-      do_CreateInstance(NS_CONTROLLERCOMMANDTABLE_CONTRACTID, &rv);
+-  if (NS_FAILED(rv)) return rv;
+-
+-  rv = nsWindowCommandRegistration::RegisterWindowCommands(commandTable);
+-  if (NS_FAILED(rv)) return rv;
+-
+-  return commandTable->QueryInterface(aIID, aResult);
+-}
+-
+-static nsresult
+-CreateWindowControllerWithSingletonCommandTable(nsISupports *aOuter,
+-                                      REFNSIID aIID, void **aResult)
+-{
+-  nsresult rv;
+-  nsCOMPtr<nsIController> controller =
+-       do_CreateInstance("@mozilla.org/embedcomp/base-command-controller;1", &rv);
+-
+- if (NS_FAILED(rv)) return rv;
+-
+-  nsCOMPtr<nsIControllerCommandTable> windowCommandTable = do_GetService(kWindowCommandTableCID, &rv);
+-  if (NS_FAILED(rv)) return rv;
+-
+-  // this is a singleton; make it immutable
+-  windowCommandTable->MakeImmutable();
+-
+-  nsCOMPtr<nsIControllerContext> controllerContext = do_QueryInterface(controller, &rv);
+-  if (NS_FAILED(rv)) return rv;
+-
+-  controllerContext->Init(windowCommandTable);
+-  if (NS_FAILED(rv)) return rv;
+-
+-  return controller->QueryInterface(aIID, aResult);
+-}
+-
+ NS_GENERIC_FACTORY_CONSTRUCTOR(nsDOMScriptObjectFactory)
+ NS_GENERIC_FACTORY_CONSTRUCTOR(nsBaseDOMException)
+ 
+ #define NS_GEOLOCATION_CID \
+   { 0x1E1C3FF, 0x94A, 0xD048, { 0x44, 0xB4, 0x62, 0xD2, 0x9C, 0x7B, 0x4F, 0x39 } }
+ 
+ NS_GENERIC_FACTORY_CONSTRUCTOR_INIT(nsGeolocation, Init)
+ 
+@@ -815,17 +728,19 @@
+ NS_DEFINE_NAMED_CID(NS_TEXTEDITOR_CID);
+ NS_DEFINE_NAMED_CID(INDEXEDDB_MANAGER_CID );
+ #ifdef ENABLE_EDITOR_API_LOG
+ NS_DEFINE_NAMED_CID(NS_HTMLEDITOR_CID);
+ #else
+ NS_DEFINE_NAMED_CID(NS_HTMLEDITOR_CID);
+ #endif
+ NS_DEFINE_NAMED_CID(NS_EDITORCONTROLLER_CID);
++NS_DEFINE_NAMED_CID(NS_EDITINGCONTROLLER_CID);
+ NS_DEFINE_NAMED_CID(NS_EDITORCOMMANDTABLE_CID);
++NS_DEFINE_NAMED_CID(NS_EDITINGCOMMANDTABLE_CID);
+ NS_DEFINE_NAMED_CID(NS_TEXTSERVICESDOCUMENT_CID);
+ NS_DEFINE_NAMED_CID(NS_GEOLOCATION_SERVICE_CID);
+ NS_DEFINE_NAMED_CID(NS_GEOLOCATION_CID);
+ NS_DEFINE_NAMED_CID(NS_FOCUSMANAGER_CID);
+ NS_DEFINE_NAMED_CID(CSPSERVICE_CID);
+ NS_DEFINE_NAMED_CID(NS_EVENTLISTENERSERVICE_CID);
+ NS_DEFINE_NAMED_CID(NS_GLOBALMESSAGEMANAGER_CID);
+ NS_DEFINE_NAMED_CID(NS_PARENTPROCESSMESSAGEMANAGER_CID);
+@@ -844,16 +759,145 @@
+     defined(machintosh) || \
+     defined(android)
+ NS_DEFINE_NAMED_CID(NS_DEVICE_MOTION_CID);
+ #endif
+ #if defined(ANDROID) || defined(MOZ_PLATFORM_MAEMO)
+ NS_DEFINE_NAMED_CID(NS_HAPTICFEEDBACK_CID);
+ #endif
+ 
++static nsresult
++CreateWindowCommandTableConstructor(nsISupports *aOuter,
++                                    REFNSIID aIID, void **aResult)
++{
++  nsresult rv;
++  nsCOMPtr<nsIControllerCommandTable> commandTable =
++      do_CreateInstance(NS_CONTROLLERCOMMANDTABLE_CONTRACTID, &rv);
++  if (NS_FAILED(rv)) return rv;
++
++  rv = nsWindowCommandRegistration::RegisterWindowCommands(commandTable);
++  if (NS_FAILED(rv)) return rv;
++
++  return commandTable->QueryInterface(aIID, aResult);
++}
++
++static nsresult
++CreateWindowControllerWithSingletonCommandTable(nsISupports *aOuter,
++                                      REFNSIID aIID, void **aResult)
++{
++  nsresult rv;
++  nsCOMPtr<nsIController> controller =
++       do_CreateInstance("@mozilla.org/embedcomp/base-command-controller;1", &rv);
++
++ if (NS_FAILED(rv)) return rv;
++
++  nsCOMPtr<nsIControllerCommandTable> windowCommandTable = do_GetService(kNS_WINDOWCOMMANDTABLE_CID, &rv);
++  if (NS_FAILED(rv)) return rv;
++
++  // this is a singleton; make it immutable
++  windowCommandTable->MakeImmutable();
++
++  nsCOMPtr<nsIControllerContext> controllerContext = do_QueryInterface(controller, &rv);
++  if (NS_FAILED(rv)) return rv;
++
++  controllerContext->Init(windowCommandTable);
++  if (NS_FAILED(rv)) return rv;
++
++  return controller->QueryInterface(aIID, aResult);
++}
++
++// Constructor of a controller which is set up to use, internally, a
++// singleton command-table pre-filled with editor commands.
++static nsresult
++nsEditorControllerConstructor(nsISupports *aOuter, REFNSIID aIID,
++                              void **aResult)
++{
++  nsresult rv;
++  nsCOMPtr<nsIController> controller = do_CreateInstance("@mozilla.org/embedcomp/base-command-controller;1", &rv);
++  if (NS_FAILED(rv)) return rv;
++
++  nsCOMPtr<nsIControllerCommandTable> editorCommandTable = do_GetService(kNS_EDITORCOMMANDTABLE_CID, &rv);
++  if (NS_FAILED(rv)) return rv;
++  
++  // this guy is a singleton, so make it immutable
++  editorCommandTable->MakeImmutable();
++  
++  nsCOMPtr<nsIControllerContext> controllerContext = do_QueryInterface(controller, &rv);
++  if (NS_FAILED(rv)) return rv;
++  
++  rv = controllerContext->Init(editorCommandTable);
++  if (NS_FAILED(rv)) return rv;
++  
++  return controller->QueryInterface(aIID, aResult);
++}
++
++// Constructor of a controller which is set up to use, internally, a
++// singleton command-table pre-filled with editing commands.
++static nsresult
++nsEditingControllerConstructor(nsISupports *aOuter, REFNSIID aIID,
++                                void **aResult)
++{
++  nsresult rv;
++  nsCOMPtr<nsIController> controller = do_CreateInstance("@mozilla.org/embedcomp/base-command-controller;1", &rv);
++  if (NS_FAILED(rv)) return rv;
++
++  nsCOMPtr<nsIControllerCommandTable> editingCommandTable = do_GetService(kNS_EDITINGCOMMANDTABLE_CID, &rv);
++  if (NS_FAILED(rv)) return rv;
++  
++  // this guy is a singleton, so make it immutable
++  editingCommandTable->MakeImmutable();
++  
++  nsCOMPtr<nsIControllerContext> controllerContext = do_QueryInterface(controller, &rv);
++  if (NS_FAILED(rv)) return rv;
++  
++  rv = controllerContext->Init(editingCommandTable);
++  if (NS_FAILED(rv)) return rv;
++  
++  return controller->QueryInterface(aIID, aResult);
++}
++
++// Constructor for a command-table pre-filled with editor commands
++static nsresult
++nsEditorCommandTableConstructor(nsISupports *aOuter, REFNSIID aIID,
++                                            void **aResult)
++{
++  nsresult rv;
++  nsCOMPtr<nsIControllerCommandTable> commandTable =
++      do_CreateInstance(NS_CONTROLLERCOMMANDTABLE_CONTRACTID, &rv);
++  if (NS_FAILED(rv)) return rv;
++  
++  rv = nsEditorController::RegisterEditorCommands(commandTable);
++  if (NS_FAILED(rv)) return rv;
++  
++  // we don't know here whether we're being created as an instance,
++  // or a service, so we can't become immutable
++
++  return commandTable->QueryInterface(aIID, aResult);
++}
++
++// Constructor for a command-table pre-filled with editing commands
++static nsresult
++nsEditingCommandTableConstructor(nsISupports *aOuter, REFNSIID aIID,
++                                              void **aResult)
++{
++  nsresult rv;
++  nsCOMPtr<nsIControllerCommandTable> commandTable =
++      do_CreateInstance(NS_CONTROLLERCOMMANDTABLE_CONTRACTID, &rv);
++  if (NS_FAILED(rv)) return rv;
++
++  rv = nsEditorController::RegisterEditingCommands(commandTable);
++  if (NS_FAILED(rv)) return rv;
++
++  // we don't know here whether we're being created as an instance,
++  // or a service, so we can't become immutable
++
++  return commandTable->QueryInterface(aIID, aResult);
++}
++
++
+ static const mozilla::Module::CIDEntry kLayoutCIDs[] = {
+   XPCONNECT_CIDENTRIES
+ #ifdef DEBUG
+   { &kNS_FRAME_UTIL_CID, false, NULL, CreateNewFrameUtil },
+   { &kNS_LAYOUT_DEBUGGER_CID, false, NULL, CreateNewLayoutDebugger },
+ #endif
+   { &kNS_FRAMETRAVERSAL_CID, false, NULL, CreateNewFrameTraversal },
+   { &kNS_PRESSHELL_CID, false, NULL, CreateNewPresShell },
+@@ -948,17 +992,19 @@ static const mozilla::Module::CIDEntry k
+   { &kNS_TEXTEDITOR_CID, false, NULL, nsPlaintextEditorConstructor },
+   { &kINDEXEDDB_MANAGER_CID, false, NULL, IndexedDatabaseManagerConstructor },
+ #ifdef ENABLE_EDITOR_API_LOG
+   { &kNS_HTMLEDITOR_CID, false, NULL, nsHTMLEditorLogConstructor },
+ #else
+   { &kNS_HTMLEDITOR_CID, false, NULL, nsHTMLEditorConstructor },
+ #endif
+   { &kNS_EDITORCONTROLLER_CID, false, NULL, nsEditorControllerConstructor },
++  { &kNS_EDITINGCONTROLLER_CID, false, NULL, nsEditingControllerConstructor },
+   { &kNS_EDITORCOMMANDTABLE_CID, false, NULL, nsEditorCommandTableConstructor },
++  { &kNS_EDITINGCOMMANDTABLE_CID, false, NULL, nsEditingCommandTableConstructor },
+   { &kNS_TEXTSERVICESDOCUMENT_CID, false, NULL, nsTextServicesDocumentConstructor },
+   { &kNS_GEOLOCATION_SERVICE_CID, false, NULL, nsGeolocationServiceConstructor },
+   { &kNS_GEOLOCATION_CID, false, NULL, nsGeolocationConstructor },
+   { &kNS_FOCUSMANAGER_CID, false, NULL, CreateFocusManager },
+   { &kCSPSERVICE_CID, false, NULL, CSPServiceConstructor },
+   { &kNS_EVENTLISTENERSERVICE_CID, false, NULL, CreateEventListenerService },
+   { &kNS_GLOBALMESSAGEMANAGER_CID, false, NULL, CreateGlobalMessageManager },
+   { &kNS_PARENTPROCESSMESSAGEMANAGER_CID, false, NULL, CreateParentMessageManager },
+@@ -1075,17 +1121,17 @@ static const mozilla::Module::ContractID
+   { "@mozilla.org/editor/texteditor;1", &kNS_TEXTEDITOR_CID },
+   { INDEXEDDB_MANAGER_CONTRACTID, &kINDEXEDDB_MANAGER_CID },
+ #ifdef ENABLE_EDITOR_API_LOG
+   { "@mozilla.org/editor/htmleditor;1", &kNS_HTMLEDITOR_CID },
+ #else
+   { "@mozilla.org/editor/htmleditor;1", &kNS_HTMLEDITOR_CID },
+ #endif
+   { "@mozilla.org/editor/editorcontroller;1", &kNS_EDITORCONTROLLER_CID },
+-  { "", &kNS_EDITORCOMMANDTABLE_CID },
++  { "@mozilla.org/editor/editingcontroller;1", &kNS_EDITINGCONTROLLER_CID },
+   { "@mozilla.org/textservices/textservicesdocument;1", &kNS_TEXTSERVICESDOCUMENT_CID },
+   { "@mozilla.org/geolocation/service;1", &kNS_GEOLOCATION_SERVICE_CID },
+   { "@mozilla.org/geolocation;1", &kNS_GEOLOCATION_CID },
+   { "@mozilla.org/focus-manager;1", &kNS_FOCUSMANAGER_CID },
+   { CSPSERVICE_CONTRACTID, &kCSPSERVICE_CID },
+   { NS_EVENTLISTENERSERVICE_CONTRACTID, &kNS_EVENTLISTENERSERVICE_CID },
+   { NS_GLOBALMESSAGEMANAGER_CONTRACTID, &kNS_GLOBALMESSAGEMANAGER_CID },
+   { NS_PARENTPROCESSMESSAGEMANAGER_CONTRACTID, &kNS_PARENTPROCESSMESSAGEMANAGER_CID },
