@@ -1,0 +1,142 @@
+# HG changeset patch
+# Parent 4c2bd49994455b61e6936ca4ad86c91b7f4ae495
+# User Ehsan Akhgari <ehsan@mozilla.com>
+Bug 674770 - contenteditable breaks middle-click to open links when middlemouse.paste=true
+
+
+diff --git a/editor/libeditor/base/nsEditorEventListener.cpp b/editor/libeditor/base/nsEditorEventListener.cpp
+--- a/editor/libeditor/base/nsEditorEventListener.cpp
++++ b/editor/libeditor/base/nsEditorEventListener.cpp
+@@ -384,16 +384,26 @@ nsEditorEventListener::MouseClick(nsIDOM
+   nsCOMPtr<nsIDOMNSEvent> nsevent = do_QueryInterface(aMouseEvent);
+   PRBool isTrusted = PR_FALSE;
+   if (!mouseEvent || !nsevent ||
+       NS_FAILED(nsevent->GetIsTrusted(&isTrusted)) || !isTrusted) {
+     // Non-ui or non-trusted event passed in. Bad things.
+     return NS_OK;
+   }
+ 
++  nsCOMPtr<nsIDOMEventTarget> target;
++  aMouseEvent->GetTarget(getter_AddRefs(target));
++  nsCOMPtr<nsIDOMNode> node = do_QueryInterface(target);
++  NS_ENSURE_TRUE(node, NS_ERROR_FAILURE);
++
++  if (!mEditor->IsModifiableNode(node)) {
++    // We shouldn't handle the event for non-editable content.
++    return NS_OK;
++  }
++
+   nsresult rv;
+   nsCOMPtr<nsIDOMNSUIEvent> nsuiEvent = do_QueryInterface(aMouseEvent);
+   NS_ENSURE_TRUE(nsuiEvent, NS_ERROR_NULL_POINTER);
+ 
+   PRBool preventDefault;
+   rv = nsuiEvent->GetPreventDefault(&preventDefault);
+   if (NS_FAILED(rv) || preventDefault)
+   {
+diff --git a/editor/libeditor/html/tests/Makefile.in b/editor/libeditor/html/tests/Makefile.in
+--- a/editor/libeditor/html/tests/Makefile.in
++++ b/editor/libeditor/html/tests/Makefile.in
+@@ -75,16 +75,18 @@ _TEST_FILES = \
+ 		test_bug607584.html \
+ 		test_bug611182.html \
+ 		test_bug612447.html \
+ 		test_bug620906.html \
+ 		test_bug622371.html \
+ 		test_bug629845.html \
+ 		test_bug640321.html \
+ 		test_bug668599.html \
++		test_bug674770.html \
++		file_bug674770.html \
+ 		test_CF_HTML_clipboard.html \
+ 		test_contenteditable_focus.html \
+ 		test_htmleditor_keyevent_handling.html \
+ 		test_select_all_without_body.html \
+ 		file_select_all_without_body.html \
+ 		test_root_element_replacement.html \
+ 		$(NULL)
+ 
+diff --git a/editor/libeditor/html/tests/file_bug674770.html b/editor/libeditor/html/tests/file_bug674770.html
+new file mode 100644
+--- /dev/null
++++ b/editor/libeditor/html/tests/file_bug674770.html
+@@ -0,0 +1,5 @@
++<!DOCTYPE>
++<script>
++  localStorage["clicked"] = "true";
++  close();
++</script>
+diff --git a/editor/libeditor/html/tests/test_bug674770.html b/editor/libeditor/html/tests/test_bug674770.html
+new file mode 100644
+--- /dev/null
++++ b/editor/libeditor/html/tests/test_bug674770.html
+@@ -0,0 +1,69 @@
++<!DOCTYPE HTML>
++<html>
++<!--
++https://bugzilla.mozilla.org/show_bug.cgi?id=674770
++-->
++<head>
++  <title>Test for Bug 674770</title>
++  <script type="application/javascript" src="/MochiKit/packed.js"></script>
++  <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
++  <script type="text/javascript" src="/tests/SimpleTest/EventUtils.js"></script>
++  <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
++</head>
++<body>
++<a target="_blank" href="https://bugzilla.mozilla.org/show_bug.cgi?id=674770">Mozilla Bug 674770</a>
++<p id="display"></p>
++<div id="content">
++<a href="file_bug674770.html" id="link1">test</a>
++<div contenteditable>
++<a href="file_bug674770.html" id="link2">test</a>
++</div>
++</div>
++<pre id="test">
++<script type="application/javascript">
++
++/** Test for Bug 674770 **/
++SimpleTest.waitForExplicitFinish();
++SimpleTest.waitForFocus(function() {
++  SpecialPowers.setBoolPref("middlemouse.paste", true);
++  localStorage.removeItem("clicked");
++  window.linkWasClicked = false;
++
++  var link = document.querySelector("#link1");
++  addEventListener("storage", function(e) {
++    is(e.key, "clicked", "Correct event");
++    is(e.newValue, "true", "Correct value");
++    window.linkWasClicked = true;
++  }, false);
++  synthesizeMouseAtCenter(link, {button: 1});
++
++  hitEventLoop(function() {
++    ok(window.linkWasClicked, "The click operation worked successfully");
++    window.linkWasClicked = false;
++
++    link = document.querySelector("#link2");
++    localStorage.removeItem("clicked");
++    synthesizeMouseAtCenter(link, {button: 1});
++
++    hitEventLoop(function() {
++      ok(!window.linkWasClicked, "The click operation shouldn't work in the contenteditable area");
++
++      localStorage.removeItem("clicked");
++      SpecialPowers.clearUserPref("middlemouse.paste");
++      SimpleTest.finish();
++    }, 100);
++  }, 100);
++});
++
++function hitEventLoop(func, times) {
++  if (times > 0) {
++    setTimeout(hitEventLoop, 0, func, times - 1);
++  } else {
++    setTimeout(func, 0);
++  }
++}
++
++</script>
++</pre>
++</body>
++</html>
