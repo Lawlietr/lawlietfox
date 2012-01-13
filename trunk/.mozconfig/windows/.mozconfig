@@ -4,8 +4,8 @@ ac_add_options --disable-debug
 ac_add_options --disable-tests
 ac_add_options --disable-installer --disable-updater --disable-update-channel --disable-update-packaging
 #ac_add_options --enable-official-branding
-#ac_add_options --with-branding=browser/branding/unofficial
-ac_add_options --with-branding=browser/branding/aurora
+ac_add_options --with-branding=browser/branding/unofficial
+#ac_add_options --with-branding=browser/branding/aurora
 #ac_add_options --with-distribution-id=LawlietFox
 ac_add_options --disable-accessibility
 export MOZ_OPTIMIZE_LDFLAGS="-opt:ref,icf"
@@ -14,6 +14,7 @@ mk_add_options MOZ_OPTIMIZE_LDFLAGS="-opt:ref,icf"
 ## optimize options
 #ac_add_options --enable-optimize="-O2 -Ot -Oy -GT -Gy -GF -GL -GR -GS -arch:SSE2"
 ac_add_options --enable-optimize="-O2 -Ot -Oy -GT -Gy -GF -GL -arch:SSE2"
+#ac_add_options --enable-optimize="-O2 -GL -arch:SSE2"
 #ac_add_options --enable-optimize="-O2 -Ot -Oy -GT -Gy -GF -GL -favor:AMD64 -arch:AVX'
 #ac_add_options --enable-optimize="-O2 -Ot -Oy -GT -Gy -GF -GL -favor:INTEL64 -arch:AVX'
 ### for 64bit build
@@ -26,18 +27,24 @@ ac_add_options --disable-activex-scripting
 ac_add_options --disable-ipdl-tests
 ac_add_options --enable-extensions=default
 ac_add_options --enable-strip
+ac_add_options --enable-install-strip
 ac_add_options --enable-debugger-info-modules=no
+ac_add_options --disable-debugger-info-modules
+ac_add_options --enable-chrome-format=jar
+ac_add_options --disable-parental-controls
+ac_add_options --disable-debug-symbols
+ac_add_options --enable-shared-js
+ac_add_options --enable-crypto
+ac_add_options --disable-mochitest
+ac_add_options --disable-mochitests 
+ac_add_options --disable-windows-mobile-components
 #ac_add_options --enable-canvas
 #ac_add_options --enable-svg
-#ac_add_options --disable-parental-controls
-#ac_add_options --disable-debug-symbols
-#ac_add_options --enable-shared-js
-#ac_add_options --enable-crypto
-#ac_add_options --enable-image-decoders=icon,png,gif,jpeg,bmp
+ac_add_options --enable-image-decoders=icon,png,gif,jpeg,bmp
 #
 ##  PGO build
 #ac_add_options --enable-profile-guided-optimization
-mk_add_options MOZ_MAKE_FLAGS="-j1"
+mk_add_options MOZ_MAKE_FLAGS="-j5"
 mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/ff-pgo
 #mk_add_options PROFILE_GEN_SCRIPT='$(PYTHON) $(MOZ_OBJDIR)/_profile/pgo/profileserver.py'
 mk_add_options PROFILE_GEN_SCRIPT='cscript E:/SystemTools/win32_Firefox/PgoMsg.vbs'
@@ -53,6 +60,6 @@ mk_add_options PROFILE_GEN_SCRIPT='cscript E:/SystemTools/win32_Firefox/PgoMsg.v
 #ac_add_options --with-windows-version=601
 #
 ## crt dir
-#WIN32_REDIST_DIR=$VCINSTALLDIR/redist/x86/Microsoft.VC100.CRT
+WIN32_REDIST_DIR=$VCINSTALLDIR/redist/x86/Microsoft.VC100.CRT
 #WIN32_REDIST_DIR=$VCINSTALLDIR/redist/x64/Microsoft.VC100.CRT
 
