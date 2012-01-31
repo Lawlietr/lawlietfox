@@ -1,0 +1,45 @@
+diff --git a/memory/mozutils/Makefile.in b/memory/mozutils/Makefile.in
+--- a/memory/mozutils/Makefile.in
++++ b/memory/mozutils/Makefile.in
+@@ -67,18 +67,16 @@ MOZ_UTILS_LDFLAGS = # Don't link against
+ ifeq (WINNT,$(OS_TARGET))
+ DEFFILE = mozutils.def
+ 
+ mozutils.def: mozutils.def.in
+ 	$(PYTHON) $(topsrcdir)/config/Preprocessor.py $(ACDEFINES) $< > $@
+ 
+ GARBAGE += mozutils.def
+ 
+-LDFLAGS += -ENTRY:DllMain
+-
+ ifneq (,$(filter -DEFAULTLIB:mozcrt,$(MOZ_UTILS_LDFLAGS)))
+ # Don't install the import library if we use mozcrt
+ NO_INSTALL_IMPORT_LIBRARY = 1
+ endif
+ endif
+ 
+ ifeq (Android, $(OS_TARGET))
+ # Add Android linker
+@@ -92,16 +90,22 @@ include $(topsrcdir)/config/rules.mk
+ ifdef MOZ_MEMORY
+ ifeq (Darwin,$(OS_TARGET))
+ LDFLAGS += -init _jemalloc_darwin_init
+ endif
+ 
+ ifeq (WINNT,$(OS_TARGET))
+ # Roll our own custom logic here for the import library
+ 
++LDFLAGS += -ENTRY:DllMain
++
++ifeq (x86_64, $(TARGET_CPU))
++LDFLAGS += -MACHINE:X64
++endif
++
+ ###############################################################################
+ #
+ # Linking Mozilla itself to jemalloc is not particularly difficult.  To do this
+ # we avoid linking directly to the Microsoft-provided CRT import libraries.
+ # Instead, we link to our own import library which we generate here.  To
+ # replace the CRT's malloc/free/other memory management symbols we export
+ # our own versions out of jemalloc.dll.  We then take the import library that
+ # the compiler generates for jemalloc.dll and combine it with the MS CRT import
