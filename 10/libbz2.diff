@@ -1,6 +1,6 @@
 diff -r 9f29daaecbcc modules/libbz2/src/LICENSE
---- a/modules/libbz2/src/LICENSE	Mon Dec 26 13:19:08 2011 +1300
-+++ b/modules/libbz2/src/LICENSE	Wed Dec 28 18:30:17 2011 +0900
+--- a/modules/libbz2/src/LICENSE    Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/LICENSE    Wed Dec 28 18:30:17 2011 +0900
 @@ -2,7 +2,7 @@
  --------------------------------------------------------------------------
  
@@ -22,8 +22,8 @@ diff -r 9f29daaecbcc modules/libbz2/src/LICENSE
  
  --------------------------------------------------------------------------
 diff -r 9f29daaecbcc modules/libbz2/src/blocksort.c
---- a/modules/libbz2/src/blocksort.c	Mon Dec 26 13:19:08 2011 +1300
-+++ b/modules/libbz2/src/blocksort.c	Wed Dec 28 18:30:17 2011 +0900
+--- a/modules/libbz2/src/blocksort.c    Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/blocksort.c    Wed Dec 28 18:30:17 2011 +0900
 @@ -8,8 +8,8 @@
     This file is part of bzip2/libbzip2, a program and library for
     lossless, block-sorting data compression.
@@ -36,8 +36,8 @@ diff -r 9f29daaecbcc modules/libbz2/src/blocksort.c
     Please read the WARNING, DISCLAIMER and PATENTS sections in the 
     README file.
 diff -r 9f29daaecbcc modules/libbz2/src/bzlib.c
---- a/modules/libbz2/src/bzlib.c	Mon Dec 26 13:19:08 2011 +1300
-+++ b/modules/libbz2/src/bzlib.c	Wed Dec 28 18:30:17 2011 +0900
+--- a/modules/libbz2/src/bzlib.c    Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/bzlib.c    Wed Dec 28 18:30:17 2011 +0900
 @@ -8,8 +8,8 @@
     This file is part of bzip2/libbzip2, a program and library for
     lossless, block-sorting data compression.
@@ -92,8 +92,8 @@ diff -r 9f29daaecbcc modules/libbz2/src/bzlib.c
  #   include <io.h>
  #   define SET_BINARY_MODE(file) setmode(fileno(file),O_BINARY)
 diff -r 9f29daaecbcc modules/libbz2/src/bzlib.h
---- a/modules/libbz2/src/bzlib.h	Mon Dec 26 13:19:08 2011 +1300
-+++ b/modules/libbz2/src/bzlib.h	Wed Dec 28 18:30:17 2011 +0900
+--- a/modules/libbz2/src/bzlib.h    Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/bzlib.h    Wed Dec 28 18:30:17 2011 +0900
 @@ -8,8 +8,8 @@
     This file is part of bzip2/libbzip2, a program and library for
     lossless, block-sorting data compression.
@@ -106,8 +106,8 @@ diff -r 9f29daaecbcc modules/libbz2/src/bzlib.h
     Please read the WARNING, DISCLAIMER and PATENTS sections in the 
     README file.
 diff -r 9f29daaecbcc modules/libbz2/src/bzlib_private.h
---- a/modules/libbz2/src/bzlib_private.h	Mon Dec 26 13:19:08 2011 +1300
-+++ b/modules/libbz2/src/bzlib_private.h	Wed Dec 28 18:30:17 2011 +0900
+--- a/modules/libbz2/src/bzlib_private.h    Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/bzlib_private.h    Wed Dec 28 18:30:17 2011 +0900
 @@ -8,8 +8,8 @@
     This file is part of bzip2/libbzip2, a program and library for
     lossless, block-sorting data compression.
@@ -158,8 +158,8 @@ diff -r 9f29daaecbcc modules/libbz2/src/bzlib_private.h
  
  /*-- externs for decompression. --*/
 diff -r 9f29daaecbcc modules/libbz2/src/compress.c
---- a/modules/libbz2/src/compress.c	Mon Dec 26 13:19:08 2011 +1300
-+++ b/modules/libbz2/src/compress.c	Wed Dec 28 18:30:17 2011 +0900
+--- a/modules/libbz2/src/compress.c    Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/compress.c    Wed Dec 28 18:30:17 2011 +0900
 @@ -8,8 +8,8 @@
     This file is part of bzip2/libbzip2, a program and library for
     lossless, block-sorting data compression.
@@ -172,8 +172,8 @@ diff -r 9f29daaecbcc modules/libbz2/src/compress.c
     Please read the WARNING, DISCLAIMER and PATENTS sections in the 
     README file.
 diff -r 9f29daaecbcc modules/libbz2/src/crctable.c
---- a/modules/libbz2/src/crctable.c	Mon Dec 26 13:19:08 2011 +1300
-+++ b/modules/libbz2/src/crctable.c	Wed Dec 28 18:30:17 2011 +0900
+--- a/modules/libbz2/src/crctable.c    Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/crctable.c    Wed Dec 28 18:30:17 2011 +0900
 @@ -8,8 +8,8 @@
     This file is part of bzip2/libbzip2, a program and library for
     lossless, block-sorting data compression.
@@ -186,8 +186,8 @@ diff -r 9f29daaecbcc modules/libbz2/src/crctable.c
     Please read the WARNING, DISCLAIMER and PATENTS sections in the 
     README file.
 diff -r 9f29daaecbcc modules/libbz2/src/decompress.c
---- a/modules/libbz2/src/decompress.c	Mon Dec 26 13:19:08 2011 +1300
-+++ b/modules/libbz2/src/decompress.c	Wed Dec 28 18:30:17 2011 +0900
+--- a/modules/libbz2/src/decompress.c    Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/decompress.c    Wed Dec 28 18:30:17 2011 +0900
 @@ -8,8 +8,8 @@
     This file is part of bzip2/libbzip2, a program and library for
     lossless, block-sorting data compression.
@@ -243,8 +243,8 @@ diff -r 9f29daaecbcc modules/libbz2/src/decompress.c
        s->state_out_len = 0;
        s->state_out_ch  = 0;
 diff -r 9f29daaecbcc modules/libbz2/src/huffman.c
---- a/modules/libbz2/src/huffman.c	Mon Dec 26 13:19:08 2011 +1300
-+++ b/modules/libbz2/src/huffman.c	Wed Dec 28 18:30:17 2011 +0900
+--- a/modules/libbz2/src/huffman.c    Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/huffman.c    Wed Dec 28 18:30:17 2011 +0900
 @@ -8,8 +8,8 @@
     This file is part of bzip2/libbzip2, a program and library for
     lossless, block-sorting data compression.
@@ -257,8 +257,8 @@ diff -r 9f29daaecbcc modules/libbz2/src/huffman.c
     Please read the WARNING, DISCLAIMER and PATENTS sections in the 
     README file.
 diff -r 9f29daaecbcc modules/libbz2/src/randtable.c
---- a/modules/libbz2/src/randtable.c	Mon Dec 26 13:19:08 2011 +1300
-+++ b/modules/libbz2/src/randtable.c	Wed Dec 28 18:30:17 2011 +0900
+--- a/modules/libbz2/src/randtable.c    Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/randtable.c    Wed Dec 28 18:30:17 2011 +0900
 @@ -8,8 +8,8 @@
     This file is part of bzip2/libbzip2, a program and library for
     lossless, block-sorting data compression.
@@ -270,3 +270,4 @@ diff -r 9f29daaecbcc modules/libbz2/src/randtable.c
  
     Please read the WARNING, DISCLAIMER and PATENTS sections in the 
     README file.
+
