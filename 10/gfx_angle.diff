@@ -1,11 +1,51 @@
-diff -r d713478624d8 gfx/angle/README.mozilla
---- a/gfx/angle/README.mozilla	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/README.mozilla	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/CONTRIBUTORS
+--- a/gfx/angle/CONTRIBUTORS    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/CONTRIBUTORS    Wed Jan 25 02:47:30 2012 +0900
+@@ -15,6 +15,7 @@
+ 
+ Google Inc.
+  Brent Austin
++ Michael Bai
+  John Bauman
+  Henry Bridge
+  Nat Duca
+@@ -24,6 +25,7 @@
+  Alastair Patrick
+  Alok Priyadarshi
+  Kenneth Russell
++ Brian Salomon
+  Ben Vanik
+  Adrienne Walker
+ 
+@@ -42,4 +44,6 @@
+ timeless
+ Yore Apex
+ Mark Callow
++Yuriy O'Donnell
++Sam Hocevar
+ 
+diff -r 3a99d7ff459c gfx/angle/Makefile.in
+--- a/gfx/angle/Makefile.in    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/Makefile.in    Wed Jan 25 02:47:30 2012 +0900
+@@ -47,6 +47,10 @@
+ LIBXUL_LIBRARY  = 1
+ EXPORT_LIBRARY  = 1
+ 
++ifeq (WINNT,$(OS_TARGET))
++VISIBILITY_FLAGS =
++endif
++
+ EXPORTS_NAMESPACES = angle
+ 
+ EXPORTS_angle = \
+diff -r 3a99d7ff459c gfx/angle/README.mozilla
+--- a/gfx/angle/README.mozilla    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/README.mozilla    Wed Jan 25 02:47:30 2012 +0900
 @@ -1,6 +1,6 @@
  This is the ANGLE project, from http://code.google.com/p/angleproject/
  
 -Current revision: r809
-+Current revision: r924
++Current revision: r930
  
  == Applied local patches ==
  
@@ -17,11 +57,249 @@ diff -r d713478624d8 gfx/angle/README.mozilla
  
  In addition to these patches, the Makefile.in files are ours, they're not present in upsteam ANGLE.
  
-diff -r d713478624d8 gfx/angle/include/EGL/eglext.h
---- a/gfx/angle/include/EGL/eglext.h	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/include/EGL/eglext.h	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/angle-intrinsic-msvc2005.patch
+--- a/gfx/angle/angle-intrinsic-msvc2005.patch    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/angle-intrinsic-msvc2005.patch    Wed Jan 25 02:47:30 2012 +0900
+@@ -1,5 +1,5 @@
+ # HG changeset patch
+-# Parent b5604c321da4e3b5d6b0a940d18022a827061579
++# Parent 2cefa41bd95ba8875964dde3829559fd70b8101d
+ diff --git a/gfx/angle/src/libGLESv2/Texture.cpp b/gfx/angle/src/libGLESv2/Texture.cpp
+ --- a/gfx/angle/src/libGLESv2/Texture.cpp
+ +++ b/gfx/angle/src/libGLESv2/Texture.cpp
+diff -r 3a99d7ff459c gfx/angle/angle-limit-identifiers-to-250-chars.patch
+--- a/gfx/angle/angle-limit-identifiers-to-250-chars.patch    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/angle-limit-identifiers-to-250-chars.patch    Wed Jan 25 02:47:30 2012 +0900
+@@ -1,26 +1,5 @@
+ # HG changeset patch
+-# Parent e8b87ef36a1dae3bbd7abb13c4bb0a0bb8f5b58c
+-diff --git a/gfx/angle/README.mozilla b/gfx/angle/README.mozilla
+---- a/gfx/angle/README.mozilla
+-+++ b/gfx/angle/README.mozilla
+-@@ -2,16 +2,17 @@ This is the ANGLE project, from http://c
+- 
+- Current revision: r802
+- 
+- == Applied local patches ==
+- 
+- In this order:
+-   angle-renaming-debug.patch - rename debug.h to compilerdebug.h to avoid conflict in our makefiles
+-   angle-intrinsic-msvc2005.patch - work around a MSVC 2005 compile error
+-+  angle-limit-identifiers-to-250-chars.patch - see bug 675625
+- 
+- In addition to these patches, the Makefile.in files are ours, they're not present in upsteam ANGLE.
+- 
+- == How to update this ANGLE copy ==
+- 
+- 1. Unapply patches
+- 2. Apply diff with new ANGLE version
+- 3. Reapply patches.
++# Parent 60ae9443af647dc56c76bf9c7a5958f2ff176fb8
+ diff --git a/gfx/angle/src/compiler/preprocessor/length_limits.h b/gfx/angle/src/compiler/preprocessor/length_limits.h
+ --- a/gfx/angle/src/compiler/preprocessor/length_limits.h
+ +++ b/gfx/angle/src/compiler/preprocessor/length_limits.h
+diff -r 3a99d7ff459c gfx/angle/angle-renaming-debug.patch
+--- a/gfx/angle/angle-renaming-debug.patch    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/angle-renaming-debug.patch    Wed Jan 25 02:47:30 2012 +0900
+@@ -1,9 +1,10 @@
+ # HG changeset patch
+-# Parent 0239f15c7212413b5cffe66aee9ae5a4feb28f16
++# Parent 7e7cd80ef724c094b88ed8bb35f3af0ce9a9cfee
++
+ diff --git a/gfx/angle/Makefile.in b/gfx/angle/Makefile.in
+ --- a/gfx/angle/Makefile.in
+ +++ b/gfx/angle/Makefile.in
+-@@ -73,17 +73,17 @@ CPPSRCS = \
++@@ -75,17 +75,17 @@ CPPSRCS = \
+          parseConst.cpp \
+          ParseHelper.cpp \
+          PoolAlloc.cpp \
+@@ -22,6 +23,51 @@
+          BuiltInFunctionEmulator.cpp \
+          $(NULL)
+  
++diff --git a/gfx/angle/angle-renaming-debug.patch b/gfx/angle/angle-renaming-debug.patch
++--- a/gfx/angle/angle-renaming-debug.patch
+++++ b/gfx/angle/angle-renaming-debug.patch
++@@ -1,14 +1,14 @@
++ # HG changeset patch
++-# Parent b6f65ca6027d397ca50783d7164a6a8fa59eef4c
+++# Parent 1879d857ef07dc5797704516caea99b231d7590a
++ diff --git a/gfx/angle/Makefile.in b/gfx/angle/Makefile.in
++ --- a/gfx/angle/Makefile.in
++ +++ b/gfx/angle/Makefile.in
++-@@ -73,17 +73,17 @@ CPPSRCS = \
+++@@ -75,17 +75,17 @@ CPPSRCS = \
++          parseConst.cpp \
++          ParseHelper.cpp \
++          PoolAlloc.cpp \
++          QualifierAlive.cpp \
++          RemoveTree.cpp \
++          ShaderLang.cpp \
++          SymbolTable.cpp \
++          VariableInfo.cpp \
++@@ -163,22 +163,22 @@ diff --git a/gfx/angle/src/compiler/prep
++  #include <stdlib.h>
++  #include <stdio.h>
++  #include <string.h>
++  
++ -#include "compiler/debug.h"
++ +#include "compiler/compilerdebug.h"
++  #include "compiler/preprocessor/slglobals.h"
++  
+++ #include "../../../../../memory/mozalloc/mozalloc.h"
+++ 
++  #undef malloc
++  #undef realloc
++  #undef free
++  
++- ///////////////////////////////////////////////////////////////////////////////////////////////
++- ////////////////////////////////////////// String table: //////////////////////////////////////
++ diff --git a/gfx/angle/src/compiler/preprocessor/tokens.c b/gfx/angle/src/compiler/preprocessor/tokens.c
++ --- a/gfx/angle/src/compiler/preprocessor/tokens.c
++ +++ b/gfx/angle/src/compiler/preprocessor/tokens.c
++ @@ -45,17 +45,17 @@ NVIDIA HAS BEEN ADVISED OF THE POSSIBILI
++  // tokens.c
++  //
++  
++  #include <stdlib.h>
+ diff --git a/gfx/angle/src/compiler/OutputGLSLBase.cpp b/gfx/angle/src/compiler/OutputGLSLBase.cpp
+ --- a/gfx/angle/src/compiler/OutputGLSLBase.cpp
+ +++ b/gfx/angle/src/compiler/OutputGLSLBase.cpp
+diff -r 3a99d7ff459c gfx/angle/angle-use-xmalloc.patch
+--- a/gfx/angle/angle-use-xmalloc.patch    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/angle-use-xmalloc.patch    Wed Jan 25 02:47:30 2012 +0900
+@@ -1,13 +1,13 @@
+ # HG changeset patch
+-# Parent fecc64a6df53a9056b21958affad38c80ca38496
++# Parent bc7188c29ec5b942046c0589ce959d7985f7ad6e
+ 
+ diff --git a/gfx/angle/Makefile.in b/gfx/angle/Makefile.in
+ --- a/gfx/angle/Makefile.in
+ +++ b/gfx/angle/Makefile.in
+-@@ -127,16 +127,18 @@ CSRCS   = \
++@@ -129,16 +129,18 @@ CSRCS   = \
+      $(NULL)
+  
+- DEFINES += -DANGLE_USE_NSPR -DANGLE_BUILD
++ DEFINES += -DANGLE_USE_NSPR -DANGLE_BUILD -DCOMPILER_IMPLEMENTATION
+  
+  #these defines are from ANGLE's build_angle.gyp
+  DEFINES += -DANGLE_DISABLE_TRACE
+@@ -23,40 +23,74 @@
+  libs::
+      expand "$(MOZ_D3DX9_CAB)" -F:$(MOZ_D3DX9_DLL) "$(DIST)/bin"
+      expand "$(MOZ_D3DCOMPILER_CAB)" -F:$(MOZ_D3DCOMPILER_DLL) "$(DIST)/bin"
+-diff --git a/gfx/angle/README.mozilla b/gfx/angle/README.mozilla
+---- a/gfx/angle/README.mozilla
+-+++ b/gfx/angle/README.mozilla
+-@@ -3,16 +3,17 @@ This is the ANGLE project, from http://c
+- Current revision: r774
+- 
+- == Applied local patches ==
+- 
+- In this order:
+-   angle-renaming.patch - rename debug.h to compilerdebug.h to avoid conflict in our makefiles
+-   angle-instrinsic-msvc2005.patch - work around a MSVC 2005 compile error
+-   angle-limit-identifiers-to-250-chars.patch - see bug 675625
+-+  angle-use-xmalloc.patch - see bug 680840. Can drop this patch whenever the new preprocessor lands.
+- 
+- In addition to these patches, the Makefile.in files are ours, they're not present in upsteam ANGLE.
+- 
+- == How to update this ANGLE copy ==
+- 
+- 1. Unapply patches
+- 2. Apply diff with new ANGLE version
+- 3. Reapply patches.
+-diff --git a/gfx/angle/angle-limit-identifiers-to-250-chars.patch b/gfx/angle/angle-limit-identifiers-to-250-chars.patch
+---- a/gfx/angle/angle-limit-identifiers-to-250-chars.patch
+-+++ b/gfx/angle/angle-limit-identifiers-to-250-chars.patch
+-@@ -1,8 +1,10 @@
+-+# HG changeset patch
+-+# Parent f9415c10c3ebd27856500cca7a0ee0f28a16f53c
+- diff --git a/gfx/angle/src/compiler/preprocessor/scanner.h b/gfx/angle/src/compiler/preprocessor/scanner.h
+- --- a/gfx/angle/src/compiler/preprocessor/scanner.h
+- +++ b/gfx/angle/src/compiler/preprocessor/scanner.h
+- @@ -44,17 +44,19 @@ NVIDIA HAS BEEN ADVISED OF THE POSSIBILI
+-  //
+-  // scanner.h
+-  //
++diff --git a/gfx/angle/angle-use-xmalloc.patch b/gfx/angle/angle-use-xmalloc.patch
++--- a/gfx/angle/angle-use-xmalloc.patch
+++++ b/gfx/angle/angle-use-xmalloc.patch
++@@ -1,14 +1,14 @@
++ # HG changeset patch
++-# Parent 31d1c6ebb61eb118868ca924769a2fa3a50d54ef
+++# Parent 6a1ee30b3a60564c165795ecf79e9c2081ee80ab
++ diff --git a/gfx/angle/Makefile.in b/gfx/angle/Makefile.in
++ --- a/gfx/angle/Makefile.in
++ +++ b/gfx/angle/Makefile.in
++-@@ -127,16 +127,18 @@ CSRCS   = \
+++@@ -129,16 +129,18 @@ CSRCS   = \
++      $(NULL)
++  
++  DEFINES += -DANGLE_USE_NSPR -DANGLE_BUILD -DCOMPILER_IMPLEMENTATION
++  
++  #these defines are from ANGLE's build_angle.gyp
++  DEFINES += -DANGLE_DISABLE_TRACE
++  DEFINES += -DANGLE_COMPILE_OPTIMIZATION_LEVEL=D3DCOMPILE_OPTIMIZATION_LEVEL0
++  
++@@ -17,47 +17,26 @@ diff --git a/gfx/angle/Makefile.in b/gfx
++  ifdef MOZ_ANGLE
++  
++  # libEGL depends on (links against!) libGLESv2!
++  DIRS = src/libGLESv2 src/libEGL
++  
++  libs::
++      expand "$(MOZ_D3DX9_CAB)" -F:$(MOZ_D3DX9_DLL) "$(DIST)/bin"
++      expand "$(MOZ_D3DCOMPILER_CAB)" -F:$(MOZ_D3DCOMPILER_DLL) "$(DIST)/bin"
++-diff --git a/gfx/angle/README.mozilla b/gfx/angle/README.mozilla
++---- a/gfx/angle/README.mozilla
++-+++ b/gfx/angle/README.mozilla
++-@@ -3,16 +3,17 @@ This is the ANGLE project, from http://c
++- Current revision: r885
++- 
++- == Applied local patches ==
++- 
++- In this order:
++-   angle-renaming-debug.patch - rename debug.h to compilerdebug.h to avoid conflict in our makefiles
++-   angle-intrinsic-msvc2005.patch - work around a MSVC 2005 compile error
++-   angle-limit-identifiers-to-250-chars.patch - see bug 675625
++-+  angle-use-xmalloc.patch - see bug 680840. Can drop this patch whenever the new preprocessor lands.
++- 
++- In addition to these patches, the Makefile.in files are ours, they're not present in upsteam ANGLE.
++- 
++- == How to update this ANGLE copy ==
++- 
++- 1. Unapply patches
++- 2. Apply diff with new ANGLE version
++- 3. Reapply patches.
++ diff --git a/gfx/angle/src/compiler/preprocessor/atom.c b/gfx/angle/src/compiler/preprocessor/atom.c
++ --- a/gfx/angle/src/compiler/preprocessor/atom.c
++ +++ b/gfx/angle/src/compiler/preprocessor/atom.c
++ @@ -48,16 +48,18 @@ NVIDIA HAS BEEN ADVISED OF THE POSSIBILI
++  
++  #include <stdlib.h>
++  #include <stdio.h>
++  #include <string.h>
++  
++- #include "compiler/compilerdebug.h"
+++ #include "compiler/debug.h"
++  #include "compiler/preprocessor/slglobals.h"
++  
++ +#include "../../../../../memory/mozalloc/mozalloc.h"
++ +
++  #undef malloc
++  #undef realloc
++  #undef free
+   
+ diff --git a/gfx/angle/src/compiler/preprocessor/atom.c b/gfx/angle/src/compiler/preprocessor/atom.c
+ --- a/gfx/angle/src/compiler/preprocessor/atom.c
+diff -r 3a99d7ff459c gfx/angle/include/EGL/eglext.h
+--- a/gfx/angle/include/EGL/eglext.h    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/include/EGL/eglext.h    Wed Jan 25 02:47:30 2012 +0900
 @@ -318,6 +318,14 @@
- #define EGL_COVERAGE_SAMPLE_RESOLVE_NONE_NV	0x3133
+ #define EGL_COVERAGE_SAMPLE_RESOLVE_NONE_NV    0x3133
  #endif
  
 +#ifndef EGL_EXT_create_context_robustness
@@ -35,9 +313,9 @@ diff -r d713478624d8 gfx/angle/include/EGL/eglext.h
  #if KHRONOS_SUPPORT_INT64   /* EGLTimeKHR requires 64-bit uint support */
  #ifndef EGL_NV_system_time
  #define EGL_NV_system_time 1
-diff -r d713478624d8 gfx/angle/include/EGL/eglplatform.h
---- a/gfx/angle/include/EGL/eglplatform.h	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/include/EGL/eglplatform.h	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/include/EGL/eglplatform.h
+--- a/gfx/angle/include/EGL/eglplatform.h    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/include/EGL/eglplatform.h    Wed Jan 25 02:47:30 2012 +0900
 @@ -89,7 +89,7 @@
  typedef struct wl_egl_pixmap  *EGLNativePixmapType;
  typedef struct wl_egl_window  *EGLNativeWindowType;
@@ -62,9 +340,9 @@ diff -r d713478624d8 gfx/angle/include/EGL/eglplatform.h
  #else
  #error "Platform not recognized"
  #endif
-diff -r d713478624d8 gfx/angle/include/GLES2/gl2ext.h
---- a/gfx/angle/include/GLES2/gl2ext.h	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/include/GLES2/gl2ext.h	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/include/GLES2/gl2ext.h
+--- a/gfx/angle/include/GLES2/gl2ext.h    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/include/GLES2/gl2ext.h    Wed Jan 25 02:47:30 2012 +0900
 @@ -207,6 +207,11 @@
  #define GL_MAX_SAMPLES_ANGLE                                    0x8D57
  #endif
@@ -188,9 +466,9 @@ diff -r d713478624d8 gfx/angle/include/GLES2/gl2ext.h
  /*------------------------------------------------------------------------*
   * DMP extension functions
   *------------------------------------------------------------------------*/
-diff -r d713478624d8 gfx/angle/include/GLSLANG/ShaderLang.h
---- a/gfx/angle/include/GLSLANG/ShaderLang.h	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/include/GLSLANG/ShaderLang.h	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/include/GLSLANG/ShaderLang.h
+--- a/gfx/angle/include/GLSLANG/ShaderLang.h    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/include/GLSLANG/ShaderLang.h    Wed Jan 25 02:47:30 2012 +0900
 @@ -76,7 +76,8 @@
    SH_FLOAT_MAT3     = 0x8B5B,
    SH_FLOAT_MAT4     = 0x8B5C,
@@ -209,9 +487,9 @@ diff -r d713478624d8 gfx/angle/include/GLSLANG/ShaderLang.h
  } ShBuiltInResources;
  
  //
-diff -r d713478624d8 gfx/angle/samples/build_samples.gyp
---- a/gfx/angle/samples/build_samples.gyp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/samples/build_samples.gyp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/samples/build_samples.gyp
+--- a/gfx/angle/samples/build_samples.gyp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/samples/build_samples.gyp    Wed Jan 25 02:47:30 2012 +0900
 @@ -159,6 +159,14 @@
              'gles2_book/TextureWrap/TextureWrap.c',
            ],
@@ -227,9 +505,9 @@ diff -r d713478624d8 gfx/angle/samples/build_samples.gyp
        ],
      }],
    ],
-diff -r d713478624d8 gfx/angle/samples/gles2_book/Common/esUtil.c
---- a/gfx/angle/samples/gles2_book/Common/esUtil.c	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/samples/gles2_book/Common/esUtil.c	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/samples/gles2_book/Common/esUtil.c
+--- a/gfx/angle/samples/gles2_book/Common/esUtil.c    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/samples/gles2_book/Common/esUtil.c    Wed Jan 25 02:47:30 2012 +0900
 @@ -22,10 +22,16 @@
  #include <stdlib.h>
  #include <GLES2/gl2.h>
@@ -326,9 +604,9 @@ diff -r d713478624d8 gfx/angle/samples/gles2_book/Common/esUtil.c
     {
        return GL_FALSE;
     }
-diff -r d713478624d8 gfx/angle/samples/gles2_book/Common/esUtil.h
---- a/gfx/angle/samples/gles2_book/Common/esUtil.h	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/samples/gles2_book/Common/esUtil.h	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/samples/gles2_book/Common/esUtil.h
+--- a/gfx/angle/samples/gles2_book/Common/esUtil.h    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/samples/gles2_book/Common/esUtil.h    Wed Jan 25 02:47:30 2012 +0900
 @@ -22,6 +22,7 @@
  //
  #include <GLES2/gl2.h>
@@ -372,9 +650,35 @@ diff -r d713478624d8 gfx/angle/samples/gles2_book/Common/esUtil.h
  /// \return GL_TRUE if window creation is succesful, GL_FALSE otherwise
  GLboolean ESUTIL_API esCreateWindow ( ESContext *esContext, LPCTSTR title, GLint width, GLint height, GLuint flags );
  
-diff -r d713478624d8 gfx/angle/src/common/version.h
---- a/gfx/angle/src/common/version.h	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/common/version.h	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/samples/samples.sln
+--- a/gfx/angle/samples/samples.sln    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/samples/samples.sln    Wed Jan 25 02:47:30 2012 +0900
+@@ -74,6 +74,11 @@
+ EndProject
+ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "translator_common", "..\src\compiler\translator_common.vcproj", "{5B3A6DB8-1E7E-40D7-92B9-DA8AAE619FAD}"
+ EndProject
++Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PostSubBuffer", "gles2_book\PostSubBuffer\PostSubBuffer.vcproj", "{667CE95F-5DD8-4495-8C18-5CA8A175B12D}"
++    ProjectSection(ProjectDependencies) = postProject
++        {47C93F52-AB4E-4FF9-8D4F-B38CD60A183F} = {47C93F52-AB4E-4FF9-8D4F-B38CD60A183F}
++    EndProjectSection
++EndProject
+ Global
+     GlobalSection(SolutionConfigurationPlatforms) = preSolution
+         Debug|Win32 = Debug|Win32
+@@ -140,6 +145,10 @@
+         {5B3A6DB8-1E7E-40D7-92B9-DA8AAE619FAD}.Debug|Win32.Build.0 = Debug|Win32
+         {5B3A6DB8-1E7E-40D7-92B9-DA8AAE619FAD}.Release|Win32.ActiveCfg = Release|Win32
+         {5B3A6DB8-1E7E-40D7-92B9-DA8AAE619FAD}.Release|Win32.Build.0 = Release|Win32
++        {667CE95F-5DD8-4495-8C18-5CA8A175B12D}.Debug|Win32.ActiveCfg = Debug|Win32
++        {667CE95F-5DD8-4495-8C18-5CA8A175B12D}.Debug|Win32.Build.0 = Debug|Win32
++        {667CE95F-5DD8-4495-8C18-5CA8A175B12D}.Release|Win32.ActiveCfg = Release|Win32
++        {667CE95F-5DD8-4495-8C18-5CA8A175B12D}.Release|Win32.Build.0 = Release|Win32
+     EndGlobalSection
+     GlobalSection(SolutionProperties) = preSolution
+         HideSolutionNode = FALSE
+diff -r 3a99d7ff459c gfx/angle/src/common/version.h
+--- a/gfx/angle/src/common/version.h    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/common/version.h    Wed Jan 25 02:47:30 2012 +0900
 @@ -1,7 +1,7 @@
 -#define MAJOR_VERSION 0
 +#define MAJOR_VERSION 1
@@ -385,9 +689,9 @@ diff -r d713478624d8 gfx/angle/src/common/version.h
  
  #define STRINGIFY(x) #x
  #define MACRO_STRINGIFY(x) STRINGIFY(x)
-diff -r d713478624d8 gfx/angle/src/compiler/BaseTypes.h
---- a/gfx/angle/src/compiler/BaseTypes.h	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/compiler/BaseTypes.h	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/compiler/BaseTypes.h
+--- a/gfx/angle/src/compiler/BaseTypes.h    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/compiler/BaseTypes.h    Wed Jan 25 02:47:30 2012 +0900
 @@ -43,6 +43,7 @@
      EbtSampler2D,
      EbtSamplerCube,
@@ -404,9 +708,9 @@ diff -r d713478624d8 gfx/angle/src/compiler/BaseTypes.h
      case EbtStruct:            return "structure";         break;
      default:                   return "unknown type";
      }
-diff -r d713478624d8 gfx/angle/src/compiler/BuiltInFunctionEmulator.cpp
---- a/gfx/angle/src/compiler/BuiltInFunctionEmulator.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/compiler/BuiltInFunctionEmulator.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/compiler/BuiltInFunctionEmulator.cpp
+--- a/gfx/angle/src/compiler/BuiltInFunctionEmulator.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/compiler/BuiltInFunctionEmulator.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -333,12 +333,12 @@
      out << "// BEGIN: Generated code for built-in function emulation\n\n";
      if (withPrecision) {
@@ -423,9 +727,9 @@ diff -r d713478624d8 gfx/angle/src/compiler/BuiltInFunctionEmulator.cpp
      }
      for (size_t i = 0; i < mFunctions.size(); ++i) {
          out << mFunctionSource[mFunctions[i]] << "\n\n";
-diff -r d713478624d8 gfx/angle/src/compiler/Initialize.cpp
---- a/gfx/angle/src/compiler/Initialize.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/compiler/Initialize.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/compiler/Initialize.cpp
+--- a/gfx/angle/src/compiler/Initialize.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/compiler/Initialize.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -19,7 +19,7 @@
  // Prototypes for built-in functions seen by both vertex and fragment shaders.
  //
@@ -541,9 +845,9 @@ diff -r d713478624d8 gfx/angle/src/compiler/Initialize.cpp
 +    if (resources.ARB_texture_rectangle)
 +        extBehavior["GL_ARB_texture_rectangle"] = EBhUndefined;
  }
-diff -r d713478624d8 gfx/angle/src/compiler/OutputHLSL.cpp
---- a/gfx/angle/src/compiler/OutputHLSL.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/compiler/OutputHLSL.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/compiler/OutputHLSL.cpp
+--- a/gfx/angle/src/compiler/OutputHLSL.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/compiler/OutputHLSL.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -45,9 +45,12 @@
      mUsesPointSize = false;
      mUsesXor = false;
@@ -648,9 +952,9 @@ diff -r d713478624d8 gfx/angle/src/compiler/OutputHLSL.cpp
                default: UNREACHABLE();
              }
  
-diff -r d713478624d8 gfx/angle/src/compiler/OutputHLSL.h
---- a/gfx/angle/src/compiler/OutputHLSL.h	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/compiler/OutputHLSL.h	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/compiler/OutputHLSL.h
+--- a/gfx/angle/src/compiler/OutputHLSL.h    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/compiler/OutputHLSL.h    Wed Jan 25 02:47:30 2012 +0900
 @@ -91,9 +91,12 @@
      bool mUsesPointSize;
      bool mUsesXor;
@@ -667,9 +971,9 @@ diff -r d713478624d8 gfx/angle/src/compiler/OutputHLSL.h
      bool mUsesFaceforward1;
      bool mUsesFaceforward2;
      bool mUsesFaceforward3;
-diff -r d713478624d8 gfx/angle/src/compiler/ParseHelper.cpp
---- a/gfx/angle/src/compiler/ParseHelper.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/compiler/ParseHelper.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/compiler/ParseHelper.cpp
+--- a/gfx/angle/src/compiler/ParseHelper.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/compiler/ParseHelper.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -553,7 +553,7 @@
          return true;
      }
@@ -679,9 +983,9 @@ diff -r d713478624d8 gfx/angle/src/compiler/ParseHelper.cpp
          if ((op != EOpConstructStruct && size != 1 && size < type->getObjectSize()) ||
              (op == EOpConstructStruct && size < type->getObjectSize())) {
              error(line, "not enough data provided for construction", "constructor", "");
-diff -r d713478624d8 gfx/angle/src/compiler/ShaderLang.cpp
---- a/gfx/angle/src/compiler/ShaderLang.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/compiler/ShaderLang.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/compiler/ShaderLang.cpp
+--- a/gfx/angle/src/compiler/ShaderLang.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/compiler/ShaderLang.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -122,6 +122,7 @@
      // Extensions.
      resources->OES_standard_derivatives = 0;
@@ -690,9 +994,9 @@ diff -r d713478624d8 gfx/angle/src/compiler/ShaderLang.cpp
  }
  
  //
-diff -r d713478624d8 gfx/angle/src/compiler/VariableInfo.cpp
---- a/gfx/angle/src/compiler/VariableInfo.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/compiler/VariableInfo.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/compiler/VariableInfo.cpp
+--- a/gfx/angle/src/compiler/VariableInfo.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/compiler/VariableInfo.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -63,6 +63,7 @@
            }
        case EbtSampler2D: return SH_SAMPLER_2D;
@@ -701,9 +1005,9 @@ diff -r d713478624d8 gfx/angle/src/compiler/VariableInfo.cpp
        default: UNREACHABLE();
      }
      return SH_NONE;
-diff -r d713478624d8 gfx/angle/src/compiler/glslang.l
---- a/gfx/angle/src/compiler/glslang.l	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/compiler/glslang.l	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/compiler/glslang.l
+--- a/gfx/angle/src/compiler/glslang.l    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/compiler/glslang.l    Wed Jan 25 02:47:30 2012 +0900
 @@ -121,6 +121,7 @@
  "sampler2D"       { context->lexAfterType = true; return SAMPLER2D; }
  "samplerCube"     { context->lexAfterType = true; return SAMPLERCUBE; }
@@ -712,9 +1016,9 @@ diff -r d713478624d8 gfx/angle/src/compiler/glslang.l
  
  "struct"       { context->lexAfterType = true; return(STRUCT); }
  
-diff -r d713478624d8 gfx/angle/src/compiler/glslang.y
---- a/gfx/angle/src/compiler/glslang.y	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/compiler/glslang.y	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/compiler/glslang.y
+--- a/gfx/angle/src/compiler/glslang.y    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/compiler/glslang.y    Wed Jan 25 02:47:30 2012 +0900
 @@ -98,7 +98,7 @@
  %token <lex> BVEC2 BVEC3 BVEC4 IVEC2 IVEC3 IVEC4 VEC2 VEC3 VEC4
  %token <lex> MATRIX2 MATRIX3 MATRIX4 IN_QUAL OUT_QUAL INOUT_QUAL UNIFORM VARYING
@@ -740,9 +1044,9 @@ diff -r d713478624d8 gfx/angle/src/compiler/glslang.y
      | struct_specifier {
          FRAG_VERT_ONLY("struct", $1.line);
          $$ = $1;
-diff -r d713478624d8 gfx/angle/src/compiler/glslang_lex.cpp
---- a/gfx/angle/src/compiler/glslang_lex.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/compiler/glslang_lex.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/compiler/glslang_lex.cpp
+--- a/gfx/angle/src/compiler/glslang_lex.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/compiler/glslang_lex.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -63,7 +63,6 @@
  typedef unsigned char flex_uint8_t; 
  typedef unsigned short int flex_uint16_t;
@@ -777,8 +1081,8 @@ diff -r d713478624d8 gfx/angle/src/compiler/glslang_lex.cpp
  
  /* The state buf must be large enough to hold one state per character in the main buffer.
 @@ -371,8 +380,8 @@
- 	*yy_cp = '\0'; \
- 	yyg->yy_c_buf_p = yy_cp;
+     *yy_cp = '\0'; \
+     yyg->yy_c_buf_p = yy_cp;
  
 -#define YY_NUM_RULES 146
 -#define YY_END_OF_BUFFER 147
@@ -788,9 +1092,9 @@ diff -r d713478624d8 gfx/angle/src/compiler/glslang_lex.cpp
     but its presence is necessary. */
  struct yy_trans_info
 @@ -380,55 +389,55 @@
- 	flex_int32_t yy_verify;
- 	flex_int32_t yy_nxt;
- 	};
+     flex_int32_t yy_verify;
+     flex_int32_t yy_nxt;
+     };
 -static yyconst flex_int16_t yy_accept[422] =
 +static yyconst flex_int16_t yy_accept[426] =
      {   0,
@@ -1460,312 +1764,312 @@ diff -r d713478624d8 gfx/angle/src/compiler/glslang_lex.cpp
  
  /* Gets input and stuffs it into "buf".  number of characters read, or YY_NULL,
 @@ -928,7 +946,7 @@
- 	if ( YY_CURRENT_BUFFER_LVALUE->yy_is_interactive ) \
- 		{ \
- 		int c = '*'; \
--		int n; \
-+		size_t n; \
- 		for ( n = 0; n < max_size && \
- 			     (c = getc( yyin )) != EOF && c != '\n'; ++n ) \
- 			buf[n] = (char) c; \
+     if ( YY_CURRENT_BUFFER_LVALUE->yy_is_interactive ) \
+         { \
+         int c = '*'; \
+-        int n; \
++        size_t n; \
+         for ( n = 0; n < max_size && \
+                  (c = getc( yyin )) != EOF && c != '\n'; ++n ) \
+             buf[n] = (char) c; \
 @@ -1070,13 +1088,13 @@
- 			while ( yy_chk[yy_base[yy_current_state] + yy_c] != yy_current_state )
- 				{
- 				yy_current_state = (int) yy_def[yy_current_state];
--				if ( yy_current_state >= 422 )
-+				if ( yy_current_state >= 426 )
- 					yy_c = yy_meta[(unsigned int) yy_c];
- 				}
- 			yy_current_state = yy_nxt[yy_base[yy_current_state] + (unsigned int) yy_c];
- 			++yy_cp;
- 			}
--		while ( yy_current_state != 421 );
-+		while ( yy_current_state != 425 );
- 		yy_cp = yyg->yy_last_accepting_cpos;
- 		yy_current_state = yyg->yy_last_accepting_state;
+             while ( yy_chk[yy_base[yy_current_state] + yy_c] != yy_current_state )
+                 {
+                 yy_current_state = (int) yy_def[yy_current_state];
+-                if ( yy_current_state >= 422 )
++                if ( yy_current_state >= 426 )
+                     yy_c = yy_meta[(unsigned int) yy_c];
+                 }
+             yy_current_state = yy_nxt[yy_base[yy_current_state] + (unsigned int) yy_c];
+             ++yy_cp;
+             }
+-        while ( yy_current_state != 421 );
++        while ( yy_current_state != 425 );
+         yy_cp = yyg->yy_last_accepting_cpos;
+         yy_current_state = yyg->yy_last_accepting_state;
  
 @@ -1297,11 +1315,11 @@
- 	YY_BREAK
+     YY_BREAK
  case 48:
  YY_RULE_SETUP
 -{ context->lexAfterType = true; return(STRUCT); }
 +{ context->lexAfterType = true; return SAMPLER2DRECT; }
- 	YY_BREAK
+     YY_BREAK
  case 49:
  YY_RULE_SETUP
 -{ return reserved_word(yyscanner); }
 +{ context->lexAfterType = true; return(STRUCT); }
- 	YY_BREAK
+     YY_BREAK
  case 50:
  YY_RULE_SETUP
 @@ -1461,30 +1479,30 @@
- 	YY_BREAK
+     YY_BREAK
  case 89:
  YY_RULE_SETUP
 +{ return reserved_word(yyscanner); }
-+	YY_BREAK
++    YY_BREAK
 +case 90:
 +YY_RULE_SETUP
  {
     yylval->lex.string = NewPoolTString(yytext); 
     return check_type(yyscanner);
  }
- 	YY_BREAK
+     YY_BREAK
 -case 90:
 -YY_RULE_SETUP
 -{ yylval->lex.i = strtol(yytext, 0, 0); return(INTCONSTANT); }
--	YY_BREAK
+-    YY_BREAK
  case 91:
  YY_RULE_SETUP
  { yylval->lex.i = strtol(yytext, 0, 0); return(INTCONSTANT); }
- 	YY_BREAK
+     YY_BREAK
  case 92:
  YY_RULE_SETUP
 -{ context->error(yylineno, "Invalid Octal number.", yytext, "", ""); context->recover(); return 0;}
 +{ yylval->lex.i = strtol(yytext, 0, 0); return(INTCONSTANT); }
- 	YY_BREAK
+     YY_BREAK
  case 93:
  YY_RULE_SETUP
 -{ yylval->lex.i = strtol(yytext, 0, 0); return(INTCONSTANT); }
 +{ context->error(yylineno, "Invalid Octal number.", yytext, "", ""); context->recover(); return 0;}
- 	YY_BREAK
+     YY_BREAK
  case 94:
  YY_RULE_SETUP
 -{ yylval->lex.f = static_cast<float>(atof_dot(yytext)); return(FLOATCONSTANT); }
 +{ yylval->lex.i = strtol(yytext, 0, 0); return(INTCONSTANT); }
- 	YY_BREAK
+     YY_BREAK
  case 95:
  YY_RULE_SETUP
 @@ -1496,185 +1514,189 @@
- 	YY_BREAK
+     YY_BREAK
  case 97:
  YY_RULE_SETUP
 -{  return(ADD_ASSIGN); }
 +{ yylval->lex.f = static_cast<float>(atof_dot(yytext)); return(FLOATCONSTANT); }
- 	YY_BREAK
+     YY_BREAK
  case 98:
  YY_RULE_SETUP
 -{  return(SUB_ASSIGN); }
 +{  return(ADD_ASSIGN); }
- 	YY_BREAK
+     YY_BREAK
  case 99:
  YY_RULE_SETUP
 -{  return(MUL_ASSIGN); }
 +{  return(SUB_ASSIGN); }
- 	YY_BREAK
+     YY_BREAK
  case 100:
  YY_RULE_SETUP
 -{  return(DIV_ASSIGN); }
 +{  return(MUL_ASSIGN); }
- 	YY_BREAK
+     YY_BREAK
  case 101:
  YY_RULE_SETUP
 -{  return(MOD_ASSIGN); }
 +{  return(DIV_ASSIGN); }
- 	YY_BREAK
+     YY_BREAK
  case 102:
  YY_RULE_SETUP
 -{  return(LEFT_ASSIGN); }
 +{  return(MOD_ASSIGN); }
- 	YY_BREAK
+     YY_BREAK
  case 103:
  YY_RULE_SETUP
 -{  return(RIGHT_ASSIGN); }
 +{  return(LEFT_ASSIGN); }
- 	YY_BREAK
+     YY_BREAK
  case 104:
  YY_RULE_SETUP
 -{  return(AND_ASSIGN); }
 +{  return(RIGHT_ASSIGN); }
- 	YY_BREAK
+     YY_BREAK
  case 105:
  YY_RULE_SETUP
 -{  return(XOR_ASSIGN); }
 +{  return(AND_ASSIGN); }
- 	YY_BREAK
+     YY_BREAK
  case 106:
  YY_RULE_SETUP
 -{  return(OR_ASSIGN); }
 +{  return(XOR_ASSIGN); }
- 	YY_BREAK
+     YY_BREAK
  case 107:
  YY_RULE_SETUP
 -{  return(INC_OP); }
 +{  return(OR_ASSIGN); }
- 	YY_BREAK
+     YY_BREAK
  case 108:
  YY_RULE_SETUP
 -{  return(DEC_OP); }
 +{  return(INC_OP); }
- 	YY_BREAK
+     YY_BREAK
  case 109:
  YY_RULE_SETUP
 -{  return(AND_OP); }
 +{  return(DEC_OP); }
- 	YY_BREAK
+     YY_BREAK
  case 110:
  YY_RULE_SETUP
 -{  return(OR_OP); }
 +{  return(AND_OP); }
- 	YY_BREAK
+     YY_BREAK
  case 111:
  YY_RULE_SETUP
 -{  return(XOR_OP); }
 +{  return(OR_OP); }
- 	YY_BREAK
+     YY_BREAK
  case 112:
  YY_RULE_SETUP
 -{  return(LE_OP); }
 +{  return(XOR_OP); }
- 	YY_BREAK
+     YY_BREAK
  case 113:
  YY_RULE_SETUP
 -{  return(GE_OP); }
 +{  return(LE_OP); }
- 	YY_BREAK
+     YY_BREAK
  case 114:
  YY_RULE_SETUP
 -{  return(EQ_OP); }
 +{  return(GE_OP); }
- 	YY_BREAK
+     YY_BREAK
  case 115:
  YY_RULE_SETUP
 -{  return(NE_OP); }
 +{  return(EQ_OP); }
- 	YY_BREAK
+     YY_BREAK
  case 116:
  YY_RULE_SETUP
 -{  return(LEFT_OP); }
 +{  return(NE_OP); }
- 	YY_BREAK
+     YY_BREAK
  case 117:
  YY_RULE_SETUP
 -{  return(RIGHT_OP); }
 +{  return(LEFT_OP); }
- 	YY_BREAK
+     YY_BREAK
  case 118:
  YY_RULE_SETUP
 -{ context->lexAfterType = false; return(SEMICOLON); }
 +{  return(RIGHT_OP); }
- 	YY_BREAK
+     YY_BREAK
  case 119:
  YY_RULE_SETUP
 -{ context->lexAfterType = false; return(LEFT_BRACE); }
 +{ context->lexAfterType = false; return(SEMICOLON); }
- 	YY_BREAK
+     YY_BREAK
  case 120:
  YY_RULE_SETUP
 -{ return(RIGHT_BRACE); }
 +{ context->lexAfterType = false; return(LEFT_BRACE); }
- 	YY_BREAK
+     YY_BREAK
  case 121:
  YY_RULE_SETUP
 -{ if (context->inTypeParen) context->lexAfterType = false; return(COMMA); }
 +{ return(RIGHT_BRACE); }
- 	YY_BREAK
+     YY_BREAK
  case 122:
  YY_RULE_SETUP
 -{ return(COLON); }
 +{ if (context->inTypeParen) context->lexAfterType = false; return(COMMA); }
- 	YY_BREAK
+     YY_BREAK
  case 123:
  YY_RULE_SETUP
 -{ context->lexAfterType = false; return(EQUAL); }
 +{ return(COLON); }
- 	YY_BREAK
+     YY_BREAK
  case 124:
  YY_RULE_SETUP
 -{ context->lexAfterType = false; context->inTypeParen = true; return(LEFT_PAREN); }
 +{ context->lexAfterType = false; return(EQUAL); }
- 	YY_BREAK
+     YY_BREAK
  case 125:
  YY_RULE_SETUP
 -{ context->inTypeParen = false; return(RIGHT_PAREN); }
 +{ context->lexAfterType = false; context->inTypeParen = true; return(LEFT_PAREN); }
- 	YY_BREAK
+     YY_BREAK
  case 126:
  YY_RULE_SETUP
 -{ return(LEFT_BRACKET); }
 +{ context->inTypeParen = false; return(RIGHT_PAREN); }
- 	YY_BREAK
+     YY_BREAK
  case 127:
  YY_RULE_SETUP
 -{ return(RIGHT_BRACKET); }
 +{ return(LEFT_BRACKET); }
- 	YY_BREAK
+     YY_BREAK
  case 128:
  YY_RULE_SETUP
 -{ BEGIN(FIELDS);  return(DOT); }
 +{ return(RIGHT_BRACKET); }
- 	YY_BREAK
+     YY_BREAK
  case 129:
  YY_RULE_SETUP
 -{ return(BANG); }
 +{ BEGIN(FIELDS);  return(DOT); }
- 	YY_BREAK
+     YY_BREAK
  case 130:
  YY_RULE_SETUP
 -{ return(DASH); }
 +{ return(BANG); }
- 	YY_BREAK
+     YY_BREAK
  case 131:
  YY_RULE_SETUP
 -{ return(TILDE); }
 +{ return(DASH); }
- 	YY_BREAK
+     YY_BREAK
  case 132:
  YY_RULE_SETUP
 -{ return(PLUS); }
 +{ return(TILDE); }
- 	YY_BREAK
+     YY_BREAK
  case 133:
  YY_RULE_SETUP
 -{ return(STAR); }
 +{ return(PLUS); }
- 	YY_BREAK
+     YY_BREAK
  case 134:
  YY_RULE_SETUP
 -{ return(SLASH); }
 +{ return(STAR); }
- 	YY_BREAK
+     YY_BREAK
  case 135:
  YY_RULE_SETUP
 -{ return(PERCENT); }
 +{ return(SLASH); }
- 	YY_BREAK
+     YY_BREAK
  case 136:
  YY_RULE_SETUP
 -{ return(LEFT_ANGLE); }
 +{ return(PERCENT); }
- 	YY_BREAK
+     YY_BREAK
  case 137:
  YY_RULE_SETUP
 -{ return(RIGHT_ANGLE); }
 +{ return(LEFT_ANGLE); }
- 	YY_BREAK
+     YY_BREAK
  case 138:
  YY_RULE_SETUP
 -{ return(VERTICAL_BAR); }
 +{ return(RIGHT_ANGLE); }
- 	YY_BREAK
+     YY_BREAK
  case 139:
  YY_RULE_SETUP
 -{ return(CARET); }
 +{ return(VERTICAL_BAR); }
- 	YY_BREAK
+     YY_BREAK
  case 140:
  YY_RULE_SETUP
 -{ return(AMPERSAND); }
 +{ return(CARET); }
- 	YY_BREAK
+     YY_BREAK
  case 141:
  YY_RULE_SETUP
 +{ return(AMPERSAND); }
-+	YY_BREAK
++    YY_BREAK
 +case 142:
 +YY_RULE_SETUP
  { return(QUESTION); }
- 	YY_BREAK
+     YY_BREAK
 -case 142:
 +case 143:
  YY_RULE_SETUP
@@ -1774,55 +2078,55 @@ diff -r d713478624d8 gfx/angle/src/compiler/glslang_lex.cpp
 @@ -1682,12 +1704,12 @@
      return FIELD_SELECTION;
  }
- 	YY_BREAK
+     YY_BREAK
 -case 143:
 +case 144:
  YY_RULE_SETUP
  {}
- 	YY_BREAK
+     YY_BREAK
 -case 144:
 -/* rule 144 can match eol */
 +case 145:
 +/* rule 145 can match eol */
  YY_RULE_SETUP
  {  }
- 	YY_BREAK
+     YY_BREAK
 @@ -1696,11 +1718,11 @@
  case YY_STATE_EOF(FIELDS):
  { context->AfterEOF = true; yyterminate(); }
- 	YY_BREAK
+     YY_BREAK
 -case 145:
 +case 146:
  YY_RULE_SETUP
  { context->warning(yylineno, "Unknown char", yytext, ""); return 0; }
- 	YY_BREAK
+     YY_BREAK
 -case 146:
 +case 147:
  YY_RULE_SETUP
  ECHO;
- 	YY_BREAK
+     YY_BREAK
 @@ -1996,7 +2018,7 @@
- 		while ( yy_chk[yy_base[yy_current_state] + yy_c] != yy_current_state )
- 			{
- 			yy_current_state = (int) yy_def[yy_current_state];
--			if ( yy_current_state >= 422 )
-+			if ( yy_current_state >= 426 )
- 				yy_c = yy_meta[(unsigned int) yy_c];
- 			}
- 		yy_current_state = yy_nxt[yy_base[yy_current_state] + (unsigned int) yy_c];
+         while ( yy_chk[yy_base[yy_current_state] + yy_c] != yy_current_state )
+             {
+             yy_current_state = (int) yy_def[yy_current_state];
+-            if ( yy_current_state >= 422 )
++            if ( yy_current_state >= 426 )
+                 yy_c = yy_meta[(unsigned int) yy_c];
+             }
+         yy_current_state = yy_nxt[yy_base[yy_current_state] + (unsigned int) yy_c];
 @@ -2025,11 +2047,11 @@
- 	while ( yy_chk[yy_base[yy_current_state] + yy_c] != yy_current_state )
- 		{
- 		yy_current_state = (int) yy_def[yy_current_state];
--		if ( yy_current_state >= 422 )
-+		if ( yy_current_state >= 426 )
- 			yy_c = yy_meta[(unsigned int) yy_c];
- 		}
- 	yy_current_state = yy_nxt[yy_base[yy_current_state] + (unsigned int) yy_c];
--	yy_is_jam = (yy_current_state == 421);
-+	yy_is_jam = (yy_current_state == 425);
+     while ( yy_chk[yy_base[yy_current_state] + yy_c] != yy_current_state )
+         {
+         yy_current_state = (int) yy_def[yy_current_state];
+-        if ( yy_current_state >= 422 )
++        if ( yy_current_state >= 426 )
+             yy_c = yy_meta[(unsigned int) yy_c];
+         }
+     yy_current_state = yy_nxt[yy_base[yy_current_state] + (unsigned int) yy_c];
+-    yy_is_jam = (yy_current_state == 421);
++    yy_is_jam = (yy_current_state == 425);
  
- 	return yy_is_jam ? 0 : yy_current_state;
+     return yy_is_jam ? 0 : yy_current_state;
  }
 @@ -2439,8 +2461,8 @@
  
@@ -1835,9 +2139,9 @@ diff -r d713478624d8 gfx/angle/src/compiler/glslang_lex.cpp
   * @param yyscanner The scanner object.
   * @return the newly allocated buffer state object.
   */
-diff -r d713478624d8 gfx/angle/src/compiler/glslang_tab.cpp
---- a/gfx/angle/src/compiler/glslang_tab.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/compiler/glslang_tab.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/compiler/glslang_tab.cpp
+--- a/gfx/angle/src/compiler/glslang_tab.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/compiler/glslang_tab.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -1,24 +1,23 @@
 -/* A Bison parser, made by GNU Bison 2.3.  */
 +
@@ -2208,7 +2512,7 @@ diff -r d713478624d8 gfx/angle/src/compiler/glslang_tab.cpp
 -}
 -/* Line 193 of yacc.c.  */
 -
--	YYSTYPE;
+-    YYSTYPE;
 +
 +
 +
@@ -2278,18 +2582,18 @@ diff -r d713478624d8 gfx/angle/src/compiler/glslang_tab.cpp
     elements in the stack, and YYPTR gives the new location of the
     stack.  Advance YYPTR to a properly aligned location for the next
     stack.  */
--# define YYSTACK_RELOCATE(Stack)					\
-+# define YYSTACK_RELOCATE(Stack_alloc, Stack)				\
-     do									\
-       {									\
- 	YYSIZE_T yynewbytes;						\
--	YYCOPY (&yyptr->Stack, Stack, yysize);				\
--	Stack = &yyptr->Stack;						\
-+	YYCOPY (&yyptr->Stack_alloc, Stack, yysize);			\
-+	Stack = &yyptr->Stack_alloc;					\
- 	yynewbytes = yystacksize * sizeof (*Stack) + YYSTACK_GAP_MAXIMUM; \
- 	yyptr += yynewbytes / sizeof (*yyptr);				\
-       }									\
+-# define YYSTACK_RELOCATE(Stack)                    \
++# define YYSTACK_RELOCATE(Stack_alloc, Stack)                \
+     do                                    \
+       {                                    \
+     YYSIZE_T yynewbytes;                        \
+-    YYCOPY (&yyptr->Stack, Stack, yysize);                \
+-    Stack = &yyptr->Stack;                        \
++    YYCOPY (&yyptr->Stack_alloc, Stack, yysize);            \
++    Stack = &yyptr->Stack_alloc;                    \
+     yynewbytes = yystacksize * sizeof (*Stack) + YYSTACK_GAP_MAXIMUM; \
+     yyptr += yynewbytes / sizeof (*yyptr);                \
+       }                                    \
 @@ -580,22 +492,22 @@
  #endif
  
@@ -2317,7 +2621,7 @@ diff -r d713478624d8 gfx/angle/src/compiler/glslang_tab.cpp
 -#define YYMAXUTOK   349
 +#define YYMAXUTOK   350
  
- #define YYTRANSLATE(YYX)						\
+ #define YYTRANSLATE(YYX)                        \
    ((unsigned int) (YYX) <= YYMAXUTOK ? yytranslate[YYX] : YYUNDEFTOK)
 @@ -637,7 +549,8 @@
        55,    56,    57,    58,    59,    60,    61,    62,    63,    64,
@@ -3362,16 +3666,16 @@ diff -r d713478624d8 gfx/angle/src/compiler/glslang_tab.cpp
 +      81,   153,   157,   158,    73,   124,   157,   152,   150,    82
  };
  
- #define yyerrok		(yyerrstatus = 0)
+ #define yyerrok        (yyerrstatus = 0)
 @@ -1361,7 +1285,7 @@
     we won't break user code: when these are the locations we know.  */
  
  #ifndef YY_LOCATION_PRINT
 -# if defined YYLTYPE_IS_TRIVIAL && YYLTYPE_IS_TRIVIAL
 +# if YYLTYPE_IS_TRIVIAL
- #  define YY_LOCATION_PRINT(File, Loc)			\
-      fprintf (File, "%d.%d-%d.%d",			\
- 	      (Loc).first_line, (Loc).first_column,	\
+ #  define YY_LOCATION_PRINT(File, Loc)            \
+      fprintf (File, "%d.%d-%d.%d",            \
+           (Loc).first_line, (Loc).first_column,    \
 @@ -1475,17 +1399,20 @@
  #if (defined __STDC__ || defined __C99__FUNC__ \
       || defined __cplusplus || defined _MSC_VER)
@@ -3406,15 +3710,15 @@ diff -r d713478624d8 gfx/angle/src/compiler/glslang_tab.cpp
 -      fprintf (stderr, "   $%d = ", yyi + 1);
 +      YYFPRINTF (stderr, "   $%d = ", yyi + 1);
        yy_symbol_print (stderr, yyrhs[yyprhs[yyrule] + yyi],
- 		       &(yyvsp[(yyi + 1) - (yynrhs)])
- 		       		       , context);
+                &(yyvsp[(yyi + 1) - (yynrhs)])
+                               , context);
 -      fprintf (stderr, "\n");
 +      YYFPRINTF (stderr, "\n");
      }
  }
  
 @@ -1806,10 +1733,8 @@
- 	break;
+     break;
      }
  }
 -
@@ -3542,7 +3846,7 @@ diff -r d713478624d8 gfx/angle/src/compiler/glslang_tab.cpp
    yystate = 0;
    yyerrstatus = 0;
    yynerrs = 0;
--  yychar = YYEMPTY;		/* Cause a token to be read.  */
+-  yychar = YYEMPTY;        /* Cause a token to be read.  */
 +  yychar = YYEMPTY; /* Cause a token to be read.  */
  
    /* Initialize stack pointers.
@@ -3554,40 +3858,40 @@ diff -r d713478624d8 gfx/angle/src/compiler/glslang_tab.cpp
    yyvsp = yyvs;
  
 @@ -1952,7 +1877,6 @@
- 	YYSTYPE *yyvs1 = yyvs;
- 	yytype_int16 *yyss1 = yyss;
+     YYSTYPE *yyvs1 = yyvs;
+     yytype_int16 *yyss1 = yyss;
  
 -
- 	/* Each stack pointer address is followed by the size of the
- 	   data in use in that stack, in bytes.  This used to be a
- 	   conditional around just the two extra args, but that might
+     /* Each stack pointer address is followed by the size of the
+        data in use in that stack, in bytes.  This used to be a
+        conditional around just the two extra args, but that might
 @@ -1960,7 +1884,6 @@
- 	yyoverflow (YY_("memory exhausted"),
- 		    &yyss1, yysize * sizeof (*yyssp),
- 		    &yyvs1, yysize * sizeof (*yyvsp),
+     yyoverflow (YY_("memory exhausted"),
+             &yyss1, yysize * sizeof (*yyssp),
+             &yyvs1, yysize * sizeof (*yyvsp),
 -
- 		    &yystacksize);
+             &yystacksize);
  
- 	yyss = yyss1;
+     yyss = yyss1;
 @@ -1983,9 +1906,8 @@
- 	  (union yyalloc *) YYSTACK_ALLOC (YYSTACK_BYTES (yystacksize));
- 	if (! yyptr)
- 	  goto yyexhaustedlab;
--	YYSTACK_RELOCATE (yyss);
--	YYSTACK_RELOCATE (yyvs);
+       (union yyalloc *) YYSTACK_ALLOC (YYSTACK_BYTES (yystacksize));
+     if (! yyptr)
+       goto yyexhaustedlab;
+-    YYSTACK_RELOCATE (yyss);
+-    YYSTACK_RELOCATE (yyvs);
 -
-+	YYSTACK_RELOCATE (yyss_alloc, yyss);
-+	YYSTACK_RELOCATE (yyvs_alloc, yyvs);
++    YYSTACK_RELOCATE (yyss_alloc, yyss);
++    YYSTACK_RELOCATE (yyvs_alloc, yyvs);
  #  undef YYSTACK_RELOCATE
- 	if (yyss1 != yyssa)
- 	  YYSTACK_FREE (yyss1);
+     if (yyss1 != yyssa)
+       YYSTACK_FREE (yyss1);
 @@ -1996,7 +1918,6 @@
        yyssp = yyss + yysize - 1;
        yyvsp = yyvs + yysize - 1;
  
 -
        YYDPRINTF ((stderr, "Stack size increased to %lu\n",
- 		  (unsigned long int) yystacksize));
+           (unsigned long int) yystacksize));
  
 @@ -2006,6 +1927,9 @@
  
@@ -5412,11 +5716,11 @@ diff -r d713478624d8 gfx/angle/src/compiler/glslang_tab.cpp
      {
 -      /* If just tried and failed to reuse look-ahead token after an
 +      /* If just tried and failed to reuse lookahead token after an
- 	 error, discard it.  */
+      error, discard it.  */
  
        if (yychar <= YYEOF)
 @@ -4608,7 +4539,7 @@
- 	}
+     }
      }
  
 -  /* Else will try to reuse look-ahead token after shifting the error
@@ -5450,11 +5754,11 @@ diff -r d713478624d8 gfx/angle/src/compiler/glslang_tab.cpp
 -  if (yychar != YYEOF && yychar != YYEMPTY)
 +  if (yychar != YYEMPTY)
       yydestruct ("Cleanup: discarding lookahead",
- 		 yytoken, &yylval, context);
+          yytoken, &yylval, context);
    /* Do not reclaim the symbols of the rule which action triggered
-diff -r d713478624d8 gfx/angle/src/compiler/glslang_tab.h
---- a/gfx/angle/src/compiler/glslang_tab.h	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/compiler/glslang_tab.h	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/compiler/glslang_tab.h
+--- a/gfx/angle/src/compiler/glslang_tab.h    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/compiler/glslang_tab.h    Wed Jan 25 02:47:30 2012 +0900
 @@ -1,24 +1,23 @@
 -/* A Bison parser, made by GNU Bison 2.3.  */
 +
@@ -5726,7 +6030,7 @@ diff -r d713478624d8 gfx/angle/src/compiler/glslang_tab.h
 -}
 -/* Line 1489 of yacc.c.  */
  
--	YYSTYPE;
+-    YYSTYPE;
 +
 +
 +} YYSTYPE;
@@ -5739,9 +6043,9 @@ diff -r d713478624d8 gfx/angle/src/compiler/glslang_tab.h
  
  
 +
-diff -r d713478624d8 gfx/angle/src/libEGL/Display.cpp
---- a/gfx/angle/src/libEGL/Display.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libEGL/Display.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libEGL/Display.cpp
+--- a/gfx/angle/src/libEGL/Display.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libEGL/Display.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -88,6 +88,7 @@
      mMaxSwapInterval = 1;
      mSoftwareDevice = software;
@@ -6063,9 +6367,9 @@ diff -r d713478624d8 gfx/angle/src/libEGL/Display.cpp
      std::string::size_type end = mExtensionString.find_last_not_of(' ');
      if (end != std::string::npos)
      {
-diff -r d713478624d8 gfx/angle/src/libEGL/Display.h
---- a/gfx/angle/src/libEGL/Display.h	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libEGL/Display.h	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libEGL/Display.h
+--- a/gfx/angle/src/libEGL/Display.h    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libEGL/Display.h    Wed Jan 25 02:47:30 2012 +0900
 @@ -44,7 +44,7 @@
  
      EGLSurface createWindowSurface(HWND window, EGLConfig config, const EGLint *attribList);
@@ -6114,9 +6418,9 @@ diff -r d713478624d8 gfx/angle/src/libEGL/Display.h
      bool resetDevice();
  
      void initExtensionString();
-diff -r d713478624d8 gfx/angle/src/libEGL/Surface.cpp
---- a/gfx/angle/src/libEGL/Surface.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libEGL/Surface.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libEGL/Surface.cpp
+--- a/gfx/angle/src/libEGL/Surface.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libEGL/Surface.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -39,8 +39,8 @@
  }
  }
@@ -6348,9 +6652,9 @@ diff -r d713478624d8 gfx/angle/src/libEGL/Surface.cpp
  IDirect3DSurface9 *Surface::getRenderTarget()
  {
      if (mRenderTarget)
-diff -r d713478624d8 gfx/angle/src/libEGL/Surface.h
---- a/gfx/angle/src/libEGL/Surface.h	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libEGL/Surface.h	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libEGL/Surface.h
+--- a/gfx/angle/src/libEGL/Surface.h    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libEGL/Surface.h    Wed Jan 25 02:47:30 2012 +0900
 @@ -30,7 +30,7 @@
  class Surface
  {
@@ -6383,9 +6687,9 @@ diff -r d713478624d8 gfx/angle/src/libEGL/Surface.h
      DWORD mPresentInterval;
      bool mPresentIntervalDirty;
      gl::Texture2D *mTexture;
-diff -r d713478624d8 gfx/angle/src/libEGL/libEGL.cpp
---- a/gfx/angle/src/libEGL/libEGL.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libEGL/libEGL.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libEGL/libEGL.cpp
+--- a/gfx/angle/src/libEGL/libEGL.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libEGL/libEGL.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -488,6 +488,9 @@
            case EGL_WIDTH:
              *value = eglSurface->getWidth();
@@ -6565,9 +6869,9 @@ diff -r d713478624d8 gfx/angle/src/libEGL/libEGL.cpp
              {"", NULL},
          };
  
-diff -r d713478624d8 gfx/angle/src/libGLESv2/Context.cpp
---- a/gfx/angle/src/libGLESv2/Context.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libGLESv2/Context.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libGLESv2/Context.cpp
+--- a/gfx/angle/src/libGLESv2/Context.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libGLESv2/Context.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -38,8 +38,10 @@
  
  namespace gl
@@ -7327,9 +7631,9 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/Context.cpp
  }
  
  void glDestroyContext(gl::Context *context)
-diff -r d713478624d8 gfx/angle/src/libGLESv2/Context.h
---- a/gfx/angle/src/libGLESv2/Context.h	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libGLESv2/Context.h	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libGLESv2/Context.h
+--- a/gfx/angle/src/libGLESv2/Context.h    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libGLESv2/Context.h    Wed Jan 25 02:47:30 2012 +0900
 @@ -65,7 +65,7 @@
      MAX_TEXTURE_IMAGE_UNITS = 16,
      MAX_VERTEX_TEXTURE_IMAGE_UNITS_VTF = 4,   // For devices supporting vertex texture fetch
@@ -7387,7 +7691,7 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/Context.h
      void drawElements(GLenum mode, GLsizei count, GLenum type, const void *indices);
      void sync(bool block);   // flush/finish
  
- 	// Draw the last segment of a line loop
+     // Draw the last segment of a line loop
 -    void drawClosingLine(unsigned int first, unsigned int last);
 -    void drawClosingLine(GLsizei count, GLenum type, const void *indices);
 +    void drawClosingLine(unsigned int first, unsigned int last, int minIndex);
@@ -7470,9 +7774,9 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/Context.h
  }
  
  #endif   // INCLUDE_CONTEXT_H_
-diff -r d713478624d8 gfx/angle/src/libGLESv2/Fence.cpp
---- a/gfx/angle/src/libGLESv2/Fence.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libGLESv2/Fence.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libGLESv2/Fence.cpp
+--- a/gfx/angle/src/libGLESv2/Fence.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libGLESv2/Fence.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -65,7 +65,7 @@
  
      HRESULT result = mQuery->GetData(NULL, 0, D3DGETDATA_FLUSH);
@@ -7491,9 +7795,9 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/Fence.cpp
              {
                  params[0] = GL_TRUE;
                  return error(GL_OUT_OF_MEMORY);
-diff -r d713478624d8 gfx/angle/src/libGLESv2/Framebuffer.cpp
---- a/gfx/angle/src/libGLESv2/Framebuffer.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libGLESv2/Framebuffer.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libGLESv2/Framebuffer.cpp
+--- a/gfx/angle/src/libGLESv2/Framebuffer.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libGLESv2/Framebuffer.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -181,46 +181,19 @@
      return 0;
  }
@@ -7611,9 +7915,9 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/Framebuffer.cpp
  }
  
  int Framebuffer::getSamples()
-diff -r d713478624d8 gfx/angle/src/libGLESv2/Framebuffer.h
---- a/gfx/angle/src/libGLESv2/Framebuffer.h	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libGLESv2/Framebuffer.h	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libGLESv2/Framebuffer.h
+--- a/gfx/angle/src/libGLESv2/Framebuffer.h    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libGLESv2/Framebuffer.h    Wed Jan 25 02:47:30 2012 +0900
 @@ -46,9 +46,9 @@
      unsigned int getDepthbufferSerial();
      unsigned int getStencilbufferSerial();
@@ -7636,9 +7940,9 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/Framebuffer.h
  
      virtual GLenum completeness();
  
-diff -r d713478624d8 gfx/angle/src/libGLESv2/Program.cpp
---- a/gfx/angle/src/libGLESv2/Program.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libGLESv2/Program.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libGLESv2/Program.cpp
+--- a/gfx/angle/src/libGLESv2/Program.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libGLESv2/Program.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -36,7 +36,7 @@
  Uniform::Uniform(GLenum type, const std::string &_name, unsigned int arraySize)
      : type(type), _name(_name), name(Program::undecorateUniform(_name)), arraySize(arraySize)
@@ -7831,9 +8135,9 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/Program.cpp
  }
  
  GLint Program::getDxHalfPixelSizeLocation() const
-diff -r d713478624d8 gfx/angle/src/libGLESv2/Program.h
---- a/gfx/angle/src/libGLESv2/Program.h	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libGLESv2/Program.h	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libGLESv2/Program.h
+--- a/gfx/angle/src/libGLESv2/Program.h    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libGLESv2/Program.h    Wed Jan 25 02:47:30 2012 +0900
 @@ -98,12 +98,12 @@
      bool setUniform3iv(GLint location, GLsizei count, const GLint *v);
      bool setUniform4iv(GLint location, GLsizei count, const GLint *v);
@@ -7859,9 +8163,9 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/Program.h
      GLint mDxHalfPixelSizeLocation;
      GLint mDxFrontCCWLocation;
      GLint mDxPointsOrLinesLocation;
-diff -r d713478624d8 gfx/angle/src/libGLESv2/Renderbuffer.cpp
---- a/gfx/angle/src/libGLESv2/Renderbuffer.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libGLESv2/Renderbuffer.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libGLESv2/Renderbuffer.cpp
+--- a/gfx/angle/src/libGLESv2/Renderbuffer.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libGLESv2/Renderbuffer.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -18,103 +18,175 @@
  {
  unsigned int RenderbufferStorage::mCurrentSerial = 1;
@@ -8322,9 +8626,9 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/Renderbuffer.cpp
 -    return true;
 -}
 -}
-diff -r d713478624d8 gfx/angle/src/libGLESv2/Renderbuffer.h
---- a/gfx/angle/src/libGLESv2/Renderbuffer.h	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libGLESv2/Renderbuffer.h	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libGLESv2/Renderbuffer.h
+--- a/gfx/angle/src/libGLESv2/Renderbuffer.h    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libGLESv2/Renderbuffer.h    Wed Jan 25 02:47:30 2012 +0900
 @@ -22,38 +22,86 @@
  namespace gl
  {
@@ -8535,9 +8839,9 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/Renderbuffer.h
    private:
      DISALLOW_COPY_AND_ASSIGN(Stencilbuffer);
  };
-diff -r d713478624d8 gfx/angle/src/libGLESv2/Texture.cpp
---- a/gfx/angle/src/libGLESv2/Texture.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libGLESv2/Texture.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libGLESv2/Texture.cpp
+--- a/gfx/angle/src/libGLESv2/Texture.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libGLESv2/Texture.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -33,44 +33,9 @@
  
  namespace gl
@@ -12097,9 +12401,9 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/Texture.cpp
 +
 +}
 \ No newline at end of file
-diff -r d713478624d8 gfx/angle/src/libGLESv2/Texture.h
---- a/gfx/angle/src/libGLESv2/Texture.h	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libGLESv2/Texture.h	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libGLESv2/Texture.h
+--- a/gfx/angle/src/libGLESv2/Texture.h    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libGLESv2/Texture.h    Wed Jan 25 02:47:30 2012 +0900
 @@ -43,6 +43,129 @@
      IMPLEMENTATION_MAX_TEXTURE_LEVELS = 15   // 1+log2 of MAX_TEXTURE_SIZE
  };
@@ -12545,9 +12849,9 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/Texture.h
 -#endif   // LIBGLESV2_TEXTURE_H_
 +#endif   // LIBGLESV2_TEXTURE_H_
 \ No newline at end of file
-diff -r d713478624d8 gfx/angle/src/libGLESv2/VertexDataManager.cpp
---- a/gfx/angle/src/libGLESv2/VertexDataManager.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libGLESv2/VertexDataManager.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libGLESv2/VertexDataManager.cpp
+--- a/gfx/angle/src/libGLESv2/VertexDataManager.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libGLESv2/VertexDataManager.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -29,6 +29,12 @@
  {
  unsigned int VertexBuffer::mCurrentSerial = 1;
@@ -12579,9 +12883,9 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/VertexDataManager.cpp
                          int startIndex = attribs[i].mOffset / attribs[i].stride();
  
                          streamOffset = writeAttributeData(staticBuffer, -startIndex, totalCount, attribs[i]);
-diff -r d713478624d8 gfx/angle/src/libGLESv2/libGLESv2.cpp
---- a/gfx/angle/src/libGLESv2/libGLESv2.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libGLESv2/libGLESv2.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libGLESv2/libGLESv2.cpp
+--- a/gfx/angle/src/libGLESv2/libGLESv2.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libGLESv2/libGLESv2.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -53,6 +53,81 @@
      return false;
  }
@@ -14570,9 +14874,9 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/libGLESv2.cpp
 +}
 +
 +}
-diff -r d713478624d8 gfx/angle/src/libGLESv2/libGLESv2.def
---- a/gfx/angle/src/libGLESv2/libGLESv2.def	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libGLESv2/libGLESv2.def	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libGLESv2/libGLESv2.def
+--- a/gfx/angle/src/libGLESv2/libGLESv2.def    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libGLESv2/libGLESv2.def    Wed Jan 25 02:47:30 2012 +0900
 @@ -155,6 +155,11 @@
      glSetFenceNV                    @156
      glTestFenceNV                   @157
@@ -14585,9 +14889,9 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/libGLESv2.def
  
      ; EGL dependencies
      glCreateContext                 @144 NONAME
-diff -r d713478624d8 gfx/angle/src/libGLESv2/main.cpp
---- a/gfx/angle/src/libGLESv2/main.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libGLESv2/main.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libGLESv2/main.cpp
+--- a/gfx/angle/src/libGLESv2/main.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libGLESv2/main.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -7,6 +7,7 @@
  // main.cpp: DLL entry point and management of thread-local data.
  
@@ -14642,9 +14946,9 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/main.cpp
  }
  
  // Records an error code
-diff -r d713478624d8 gfx/angle/src/libGLESv2/main.h
---- a/gfx/angle/src/libGLESv2/main.h	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libGLESv2/main.h	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libGLESv2/main.h
+--- a/gfx/angle/src/libGLESv2/main.h    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libGLESv2/main.h    Wed Jan 25 02:47:30 2012 +0900
 @@ -29,9 +29,12 @@
  void makeCurrent(Context *context, egl::Display *display, egl::Surface *surface);
  
@@ -14658,9 +14962,9 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/main.h
  }
  
  void error(GLenum errorCode);
-diff -r d713478624d8 gfx/angle/src/libGLESv2/utilities.cpp
---- a/gfx/angle/src/libGLESv2/utilities.cpp	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libGLESv2/utilities.cpp	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libGLESv2/utilities.cpp
+--- a/gfx/angle/src/libGLESv2/utilities.cpp    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libGLESv2/utilities.cpp    Wed Jan 25 02:47:30 2012 +0900
 @@ -20,7 +20,8 @@
  namespace gl
  {
@@ -14818,9 +15122,9 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/utilities.cpp
  GLsizei GetSamplesFromMultisampleType(D3DMULTISAMPLE_TYPE type)
  {
      if (type == D3DMULTISAMPLE_NONMASKABLE)
-diff -r d713478624d8 gfx/angle/src/libGLESv2/utilities.h
---- a/gfx/angle/src/libGLESv2/utilities.h	Thu Jan 05 01:16:58 2012 +0200
-+++ b/gfx/angle/src/libGLESv2/utilities.h	Thu Jan 05 10:52:20 2012 +0900
+diff -r 3a99d7ff459c gfx/angle/src/libGLESv2/utilities.h
+--- a/gfx/angle/src/libGLESv2/utilities.h    Mon Jan 23 16:10:39 2012 -0800
++++ b/gfx/angle/src/libGLESv2/utilities.h    Wed Jan 25 02:47:30 2012 +0900
 @@ -21,10 +21,11 @@
  
  struct Color;
@@ -14872,3 +15176,4 @@ diff -r d713478624d8 gfx/angle/src/libGLESv2/utilities.h
 +};
 +
  #endif  // LIBGLESV2_UTILITIES_H
+
