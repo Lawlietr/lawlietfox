@@ -7,12 +7,7 @@ Bug 674770 - contenteditable breaks middle-click to open links when middlemouse.
 diff --git a/editor/libeditor/base/nsEditorEventListener.cpp b/editor/libeditor/base/nsEditorEventListener.cpp
 --- a/editor/libeditor/base/nsEditorEventListener.cpp
 +++ b/editor/libeditor/base/nsEditorEventListener.cpp
-@@ -384,16 +384,26 @@ nsEditorEventListener::MouseClick(nsIDOM
-   nsCOMPtr<nsIDOMNSEvent> nsevent = do_QueryInterface(aMouseEvent);
-   PRBool isTrusted = PR_FALSE;
-   if (!mouseEvent || !nsevent ||
-       NS_FAILED(nsevent->GetIsTrusted(&isTrusted)) || !isTrusted) {
-     // Non-ui or non-trusted event passed in. Bad things.
+@@ -522,6 +522,16 @@
      return NS_OK;
    }
  
@@ -26,36 +21,23 @@ diff --git a/editor/libeditor/base/nsEditorEventListener.cpp b/editor/libeditor/
 +    return NS_OK;
 +  }
 +
-   nsresult rv;
-   nsCOMPtr<nsIDOMNSUIEvent> nsuiEvent = do_QueryInterface(aMouseEvent);
-   NS_ENSURE_TRUE(nsuiEvent, NS_ERROR_NULL_POINTER);
- 
-   PRBool preventDefault;
-   rv = nsuiEvent->GetPreventDefault(&preventDefault);
-   if (NS_FAILED(rv) || preventDefault)
-   {
+   bool preventDefault;
+   nsresult rv = nsevent->GetPreventDefault(&preventDefault);
+   if (NS_FAILED(rv) || preventDefault) {
+
 diff --git a/editor/libeditor/html/tests/Makefile.in b/editor/libeditor/html/tests/Makefile.in
 --- a/editor/libeditor/html/tests/Makefile.in
 +++ b/editor/libeditor/html/tests/Makefile.in
-@@ -75,16 +75,18 @@ _TEST_FILES = \
- 		test_bug607584.html \
- 		test_bug611182.html \
- 		test_bug612447.html \
- 		test_bug620906.html \
- 		test_bug622371.html \
- 		test_bug629845.html \
- 		test_bug640321.html \
- 		test_bug668599.html \
-+		test_bug674770.html \
-+		file_bug674770.html \
- 		test_CF_HTML_clipboard.html \
- 		test_contenteditable_focus.html \
- 		test_htmleditor_keyevent_handling.html \
- 		test_select_all_without_body.html \
- 		file_select_all_without_body.html \
- 		test_root_element_replacement.html \
- 		$(NULL)
- 
+@@ -85,6 +85,8 @@
+         test_bug629845.html \
+         test_bug640321.html \
+         test_bug668599.html \
++        test_bug674770.html \
++        file_bug674770.html \
+         test_bug674861.html \
+         test_bug676401.html \
+         test_bug677752.html \
+
 diff --git a/editor/libeditor/html/tests/file_bug674770.html b/editor/libeditor/html/tests/file_bug674770.html
 new file mode 100644
 --- /dev/null
@@ -140,3 +122,4 @@ new file mode 100644
 +</pre>
 +</body>
 +</html>
+
