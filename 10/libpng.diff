@@ -4,8 +4,8 @@
 #
 
 diff -r d77b056ed4bd media/libpng/pngrutil.c
---- a/media/libpng/pngrutil.c	Sat Dec 31 21:15:38 2011 -0800
-+++ b/media/libpng/pngrutil.c	Sun Jan 01 21:16:52 2012 +0900
+--- a/media/libpng/pngrutil.c    Sat Dec 31 21:15:38 2011 -0800
++++ b/media/libpng/pngrutil.c    Sun Jan 01 21:16:52 2012 +0900
 @@ -2733,59 +2733,46 @@
     }
     else
@@ -778,3 +778,4 @@ diff -r d77b056ed4bd media/libpng/pngrutil.c
              }
              break;
           }
+
