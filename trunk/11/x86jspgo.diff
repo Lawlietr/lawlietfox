@@ -1,0 +1,21 @@
+# Mr.Tete found this workaround.
+
+diff -r 95256692afd8 js/src/methodjit/Compiler.cpp
+--- a/js/src/methodjit/Compiler.cpp	Tue Feb 21 12:46:04 2012 +1300
++++ b/js/src/methodjit/Compiler.cpp	Sat Feb 25 04:38:36 2012 +0900
+@@ -4263,6 +4263,7 @@
+     callSites.append(site);
+ }
+ 
++#pragma optimize("g", off)
+ void
+ mjit::Compiler::inlineStubCall(void *stub, RejoinState rejoin, Uses uses)
+ {
+@@ -4278,6 +4279,7 @@
+     }
+     addCallSite(site);
+ }
++#pragma optimize("g", on)
+ 
+ bool
+ mjit::Compiler::compareTwoValues(JSContext *cx, JSOp op, const Value &lhs, const Value &rhs)
