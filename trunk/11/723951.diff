@@ -1,0 +1,35 @@
+# HG changeset patch
+# User OHZEKI Tetsuharu <saneyuki.s.snyk@gmail.com>
+# Date 1330185134 -32400
+# Node ID 6831309d39effc81b9ba5d3541bf89e4a4bc82e8
+# Parent  6fbaf8cf139c21106a9d5c9a97ec931b8e0d606a
+Bug 723951 - Popup notification does not continue when the tab move to other window.
+
+diff -r 6fbaf8cf139c -r 6831309d39ef browser/base/content/tabbrowser.xml
+--- a/browser/base/content/tabbrowser.xml	Sat Feb 25 03:10:43 2012 -0800
++++ b/browser/base/content/tabbrowser.xml	Sun Feb 26 00:52:14 2012 +0900
+@@ -1888,6 +1888,24 @@
+             // of replaceTabWithWindow), notify onLocationChange, etc.
+             if (aOurTab == this.selectedTab)
+               this.updateCurrentBrowser(true);
++
++            // Restore popup notifications.
++            if (otherBrowser.popupNotifications) {
++              // Check whether ourBrowser.popupNotifications has be set already.
++              if (!Array.isArray(ourBrowser.popupNotifications)) {
++                ourBrowser.popupNotifications = [];
++              }
++              
++              let ourPopupNotifications = aOurTab.ownerDocument.defaultView.
++                                          PopupNotifications;
++              otherBrowser.popupNotifications.forEach(function(n){
++                n.browser = ourBrowser;
++                n.owner   = ourPopupNotifications;
++                ourBrowser.popupNotifications.push(n);
++              });
++              
++              delete otherBrowser.popupNotifications;
++            }
+           ]]>
+         </body>
+       </method>
