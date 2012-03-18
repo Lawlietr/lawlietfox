@@ -1,0 +1,25 @@
+diff -r f88a05e00f47 browser/components/places/content/treeView.js
+--- a/browser/components/places/content/treeView.js	Thu Feb 16 06:31:49 2012 -0800
++++ b/browser/components/places/content/treeView.js	Sat Feb 18 00:35:05 2012 +0900
+@@ -238,16 +238,21 @@ PlacesTreeView.prototype = {
+     let parentRow = this._rows.lastIndexOf(parent, aChildRow - 1);
+     return [parent, parentRow];
+   },
+ 
+   /**
+    * Gets the node at a given row.
+    */
+   _getNodeForRow: function PTV__getNodeForRow(aRow) {
++    // if aRow is less than 0, this returns root node. 
++    if (aRow < 0) {
++      return this._rootNode;
++    }
++
+     let node = this._rows[aRow];
+     if (node !== undefined)
+       return node;
+ 
+     // Find the nearest node.
+     let rowNode, row;
+     for (let i = aRow - 1; i >= 0 && rowNode === undefined; i--) {
+       rowNode = this._rows[i];
