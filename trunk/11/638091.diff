@@ -1,0 +1,122 @@
+diff -r ab1685df6e2f js/src/jsstr.cpp
+--- a/js/src/jsstr.cpp	Sun Feb 05 14:48:18 2012 +0100
++++ b/js/src/jsstr.cpp	Wed Feb 08 13:34:11 2012 +0900
+@@ -849,10 +849,15 @@
+ {
+     uint8_t skip[sBMHCharSetSize];
+ 
+-    JS_ASSERT(0 < patlen && patlen <= sBMHPatLenMax);
++    JS_ASSERT(0 < patlen);
++
++    jsuint mpatlen = patlen;
++    if (mpatlen > sBMHPatLenMax)
++        mpatlen = sBMHPatLenMax;
++
+     for (jsuint i = 0; i < sBMHCharSetSize; i++)
+-        skip[i] = (uint8_t)patlen;
+-    jsuint m = patlen - 1;
++        skip[i] = (uint8_t)mpatlen;
++    jsuint m = mpatlen - 1;
+     for (jsuint i = 0; i < m; i++) {
+         jschar c = pat[i];
+         if (c >= sBMHCharSetSize)
+@@ -862,12 +867,29 @@
+     jschar c;
+     for (jsuint k = m;
+          k < textlen;
+-         k += ((c = text[k]) >= sBMHCharSetSize) ? patlen : skip[c]) {
+-        for (jsuint i = k, j = m; ; i--, j--) {
++         k += ((c = text[k]) >= sBMHCharSetSize) ? mpatlen : skip[c]) {
++         for (jsuint i = k, j = m; ; i--, j--) {
+             if (text[i] != pat[j])
+                 break;
+-            if (j == 0)
+-                return static_cast<jsint>(i);  /* safe: max string size */
++            if (j == 0) {
++               if(mpatlen != patlen) {
++                   //printf("match");
++                   //TODO: use MemCmp if available
++                   const jschar *extent = pat+patlen;
++                   const jschar *p = pat+mpatlen;
++                   const jschar *t = text+i+mpatlen;
++                   for (; p != extent; ++p, ++t) {
++                       if (*p != *t)
++                           break;
++                   }
++                   //jsuint extent = (patlen - 1 - mpatlen) * sizeof(jschar);
++                   //if(memcmp(p, t, extent) == 0);
++                   if (p == extent)
++                       return static_cast<jsint>(i);  /* FIXME: max string size */
++               } else {
++                   return static_cast<jsint>(i);  /* safe: max string size */
++               }
++           }        
+         }
+     }
+     return -1;
+@@ -943,6 +965,45 @@
+     return -1;
+ }
+ 
++
++extern jsint
++js_ShiftAnd(const jschar *text, jsuint textlen,
++            const jschar *pat, jsuint patlen)
++{
++                jsuint i;
++		jsuint bit;
++		jsint Cs[256];
++
++                /* preprocessing of the query */
++                Cs[0] = 1;
++		for (i=1; i != 256; i++)
++			Cs[i] = 0;
++
++		for (i=0; i != 32; i++) {
++			bit = 1 << i;
++			Cs[*(pat+i)] |= bit;
++		}
++
++		/* actual matching of the algorithm */
++		jsuint k = 0;
++                for (const jschar *c = text, *end = text + textlen; c != end; ++c) {
++                        k = (k*2+1) & Cs[*c];
++
++			if (bit <= k) {
++                                jsuint j = 31;
++                                const jschar *t = c;
++				for (; j<patlen; ++j, ++t) {
++                                    if (pat[j] != *t)
++                                        break;
++                                }
++                                if (j == patlen)
++                                    return c - text - 31;
++                        }
++		}
++
++                return -1;
++}
++
+ static JS_ALWAYS_INLINE jsint
+ StringMatch(const jschar *text, jsuint textlen,
+             const jschar *pat, jsuint patlen)
+@@ -980,12 +1041,18 @@
+      * From this, the values for "big enough" and "too small" are determined
+      * empirically. See bug 526348.
+      */
+-    if (textlen >= 512 && patlen >= 11 && patlen <= sBMHPatLenMax) {
++    if (textlen >= 512 && patlen >= 11) {
+         jsint index = js_BoyerMooreHorspool(text, textlen, pat, patlen);
+         if (index != sBMHBadPattern)
+             return index;
+     }
+ 
++    if (patlen > 31)
++    {
++        jsint index = js_ShiftAnd(text, textlen, pat, patlen);
++        return index;
++    }
++
+     /*
+      * For big patterns with large potential overlap we want the SIMD-optimized
+      * speed of memcmp. For small patterns, a simple loop is faster.
