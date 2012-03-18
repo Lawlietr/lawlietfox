@@ -1,7 +1,7 @@
-diff -r 32515f50755a widget/windows/nsWindow.cpp
---- a/widget/windows/nsWindow.cpp	Wed Mar 14 18:57:00 2012 +0100
-+++ b/widget/windows/nsWindow.cpp	Sat Mar 17 01:15:17 2012 +0900
-@@ -7331,15 +7331,17 @@
+diff -r ab1685df6e2f widget/src/windows/nsWindow.cpp
+--- a/widget/src/windows/nsWindow.cpp    Sun Feb 05 14:48:18 2012 +0100
++++ b/widget/src/windows/nsWindow.cpp    Wed Feb 08 14:36:39 2012 +0900
+@@ -7325,15 +7325,17 @@
      }
    }
  
@@ -20,3 +20,4 @@ diff -r 32515f50755a widget/windows/nsWindow.cpp
      }
    }
    if (!::SetWindowRgn(mWnd, dest, TRUE)) {
+
