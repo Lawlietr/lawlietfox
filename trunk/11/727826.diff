@@ -1,0 +1,22 @@
+diff -r 6989376471f7 browser/base/content/browser-places.js
+--- a/browser/base/content/browser-places.js	Thu Feb 16 12:53:48 2012 +0100
++++ b/browser/base/content/browser-places.js	Fri Feb 17 00:14:08 2012 +0900
+@@ -557,17 +557,17 @@ HistoryMenu.prototype = {
+       undoMenu.setAttribute("disabled", true);
+       return;
+     }
+ 
+     // enable menu
+     undoMenu.removeAttribute("disabled");
+ 
+     // populate menu
+-    var undoItems = eval("(" + this._ss.getClosedTabData(window) + ")");
++    var undoItems = JSON.parse(this._ss.getClosedTabData(window));
+     for (var i = 0; i < undoItems.length; i++) {
+       var m = document.createElement("menuitem");
+       m.setAttribute("label", undoItems[i].title);
+       if (undoItems[i].image) {
+         let iconURL = undoItems[i].image;
+         // don't initiate a connection just to fetch a favicon (see bug 467828)
+         if (/^https?:/.test(iconURL))
+           iconURL = "moz-anno:favicon:" + iconURL;
