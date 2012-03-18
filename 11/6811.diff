@@ -1,6 +1,6 @@
-diff -r 57eb38613ff8 widget/gtk2/nsGtkIMModule.cpp
---- a/widget/gtk2/nsGtkIMModule.cpp	Fri Feb 17 15:13:32 2012 -0800
-+++ b/widget/gtk2/nsGtkIMModule.cpp	Tue Feb 21 15:33:14 2012 +0900
+diff -r 57eb38613ff8 widget/src/gtk2/nsGtkIMModule.cpp
+--- a/widget/src/gtk2/nsGtkIMModule.cpp    Fri Feb 17 15:13:32 2012 -0800
++++ b/widget/src/gtk2/nsGtkIMModule.cpp    Tue Feb 21 15:33:14 2012 +0900
 @@ -1492,6 +1492,35 @@
          return NS_ERROR_FAILURE;
      }
@@ -37,3 +37,4 @@ diff -r 57eb38613ff8 widget/gtk2/nsGtkIMModule.cpp
      // Get only the focused paragraph, by looking for newlines
      PRInt32 parStart = (selOffset == 0) ? 0 :
          textContent.RFind("\n", false, selOffset - 1, -1) + 1;
+
