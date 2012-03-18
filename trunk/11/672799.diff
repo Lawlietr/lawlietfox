@@ -1,0 +1,29 @@
+diff -r 95256692afd8 browser/config/mozconfigs/win64/nightly
+--- a/browser/config/mozconfigs/win64/nightly	Tue Feb 21 12:46:04 2012 +1300
++++ b/browser/config/mozconfigs/win64/nightly	Thu Feb 23 19:29:16 2012 +0900
+@@ -14,3 +14,5 @@
+ export MOZ_TELEMETRY_REPORTING=1
+ 
+ mk_add_options MOZ_MAKE_FLAGS=-j1
++
++. $topsrcdir/browser/config/mozconfigs/win64/vs2010-mozconfig
+diff -r 95256692afd8 browser/config/mozconfigs/win64/vs2010-mozconfig
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/browser/config/mozconfigs/win64/vs2010-mozconfig	Thu Feb 23 19:29:16 2012 +0900
+@@ -0,0 +1,16 @@
++export INCLUDE=/c/tools/msvs10/vc/include:/c/tools/msvs10/vc/atlmfc/include:/c/tools/sdks/v7.0/include:/c/tools/sdks/v7.0/include/atl:/c/tools/sdks/dx10/include
++export LIBPATH=/c/tools/msvs10/vc/lib/amd64:/c/tools/msvs10/vc/atlmfc/lib/amd64
++export LIB=/c/tools/msvs10/vc/lib/amd64:/c/tools/msvs10/vc/atlmfc/lib/amd64:/c/tools/sdks/v7.0/lib/x64:/c/tools/sdks/dx10/lib/x64
++export PATH="/c/tools/msvs10/Common7/IDE:/c/tools/msvs10/VC/BIN/amd64:/c/tools/msvs10/VC/BIN/x86_amd64:/c/tools/msvs10/VC/BIN:/c/tools/msvs10/Common7/Tools:/c/tools/msvs10/VC/VCPackages:${PATH}"
++export WIN32_REDIST_DIR=/c/tools/msvs10/VC/redist/x64/Microsoft.VC100.CRT
++
++# Use 32bit linker for PGO crash bug.
++# https://connect.microsoft.com/VisualStudio/feedback/details/686117/
++export LD=/c/tools/msvs10/VC/BIN/x86_amd64/link.exe
++
++
++mk_add_options "export LIB=$LIB"
++mk_add_options "export LIBPATH=$LIBPATH"
++mk_add_options "export PATH=$PATH"
++mk_add_options "export INCLUDE=$INCLUDE"
++mk_add_options "export WIN32_REDIST_DIR=$WIN32_REDIST_DIR"
