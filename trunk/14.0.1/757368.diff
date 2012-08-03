@@ -1,0 +1,22 @@
+diff -r 5f412ea09aba dom/base/nsFocusManager.cpp
+--- a/dom/base/nsFocusManager.cpp	Mon May 14 01:52:22 2012 -0400
++++ b/dom/base/nsFocusManager.cpp	Fri May 25 21:26:06 2012 +0900
+@@ -2459,11 +2459,13 @@
+   }
+   else {
+ #ifdef MOZ_XUL
+-    // if there is no focus, yet a panel is open, focus the first item in
+-    // the panel
+-    nsXULPopupManager* pm = nsXULPopupManager::GetInstance();
+-    if (pm)
+-      popupFrame = pm->GetTopPopup(ePopupTypePanel);
++    if (aType != MOVEFOCUS_CARET) {
++      // if there is no focus, yet a panel is open, focus the first item in
++      // the panel
++      nsXULPopupManager* pm = nsXULPopupManager::GetInstance();
++      if (pm)
++        popupFrame = pm->GetTopPopup(ePopupTypePanel);
++    }
+ #endif
+     if (popupFrame) {
+       rootContent = popupFrame->GetContent();
