@@ -1,0 +1,5141 @@
+diff -r d1452658046f content/base/src/nsContentUtils.cpp
+--- a/content/base/src/nsContentUtils.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/content/base/src/nsContentUtils.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -3421,6 +3421,9 @@
+ }
+ 
+ /* static */
++#ifdef _MSC_VER
++#pragma inline_recursion(on)
++#endif
+ Element*
+ nsContentUtils::MatchElementId(nsIContent *aContent, const nsIAtom* aId)
+ {
+@@ -3434,8 +3437,14 @@
+ 
+   return nsnull;
+ }
++#ifdef _MSC_VER
++#pragma inline_recursion(off)
++#endif
+ 
+ /* static */
++#ifdef _MSC_VER
++#pragma inline_recursion(on)
++#endif
+ Element *
+ nsContentUtils::MatchElementId(nsIContent *aContent, const nsAString& aId)
+ {
+@@ -3450,6 +3459,9 @@
+ 
+   return MatchElementId(aContent, id);
+ }
++#ifdef _MSC_VER
++#pragma inline_recursion(off)
++#endif
+ 
+ // Convert the string from the given charset to Unicode.
+ /* static */
+diff -r d1452658046f content/canvas/src/CanvasUtils.cpp
+--- a/content/canvas/src/CanvasUtils.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/content/canvas/src/CanvasUtils.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -35,6 +35,17 @@
+  *
+  * ***** END LICENSE BLOCK ***** */
+ 
++#if _MSC_VER == 1400
++#include <emmintrin.h>
++extern "C" {
++  extern __m128i _mm_shuffle_epi8(__m128i a, __m128i b);
++  extern __m128i _mm_alignr_epi8(__m128i a, __m128i b, const int ralign);
++}
++#else
++#include <tmmintrin.h>
++#endif
++#include "mozilla/SSE.h"
++
+ #include <stdlib.h>
+ #include <stdarg.h>
+ 
+@@ -211,5 +222,233 @@
+     return MatrixEltsToJSVal(elts, cx, val);
+ }
+ 
++void
++GetImageData_component(PRUint8* _src, PRUint8* _dst,
++                       PRUint32 width, PRUint32 height,
++                       PRUint32 srcStride, PRUint32 dstStride,
++                       PRUint8 (*sUnpremultiplyTable)[256])
++{
++    PRUint8 *srcFirst = _src;
++    PRUint8 *dstFirst = _dst;
++
++    for (PRInt64 j = 0; j < height; j++) {
++        PRUint8 *src = srcFirst + (srcStride * j);
++        PRUint8 *dst = dstFirst + (dstStride * j);
++
++        for (PRUint32 i = 0; i < width; i++) {
++            // XXX Is there some useful swizzle MMX we can use here?
++#ifdef IS_LITTLE_ENDIAN
++            PRUint8 b = *src++;
++            PRUint8 g = *src++;
++            PRUint8 r = *src++;
++            PRUint8 a = *src++;
++#else
++            PRUint8 a = *src++;
++            PRUint8 r = *src++;
++            PRUint8 g = *src++;
++            PRUint8 b = *src++;
++#endif
++            // Convert to non-premultiplied color
++            *dst++ = sUnpremultiplyTable[a][r];
++            *dst++ = sUnpremultiplyTable[a][g];
++            *dst++ = sUnpremultiplyTable[a][b];
++            *dst++ = a;
++        }
++    }
++}
++
++void
++PutImageData_component(PRUint8* _src, PRUint8* _dst,
++                       PRUint32 width, PRUint32 height,
++                       PRUint32 srcStride, PRUint32 dstStride,
++                       PRUint8 (*sPremultiplyTable)[256])
++{
++    PRUint8 *srcFirst = _src;
++    PRUint8 *dstFirst = _dst;
++
++#if (_MSC_VER != 1400) || !defined(_M_AMD64)
++    if (mozilla::supports_ssse3()) {
++        static const __m128i msk_alpha = _mm_set1_epi32(0xFF000000);
++        static const __m128i sfl_alphaLo = _mm_set_epi8(0x80, 7, 0x80, 7, 0x80, 7, 0x80, 7, 0x80, 3, 0x80, 3, 0x80, 3, 0x80, 3);
++        static const __m128i sfl_alphaHi = _mm_set_epi8(0x80, 15, 0x80, 15, 0x80, 15, 0x80, 15, 0x80, 11, 0x80, 11, 0x80, 11, 0x80, 11);
++        static const __m128i word_add = _mm_set1_epi16(0x00FF);
++        static const __m128i word_mul = _mm_set_epi16(0, 257, 257, 257, 0, 257, 257, 257);
++        static const __m128i sfl_bgra = _mm_set_epi8(15, 12, 13, 14, 11, 8, 9, 10, 7, 4, 5, 6, 3, 0, 1, 2);
++
++        for (int j = 0; j < height; j++) {
++            PRUint8 *src = srcFirst + (srcStride * j);
++            PRUint8 *dst = dstFirst + (dstStride * j);
++            PRUint32 i = width;
++
++            while (i >= 1 && ((unsigned)dst & 15)) {
++                PRUint8 r = *src++;
++                PRUint8 g = *src++;
++                PRUint8 b = *src++;
++                PRUint8 a = *src++;
++
++                // Convert to premultiplied color (losslessly if the input came from getImageData)
++                *dst++ = sPremultiplyTable[a][b];
++                *dst++ = sPremultiplyTable[a][g];
++                *dst++ = sPremultiplyTable[a][r];
++                *dst++ = a;
++                i -= 1;
++            }
++
++            const int srcMissalignedBytes = ((unsigned)src & 15);
++
++            if (srcMissalignedBytes == 0) {
++                while (i >= 4) {
++                    __m128i xmb = _mm_load_si128((__m128i*)src);
++                    __m128i xmwLo = _mm_unpacklo_epi8(xmb, _mm_setzero_si128());
++                    __m128i xmwHi = _mm_unpackhi_epi8(xmb, _mm_setzero_si128());
++
++                    __m128i xmwAlpha = _mm_and_si128(xmb, msk_alpha);
++                    __m128i xmwAlphaLo = _mm_shuffle_epi8(xmb, sfl_alphaLo);
++                    __m128i xmwAlphaHi = _mm_shuffle_epi8(xmb, sfl_alphaHi);
++
++                    xmwLo = _mm_mullo_epi16(xmwLo, xmwAlphaLo);
++                    xmwLo = _mm_adds_epu16(xmwLo, word_add);
++                    xmwLo = _mm_mulhi_epu16(xmwLo, word_mul);
++
++                    xmwHi = _mm_mullo_epi16(xmwHi, xmwAlphaHi);
++                    xmwHi = _mm_adds_epu16(xmwHi, word_add);
++                    xmwHi = _mm_mulhi_epu16(xmwHi, word_mul);
++
++                    __m128i xmRes = _mm_packus_epi16(xmwLo, xmwHi);
++                    xmRes = _mm_or_si128(xmRes, xmwAlpha);
++                    xmRes = _mm_shuffle_epi8(xmRes, sfl_bgra);
++                    _mm_store_si128((__m128i*)dst, xmRes);
++
++                    src += 16;
++                    dst += 16;
++                    i -= 4;
++                }
++            } else {
++                __m128i xmLoadPre = _mm_load_si128((__m128i*)(src - srcMissalignedBytes));
++
++                while (i >= 4) {
++                    __m128i xmLoadNext = _mm_load_si128((__m128i*)(src - srcMissalignedBytes + 16));
++                    __m128i xmb;
++
++                    switch (srcMissalignedBytes) {
++                    case 1:
++                        xmb = _mm_alignr_epi8(xmLoadNext, xmLoadPre, 1);
++                        break;
++                    case 2:
++                        xmb = _mm_alignr_epi8(xmLoadNext, xmLoadPre, 2);
++                        break;
++                    case 3:
++                        xmb = _mm_alignr_epi8(xmLoadNext, xmLoadPre, 3);
++                        break;
++                    case 4:
++                        xmb = _mm_alignr_epi8(xmLoadNext, xmLoadPre, 4);
++                        break;
++                    case 5:
++                        xmb = _mm_alignr_epi8(xmLoadNext, xmLoadPre, 5);
++                        break;
++                    case 6:
++                        xmb = _mm_alignr_epi8(xmLoadNext, xmLoadPre, 6);
++                        break;
++                    case 7:
++                        xmb = _mm_alignr_epi8(xmLoadNext, xmLoadPre, 7);
++                        break;
++                    case 8:
++                        xmb = _mm_alignr_epi8(xmLoadNext, xmLoadPre, 8);
++                        break;
++                    case 9:
++                        xmb = _mm_alignr_epi8(xmLoadNext, xmLoadPre, 9);
++                        break;
++                    case 10:
++                        xmb = _mm_alignr_epi8(xmLoadNext, xmLoadPre, 10);
++                        break;
++                    case 11:
++                        xmb = _mm_alignr_epi8(xmLoadNext, xmLoadPre, 11);
++                        break;
++                    case 12:
++                        xmb = _mm_alignr_epi8(xmLoadNext, xmLoadPre, 12);
++                        break;
++                    case 13:
++                        xmb = _mm_alignr_epi8(xmLoadNext, xmLoadPre, 13);
++                        break;
++                    case 14:
++                        xmb = _mm_alignr_epi8(xmLoadNext, xmLoadPre, 14);
++                        break;
++                    case 15:
++                        xmb = _mm_alignr_epi8(xmLoadNext, xmLoadPre, 15);
++                        break;
++                    }
++                    xmLoadPre = xmLoadNext;
++
++                    __m128i xmwLo = _mm_unpacklo_epi8(xmb, _mm_setzero_si128());
++                    __m128i xmwHi = _mm_unpackhi_epi8(xmb, _mm_setzero_si128());
++
++                    __m128i xmwAlpha = _mm_and_si128(xmb, msk_alpha);
++                    __m128i xmwAlphaLo = _mm_shuffle_epi8(xmb, sfl_alphaLo);
++                    __m128i xmwAlphaHi = _mm_shuffle_epi8(xmb, sfl_alphaHi);
++
++                    xmwLo = _mm_mullo_epi16(xmwLo, xmwAlphaLo);
++                    xmwLo = _mm_adds_epu16(xmwLo, word_add);
++                    xmwLo = _mm_mulhi_epu16(xmwLo, word_mul);
++
++                    xmwHi = _mm_mullo_epi16(xmwHi, xmwAlphaHi);
++                    xmwHi = _mm_adds_epu16(xmwHi, word_add);
++                    xmwHi = _mm_mulhi_epu16(xmwHi, word_mul);
++
++                    __m128i xmRes = _mm_packus_epi16(xmwLo, xmwHi);
++                    xmRes = _mm_or_si128(xmRes, xmwAlpha);
++                    xmRes = _mm_shuffle_epi8(xmRes, sfl_bgra);
++                    _mm_store_si128((__m128i*)dst, xmRes);
++
++                    src += 16;
++                    dst += 16;
++                    i -= 4;
++                }
++            }
++
++            while (i >= 1) {
++                PRUint8 r = *src++;
++                PRUint8 g = *src++;
++                PRUint8 b = *src++;
++                PRUint8 a = *src++;
++
++                // Convert to premultiplied color (losslessly if the input came from getImageData)
++                *dst++ = sPremultiplyTable[a][b];
++                *dst++ = sPremultiplyTable[a][g];
++                *dst++ = sPremultiplyTable[a][r];
++                *dst++ = a;
++                i -= 1;
++            }
++        }
++    } else
++#endif // (_MSC_VER != 1400) || !defined(_M_AMD64)
++    {
++        for (PRInt64 j = 0; j < height; j++) {
++            PRUint8 *src = srcFirst + (srcStride * j);
++            PRUint8 *dst = dstFirst + (dstStride * j);
++
++            for (PRUint32 i = 0; i < width; i++) {
++                // XXX Is there some useful swizzle MMX we can use here?
++                PRUint8 r = *src++;
++                PRUint8 g = *src++;
++                PRUint8 b = *src++;
++                PRUint8 a = *src++;
++
++                // Convert to premultiplied color (losslessly if the input came from getImageData)
++#ifdef IS_LITTLE_ENDIAN
++                *dst++ = sPremultiplyTable[a][b];
++                *dst++ = sPremultiplyTable[a][g];
++                *dst++ = sPremultiplyTable[a][r];
++                *dst++ = a;
++#else
++                *dst++ = a;
++                *dst++ = sPremultiplyTable[a][r];
++                *dst++ = sPremultiplyTable[a][g];
++                *dst++ = sPremultiplyTable[a][b];
++#endif
++            }
++        }
++    }
++}
++
+ } // namespace CanvasUtils
+ } // namespace mozilla
+diff -r d1452658046f content/canvas/src/CanvasUtils.h
+--- a/content/canvas/src/CanvasUtils.h	Tue Jul 03 17:04:45 2012 -0400
++++ b/content/canvas/src/CanvasUtils.h	Thu Jul 05 02:37:37 2012 +0900
+@@ -55,6 +55,16 @@
+ 
+ using namespace gfx;
+ 
++void GetImageData_component(PRUint8* _src, PRUint8* _dst,
++                            PRUint32 width, PRUint32 height,
++                            PRUint32 srcStride, PRUint32 dstStride,
++                            PRUint8 (*sUnpremultiplyTable)[256]);
++
++void PutImageData_component(PRUint8* _src, PRUint8* _dst,
++                            PRUint32 width, PRUint32 height,
++                            PRUint32 srcStride, PRUint32 dstStride,
++                            PRUint8 (*sPremultiplyTable)[256]);
++
+ // Check that the rectangle [x,y,w,h] is a subrectangle of [0,0,realWidth,realHeight]
+ 
+ inline bool CheckSaneSubrectSize(PRInt32 x, PRInt32 y, PRInt32 w, PRInt32 h,
+diff -r d1452658046f content/canvas/src/nsCanvasRenderingContext2D.cpp
+--- a/content/canvas/src/nsCanvasRenderingContext2D.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/content/canvas/src/nsCanvasRenderingContext2D.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -3989,27 +3989,7 @@
+     uint8_t *src = data;
+     uint8_t *dst = data;
+ 
+-    for (uint32_t j = 0; j < aHeight; ++j) {
+-        for (uint32_t i = 0; i < aWidth; ++i) {
+-            // XXX Is there some useful swizzle MMX we can use here?
+-#ifdef IS_LITTLE_ENDIAN
+-            PRUint8 b = *src++;
+-            PRUint8 g = *src++;
+-            PRUint8 r = *src++;
+-            PRUint8 a = *src++;
+-#else
+-            PRUint8 a = *src++;
+-            PRUint8 r = *src++;
+-            PRUint8 g = *src++;
+-            PRUint8 b = *src++;
+-#endif
+-            // Convert to non-premultiplied color
+-            *dst++ = sUnpremultiplyTable[a][r];
+-            *dst++ = sUnpremultiplyTable[a][g];
+-            *dst++ = sUnpremultiplyTable[a][b];
+-            *dst++ = a;
+-        }
+-    }
++    GetImageData_component(src, dst, aWidth, aHeight, aWidth * 4, aWidth * 4, sUnpremultiplyTable);
+ 
+     *aRetval = darray;
+     return NS_OK;
+@@ -4113,27 +4093,8 @@
+     PRUint8 *src = aData;
+     PRUint8 *dst = imgsurf->Data();
+ 
+-    for (PRUint32 j = 0; j < h; j++) {
+-        for (PRUint32 i = 0; i < w; i++) {
+-            PRUint8 r = *src++;
+-            PRUint8 g = *src++;
+-            PRUint8 b = *src++;
+-            PRUint8 a = *src++;
+-
+-            // Convert to premultiplied color (losslessly if the input came from getImageData)
+-#ifdef IS_LITTLE_ENDIAN
+-            *dst++ = sPremultiplyTable[a][b];
+-            *dst++ = sPremultiplyTable[a][g];
+-            *dst++ = sPremultiplyTable[a][r];
+-            *dst++ = a;
+-#else
+-            *dst++ = a;
+-            *dst++ = sPremultiplyTable[a][r];
+-            *dst++ = sPremultiplyTable[a][g];
+-            *dst++ = sPremultiplyTable[a][b];
+-#endif
+-        }
+-    }
++    PutImageData_component(src, dst, w, h,
++                           w * 4, w * 4, sPremultiplyTable);
+ 
+     PathAutoSaveRestore pathSR(this);
+     gfxContextAutoSaveRestore autoSR(mThebes);
+diff -r d1452658046f content/canvas/src/nsCanvasRenderingContext2DAzure.cpp
+--- a/content/canvas/src/nsCanvasRenderingContext2DAzure.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/content/canvas/src/nsCanvasRenderingContext2DAzure.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -4143,29 +4143,8 @@
+   // from src and advancing that ptr before writing to dst.
+   uint8_t* dst = data + dstWriteRect.y * (aWidth * 4) + dstWriteRect.x * 4;
+ 
+-  for (int32_t j = 0; j < dstWriteRect.height; ++j) {
+-    for (int32_t i = 0; i < dstWriteRect.width; ++i) {
+-      // XXX Is there some useful swizzle MMX we can use here?
+-#ifdef IS_LITTLE_ENDIAN
+-      PRUint8 b = *src++;
+-      PRUint8 g = *src++;
+-      PRUint8 r = *src++;
+-      PRUint8 a = *src++;
+-#else
+-      PRUint8 a = *src++;
+-      PRUint8 r = *src++;
+-      PRUint8 g = *src++;
+-      PRUint8 b = *src++;
+-#endif
+-      // Convert to non-premultiplied color
+-      *dst++ = sUnpremultiplyTable[a][r];
+-      *dst++ = sUnpremultiplyTable[a][g];
+-      *dst++ = sUnpremultiplyTable[a][b];
+-      *dst++ = a;
+-    }
+-    src += srcStride - (dstWriteRect.width * 4);
+-    dst += (aWidth * 4) - (dstWriteRect.width * 4);
+-  }
++  GetImageData_component(src, dst, dstWriteRect.width, dstWriteRect.height,
++                         srcStride, aWidth * 4, sUnpremultiplyTable);
+ 
+   *aRetval = darray;
+   return NS_OK;
+@@ -4283,27 +4262,8 @@
+   PRUint8 *src = aData;
+   PRUint8 *dst = imgsurf->Data();
+ 
+-  for (PRUint32 j = 0; j < h; j++) {
+-    for (PRUint32 i = 0; i < w; i++) {
+-      PRUint8 r = *src++;
+-      PRUint8 g = *src++;
+-      PRUint8 b = *src++;
+-      PRUint8 a = *src++;
+-
+-      // Convert to premultiplied color (losslessly if the input came from getImageData)
+-#ifdef IS_LITTLE_ENDIAN
+-      *dst++ = sPremultiplyTable[a][b];
+-      *dst++ = sPremultiplyTable[a][g];
+-      *dst++ = sPremultiplyTable[a][r];
+-      *dst++ = a;
+-#else
+-      *dst++ = a;
+-      *dst++ = sPremultiplyTable[a][r];
+-      *dst++ = sPremultiplyTable[a][g];
+-      *dst++ = sPremultiplyTable[a][b];
+-#endif
+-    }
+-  }
++  PutImageData_component(src, dst, w, h,
++                         w * 4, w * 4, sPremultiplyTable);
+ 
+   RefPtr<SourceSurface> sourceSurface =
+     mTarget->CreateSourceSurfaceFromData(imgsurf->Data(), IntSize(w, h), imgsurf->Stride(), FORMAT_B8G8R8A8);
+diff -r d1452658046f content/media/Makefile.in
+--- a/content/media/Makefile.in	Tue Jul 03 17:04:45 2012 -0400
++++ b/content/media/Makefile.in	Thu Jul 05 02:37:37 2012 +0900
+@@ -114,3 +114,11 @@
+   -I$(srcdir)/../base/src \
+   -I$(srcdir)/../html/content/src \
+   $(NULL)
++
++# Optimizer bug with MSVC PGO
++ifeq (WINNT_1,$(OS_ARCH)_$(MOZ_PROFILE_GENERATE)$(MOZ_PROFILE_USE))
++nsMediaCache.$(OBJ_SUFFIX): nsMediaCache.cpp $(GLOBAL_DEPS)
++	$(REPORT_BUILD)
++	@$(MAKE_DEPS_AUTO_CC)
++	$(ELOG) $(CCC) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS) -GL- $(_VPATH_SRCS)
++endif
+diff -r d1452658046f content/media/nsAudioStream.cpp
+--- a/content/media/nsAudioStream.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/content/media/nsAudioStream.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -43,6 +43,9 @@
+ #include "nsXULAppAPI.h"
+ using namespace mozilla::dom;
+ 
++#if (_M_IX86_FP >= 1) || defined(__SSE__)
++#include <xmmintrin.h>
++#endif
+ #include <stdio.h>
+ #include <math.h>
+ #include "prlog.h"
+@@ -515,6 +518,63 @@
+       }
+       case FORMAT_FLOAT32: {
+         const float* buf = static_cast<const float*>(aBuf);
++#if (_M_IX86_FP >= 1) || defined(__SSE__)
++        static const __m128 sMin = _mm_set_ps1(-32768.0);
++        static const __m128 sMax = _mm_set_ps1(32767.0);
++        const __m128 xmmMin = sMin;
++        const __m128 xmmMax = sMax;
++        float* b = (float*)buf;
++        const __m128 xmmMul = _mm_set_ps1((float)(32768 * scaled_volume));
++        __m128 xmmTmp = _mm_setzero_ps();
++        PRUint32 i = 0;
++        PRInt32 n = samples;
++#ifdef _MSC_VER
++        __declspec(align(16)) PRInt32
++#elif defined(__GNUC__)
++        PRInt32 __attribute__((aligned(16)))
++#else
++        PRInt32
++#endif
++        r_dest[4];
++
++        while (n >= 1 && ((unsigned long)b & 15)) {
++          __m128 scaled_value = _mm_mul_ss(xmmMul, _mm_load_ss(b));
++          scaled_value = _mm_max_ss(scaled_value, xmmMin);
++          scaled_value = _mm_min_ss(scaled_value, xmmMax);
++          s_data[i] = (short)_mm_cvtss_si32(scaled_value);
++
++          b++;
++          i++;
++          n--;
++        }
++
++        while (n >= 4) {
++          __m128 scaled_value = _mm_mul_ps(xmmMul, _mm_load_ps(b));
++          scaled_value = _mm_max_ps(scaled_value, xmmMin);
++          scaled_value = _mm_min_ps(scaled_value, xmmMax);
++          *((__m64*)&r_dest[0]) = _mm_cvtps_pi32(scaled_value);
++          *((__m64*)&r_dest[2]) = _mm_cvtps_pi32(_mm_movehl_ps(xmmTmp, scaled_value));
++          s_data[i++] = r_dest[0];
++          s_data[i++] = r_dest[1];
++          s_data[i++] = r_dest[2];
++          s_data[i++] = r_dest[3];
++
++          b += 4;
++          n -= 4;
++        }
++        _mm_empty();
++
++        while (n >= 1) {
++          __m128 scaled_value = _mm_mul_ss(xmmMul, _mm_load_ss(b));
++          scaled_value = _mm_max_ss(scaled_value, xmmMin);
++          scaled_value = _mm_min_ss(scaled_value, xmmMax);
++          s_data[i] = (short)_mm_cvtss_si32(scaled_value);
++
++          b++;
++          i++;
++          n--;
++        }
++#else // (_M_IX86_FP >= 1) || defined(__SSE__)
+         for (PRUint32 i = 0; i <  samples; ++i) {
+           float scaled_value = floorf(0.5 + 32768 * buf[i] * scaled_volume);
+           if (buf[i] < 0.0) {
+@@ -527,6 +587,7 @@
+               short(scaled_value);
+           }
+         }
++#endif // (_M_IX86_FP >= 1) || defined(__SSE__)
+         break;
+       }
+     }
+diff -r d1452658046f content/svg/content/src/nsSVGFilters.cpp
+--- a/content/svg/content/src/nsSVGFilters.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/content/svg/content/src/nsSVGFilters.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -960,6 +960,18 @@
+ 
+   PRUint16 mode = mEnumAttributes[MODE].GetAnimValue();
+ 
++  switch (mode) {
++    case nsSVGFEBlendElement::SVG_MODE_NORMAL:
++    case nsSVGFEBlendElement::SVG_MODE_MULTIPLY:
++    case nsSVGFEBlendElement::SVG_MODE_SCREEN:
++    case nsSVGFEBlendElement::SVG_MODE_DARKEN:
++    case nsSVGFEBlendElement::SVG_MODE_LIGHTEN:
++      break;
++    default:
++      return NS_ERROR_FAILURE;
++      break;
++  }
++
+   for (PRInt32 x = rect.x; x < rect.XMost(); x++) {
+     for (PRInt32 y = rect.y; y < rect.YMost(); y++) {
+       PRUint32 targIndex = y * stride + 4 * x;
+@@ -988,11 +1000,9 @@
+             val = NS_MAX((255 - qa) * cb + 255 * ca,
+                          (255 - qb) * ca + 255 * cb);
+             break;
+-          default:
+-            return NS_ERROR_FAILURE;
+-            break;
+         }
+-        val = NS_MIN(val / 255, 255U);
++        FAST_DIVIDE_BY_255(val, val);
++        val = NS_MIN(val, 255U);
+         targetData[targIndex + i] =  static_cast<PRUint8>(val);
+       }
+       PRUint32 alpha = 255 * 255 - (255 - qa) * (255 - qb);
+@@ -1550,6 +1560,7 @@
+     // Blend in the second source image
+     float k1Scaled = k1 / 255.0f;
+     float k4Scaled = k4*255.0f;
++
+     for (PRInt32 x = rect.x; x < rect.XMost(); x++) {
+       for (PRInt32 y = rect.y; y < rect.YMost(); y++) {
+         PRUint32 targIndex = y * stride + 4 * x;
+@@ -2009,7 +2020,8 @@
+       break;
+ 
+     for (i = 0; i < 256; i++) {
+-      PRUint32 k = (i * (tvLength - 1)) / 255;
++      PRUint32 k;
++      FAST_DIVIDE_BY_255(k, (i * (tvLength - 1)));
+       float v1 = tableValues[k];
+       float v2 = tableValues[NS_MIN(k + 1, tvLength - 1)];
+       PRInt32 val =
+@@ -2027,7 +2039,8 @@
+       break;
+ 
+     for (i = 0; i < 256; i++) {
+-      PRUint32 k = (i * tvLength) / 255;
++      PRUint32 k;
++      FAST_DIVIDE_BY_255(k, (i * tvLength));
+       k = NS_MIN(k, tvLength - 1);
+       float v = tableValues[k];
+       PRInt32 val = PRInt32(255 * v);
+@@ -3355,7 +3368,7 @@
+       }
+ 
+       PRUint8 r, g, b, a;
+-      a = PRUint8(col[3]);
++      a = (PRUint8)(col[3]);
+       FAST_DIVIDE_BY_255(r, unsigned(col[0]) * a);
+       FAST_DIVIDE_BY_255(g, unsigned(col[1]) * a);
+       FAST_DIVIDE_BY_255(b, unsigned(col[2]) * a);
+@@ -3819,6 +3832,8 @@
+ 
+   // Scan the kernel for each pixel to determine max/min RGBA values.
+   for (PRInt32 y = rect.y; y < rect.YMost(); y++) {
++    PRUint32 xExt[4], yExt[4];  // X, Y indices of RGBA extrema
++    PRUint8 extrema[4];         // RGBA magnitude of extrema
+     PRUint32 startY = NS_MAX(0, y - ry);
+     // We need to read pixels not just in 'rect', which is limited to
+     // the dirty part of our filter primitive subregion, but all pixels in
+@@ -5024,16 +5039,16 @@
+ 
+   const float radPerDeg = M_PI/180.0;
+ 
+-  float L[3];
++  float L_orig[3];
+   if (distantLight) {
+     float azimuth, elevation;
+     static_cast<nsSVGFEDistantLightElement*>
+       (distantLight.get())->GetAnimatedNumberValues(&azimuth,
+                                                     &elevation,
+                                                     nsnull);
+-    L[0] = cos(azimuth * radPerDeg) * cos(elevation * radPerDeg);
+-    L[1] = sin(azimuth * radPerDeg) * cos(elevation * radPerDeg);
+-    L[2] = sin(elevation * radPerDeg);
++    L_orig[0] = cos(azimuth * radPerDeg) * cos(elevation * radPerDeg);
++    L_orig[1] = sin(azimuth * radPerDeg) * cos(elevation * radPerDeg);
++    L_orig[2] = sin(elevation * radPerDeg);
+   }
+   float lightPos[3], pointsAt[3], specularExponent;
+   float cosConeAngle = 0;
+@@ -5081,6 +5096,8 @@
+       PRInt32 index = y * stride + x * 4;
+ 
+       float N[3];
++      float L[3];
++      memcpy(L, L_orig, sizeof(L));
+       GenerateNormal(N, sourceData, stride, surfaceWidth, surfaceHeight,
+                      x, y, surfaceScale);
+ 
+diff -r d1452658046f dom/plugins/base/nsPluginNativeWindowWin.cpp
+--- a/dom/plugins/base/nsPluginNativeWindowWin.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/dom/plugins/base/nsPluginNativeWindowWin.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -71,7 +71,18 @@
+    && nsMinorVersion(suppliedV) >= nsMinorVersion(requiredV))
+ 
+ 
+-#define NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION TEXT("MozillaPluginWindowPropertyAssociation")
++class CAtom_MozillaPluginWindowPropertyAssociation {
++public:
++  CAtom_MozillaPluginWindowPropertyAssociation() {
++    atom = ::GlobalAddAtomW(L"MozillaPluginWindowPropertyAssociation");
++  }
++  ~CAtom_MozillaPluginWindowPropertyAssociation() {
++    ::GlobalDeleteAtom(atom);
++  }
++  ATOM atom;
++};
++static CAtom_MozillaPluginWindowPropertyAssociation gaMpwpa;
++#define NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION ((LPCWSTR)(DWORD)gaMpwpa.atom)
+ #define NS_PLUGIN_CUSTOM_MSG_ID TEXT("MozFlashUserRelay")
+ #define WM_USER_FLASH WM_USER+1
+ static UINT sWM_FLASHBOUNCEMSG = 0;
+@@ -228,7 +239,7 @@
+  */
+ static LRESULT CALLBACK PluginWndProcInternal(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+ {
+-  nsPluginNativeWindowWin * win = (nsPluginNativeWindowWin *)::GetProp(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
++  nsPluginNativeWindowWin * win = (nsPluginNativeWindowWin *)::GetPropW(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
+   if (!win)
+     return TRUE;
+ 
+@@ -430,7 +441,7 @@
+                        LONG_PTR newLong)
+ {
+   nsPluginNativeWindowWin * win =
+-    (nsPluginNativeWindowWin *)GetProp(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
++    (nsPluginNativeWindowWin *)GetPropW(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
+   if (!win || (win && win->mPluginType != nsPluginType_Flash) ||
+       (nIndex == GWLP_WNDPROC &&
+        newLong == reinterpret_cast<LONG_PTR>(PluginWndProc)))
+@@ -458,7 +469,7 @@
+ 
+   // We already checked this in SetWindowLongHookCheck
+   nsPluginNativeWindowWin * win =
+-    (nsPluginNativeWindowWin *)GetProp(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
++    (nsPluginNativeWindowWin *)GetPropW(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
+ 
+   // Hook our subclass back up, just like we do on setwindow.
+   win->SetPrevWindowProc(
+@@ -487,7 +498,7 @@
+ 
+   // We already checked this in SetWindowLongHookCheck
+   nsPluginNativeWindowWin * win =
+-    (nsPluginNativeWindowWin *)GetProp(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
++    (nsPluginNativeWindowWin *)GetPropW(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
+ 
+   // Hook our subclass back up, just like we do on setwindow.   
+   win->SetPrevWindowProc(
+@@ -730,10 +741,10 @@
+   if (!mPluginWinProc)
+     return NS_ERROR_FAILURE;
+ 
+-  nsPluginNativeWindowWin * win = (nsPluginNativeWindowWin *)::GetProp(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
++  nsPluginNativeWindowWin * win = (nsPluginNativeWindowWin *)::GetPropW(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
+   NS_ASSERTION(!win || (win == this), "plugin window already has property and this is not us");
+   
+-  if (!::SetProp(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION, (HANDLE)this))
++  if (!::SetPropW(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION, (HANDLE)this))
+     return NS_ERROR_FAILURE;
+ 
+   return NS_OK;
+@@ -747,7 +758,7 @@
+   // remove window property
+   HWND hWnd = (HWND)window;
+   if (IsWindow(hWnd))
+-    ::RemoveProp(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
++    ::RemovePropW(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
+ 
+   // restore the original win proc
+   // but only do this if this were us last time
+diff -r d1452658046f gfx/cairo/libpixman/src/pixman-bits-image.c
+--- a/gfx/cairo/libpixman/src/pixman-bits-image.c	Tue Jul 03 17:04:45 2012 -0400
++++ b/gfx/cairo/libpixman/src/pixman-bits-image.c	Thu Jul 05 02:37:37 2012 +0900
+@@ -35,6 +35,12 @@
+ #include "pixman-private.h"
+ #include "pixman-combine32.h"
+ #include "pixman-inlines.h"
++#ifdef _WIN64
++#include "pixman-x64-mmx-emulation.h"
++#endif
++#include <xmmintrin.h>
++#include <emmintrin.h>
++#include "pixman-accessor.h"
+ 
+ /*
+  * By default, just evaluate the image at 32bpp and expand.  Individual image
+@@ -88,38 +94,562 @@
+     return image->fetch_pixel_32 (image, x, y);
+ }
+ 
+-typedef uint32_t (* get_pixel_t) (bits_image_t *image,
+-				  int x, int y, pixman_bool_t check_bounds);
++/* --------------- MMX primitivess ------------------------------------ */
++
++#ifdef __GNUC__
++typedef unsigned long long ullong;
++typedef ullong mmxdatafield;
++#endif
++#ifdef _MSC_VER
++typedef unsigned __int64 ullong;
++typedef __m64 mmxdatafield;
++#endif
++
++typedef struct
++{
++    mmxdatafield mmx_4x8000;
++    mmxdatafield mmx_2x00800000;
++    mmxdatafield mmx_2x00ff0000;
++    mmxdatafield mmx_2x0000ff00;
++} MMXData;
++
++static const MMXData c =
++{
++#ifdef __GNUC__
++    .mmx_4x8000 =     0x8000800080008000ULL;
++    .mmx_2x00800000 = 0x0080000000800000ULL;
++    .mmx_2x00ff0000 = 0x00ff000000ff0000ULL;
++    .mmx_2x0000ff00 = 0x0000ff000000ff00ULL;
++#endif
++#ifdef _MSC_VER
++    { 0x8000800080008000UI64 },
++    { 0x0080000000800000UI64 },
++    { 0x00ff000000ff0000UI64 },
++    { 0x0000ff000000ff00UI64 },
++#endif
++};
++
++#ifdef __GNUC__
++#define MC(x) ((__m64) c.mmx_##x)
++#endif
++#ifdef _MSC_VER
++#define MC(x) c.mmx_##x
++#endif
++
++static force_inline uint32_t
++
++
++transform_mmx(int distx, int idistx, int disty, int idisty,
++              uint32_t tl, uint32_t tr, uint32_t bl, uint32_t br)
++{
++    uint32_t r;
++    __m64 mZero = _mm_setzero_si64();
++
++    __m64 tlm = _m_from_int(tl);
++    __m64 trm = _m_from_int(tr);
++    __m64 blm = _m_from_int(bl);
++    __m64 brm = _m_from_int(br);
++
++    __m64 tlrLm, tlrHm, blrLm, blrHm;
++    __m64 ftLm, ftHm, fbLm, fbHm;
++    __m64 rLm, rHm;
++
++    __m64 distxm, distym;
++/*
++    distxm = _mm_set_pi16(distx, idistx, distx, idistx);
++    distym = _mm_set_pi16(disty, idisty, disty, idisty);
++*/
++    distxm = _m_punpcklwd(_m_from_int(idistx), _m_from_int(distx));
++    distym = _m_punpcklwd(_m_from_int(idisty), _m_from_int(disty));
++
++    distxm = _m_punpckldq(distxm, distxm);
++    distym = _m_punpckldq(distym, distym);
++
++    tlm = _m_punpcklbw(tlm, mZero);
++    trm = _m_punpcklbw(trm, mZero);
++    tlrLm = _m_punpcklwd(tlm, trm);
++    tlrHm = _m_punpckhwd(tlm, trm);
++    ftLm = _m_pmaddwd(tlrLm, distxm);
++    ftHm = _m_pmaddwd(tlrHm, distxm);
++
++    blm = _m_punpcklbw(blm, mZero);
++    brm = _m_punpcklbw(brm, mZero);
++    blrLm = _m_punpcklwd(blm, brm);
++    blrHm = _m_punpckhwd(blm, brm);
++    fbLm = _m_pmaddwd(blrLm, distxm);
++    fbHm = _m_pmaddwd(blrHm, distxm);
++
++    rLm = _m_por(_m_pslldi(fbLm, 16), ftLm);
++    rLm = _m_paddw(rLm, MC(4x8000));
++    rLm = _m_pmaddwd(rLm, distym);
++    rLm = _m_paddd(rLm, MC(2x00800000));
++
++    rHm = _m_por(_m_pslldi(fbHm, 16), ftHm);
++    rHm = _m_paddw(rHm, MC(4x8000));
++    rHm = _m_pmaddwd(rHm, distym);
++    rHm = _m_paddd(rHm, MC(2x00800000));
++
++#if _M_IX86_FP >= 1 || defined(USE_SSE) || defined(USE_SSE2)
++    rLm = _m_pand(rLm, MC(2x00ff0000));
++    rLm = _m_psrlqi(rLm, 16);
++    rHm = _m_pand(rHm, MC(2x00ff0000));
++    rLm = _m_por(rLm, rHm);
++    rLm = _m_pshufw(rLm, _MM_SHUFFLE(3, 1, 2, 0));
++    rLm = _m_packuswb(rLm, mZero);
++    r = _m_to_int(rLm);
++#else
++    r = ((_m_to_int(rLm) >> 16) & 0xff);
++    r |= ((_m_to_int(_m_psrlqi(rLm, 32)) >> 8) & 0xff00);
++    r |= ((_m_to_int(rHm)) & 0xff0000);
++    r |= ((_m_to_int(_m_psrlqi(rHm, 32)) << 8) & 0xff000000);
++#endif
++    return r;
++}
++
++static force_inline uint32_t
++transform_mmx_same_height(int distx, int idistx, uint32_t tl, uint32_t tr)
++{
++    uint32_t r;
++    __m64 mZero = _mm_setzero_si64();
++
++    __m64 tlm = _m_from_int(tl);
++    __m64 trm = _m_from_int(tr);
++
++    __m64 tlrLm, tlrHm;
++    __m64 ftLm, ftHm, fbLm, fbHm;
++
++    __m64 distxm;
++/*
++    distxm = _mm_set_pi16(distx, idistx, distx, idistx);
++*/
++    distxm = _m_punpcklwd(_m_from_int(idistx), _m_from_int(distx));
++    distxm = _m_punpckldq(distxm, distxm);
++
++    tlm = _m_punpcklbw(tlm, mZero);
++    trm = _m_punpcklbw(trm, mZero);
++    tlrLm = _m_punpcklwd(tlm, trm);
++    tlrHm = _m_punpckhwd(tlm, trm);
++    ftLm = _m_pmaddwd(tlrLm, distxm);
++    ftHm = _m_pmaddwd(tlrHm, distxm);
++
++#if _M_IX86_FP >= 1 || defined(USE_SSE) || defined(USE_SSE2)
++    ftLm = _m_pand(ftLm, MC(2x0000ff00));
++    ftHm = _m_pand(ftHm, MC(2x0000ff00));
++    ftHm = _m_pslldi(ftHm, 16);
++    ftLm = _m_por(ftLm, ftHm);
++    ftLm = _m_psrlwi(ftLm, 8);
++    ftLm = _m_pshufw(ftLm, _MM_SHUFFLE(3, 1, 2, 0));
++    ftLm = _m_packuswb(ftLm, mZero);
++    r = _m_to_int(ftLm);
++#else
++    r = ((_m_to_int(ftLm) >> 8) & 0xff);
++    r |= (_m_to_int(_m_psrlqi(ftLm, 32)) & 0xff00);
++    r |= ((_m_to_int(ftHm) << 8) & 0xff0000);
++    r |= ((_m_to_int(_m_psrlqi(ftHm, 32)) << 16) & 0xff000000);
++#endif
++    return r;
++}
++
++#if defined(_MSC_VER) && (_M_IX86_FP >= 1)
++static force_inline uint32_t
++transform_sse_vc86(int _distx, int _idistx, int _disty, int _idisty,
++                   uint32_t _tl, uint32_t _tr, uint32_t _bl, uint32_t _br)
++{
++    __asm
++    {
++        pxor        mm0, mm0
++
++        movd        mm1, _tl
++        movd        mm2, _tr
++        movd        mm3, _bl
++        movd        mm4, _br
++
++        movd        mm6, _idistx
++        punpcklwd   mm6, _distx
++        punpckldq   mm6, mm6
++
++        movd        mm7, _idisty
++        punpcklwd   mm7, _disty
++        punpckldq   mm7, mm7
++
++        punpcklbw   mm1, mm0
++        punpcklbw   mm2, mm0
++        movq        mm5, mm1
++        punpcklwd   mm1, mm2
++        punpckhwd   mm5, mm2
++        pmaddwd     mm1, mm6
++        pmaddwd     mm5, mm6
++
++        punpcklbw   mm3, mm0
++        punpcklbw   mm4, mm0
++        movq        mm2, mm3
++        punpcklwd   mm3, mm4
++        punpckhwd   mm2, mm4
++        pmaddwd     mm3, mm6
++        pmaddwd     mm2, mm6
++
++        pslld       mm3, 16
++        por         mm3, mm1
++        paddw       mm3, MC(4x8000)
++        pmaddwd     mm3, mm7
++        paddd       mm3, MC(2x00800000)
++
++        pslld       mm2, 16
++        por         mm2, mm5
++        paddw       mm2, MC(4x8000)
++        pmaddwd     mm2, mm7
++        paddd       mm2, MC(2x00800000)
++
++        pand        mm3, MC(2x00ff0000)
++        psrlq       mm3, 16
++        pand        mm2, MC(2x00ff0000)
++        por         mm3, mm2
++        pshufw      mm3, mm3, _MM_SHUFFLE(3, 1, 2, 0)
++        packuswb    mm3, mm0
++        movd        eax, mm3
++    }
++}
++#define transform_mmx(distx, idistx, disty, idisty, tl, tr, bl, br) \
++        transform_sse_vc86((distx), (idistx), (disty), (idisty), (tl), (tr), (bl), (br))
++
++static force_inline uint32_t
++transform_sse_same_height_vc86(int _distx, int _idistx, uint32_t _tl, uint32_t _tr)
++{
++    __asm
++    {
++        pxor        mm0, mm0
++
++        movd        mm1, _tl
++        movd        mm2, _tr
++
++        movd        mm6, _idistx
++        punpcklwd   mm6, _distx
++        punpckldq   mm6, mm6
++
++        punpcklbw   mm1, mm0
++        punpcklbw   mm2, mm0
++        movq        mm5, mm1
++        punpcklwd   mm1, mm2
++        punpckhwd   mm5, mm2
++        pmaddwd     mm1, mm6
++        pmaddwd     mm5, mm6
++
++        pand        mm1, MC(2x0000ff00)
++        pand        mm5, MC(2x0000ff00)
++        pslld       mm5, 16
++        por         mm1, mm5
++        psrlw       mm1, 8
++        pshufw      mm1, mm1, _MM_SHUFFLE(3, 1, 2, 0)
++        packuswb    mm1, mm0
++        movd        eax, mm1
++    }
++}
++#define transform_mmx_same_height(distx, idistx, tl, tr) \
++        transform_sse_same_height_vc86((distx), (idistx), (tl), (tr))
++#endif
++
++
++#if (_M_IX86_FP >= 2) || defined(__SSE2__) || defined(_WIN64)
++
++#if defined(_MSC_VER)
++  #define TT_ALIGN16(expr) __declspec(align(16)) expr
++#elif defined(__GNUC__)
++  #define TT_ALIGN16(expr) expr __attribute__((aligned(16)))
++#else
++  #define TT_ALIGN16(expr) expr
++#endif
++static const TT_ALIGN16(uint16_t) Mask8000[8] = { 0x8000, 0x8000, 0x8000, 0x8000, 0x8000, 0x8000, 0x8000, 0x8000 };
++static const TT_ALIGN16(uint32_t) Mask00800000[4] = { 0x00800000, 0x00800000, 0x00800000, 0x00800000 };
++static const TT_ALIGN16(uint32_t) Mask00ff0000[4] = { 0x00ff0000, 0x00ff0000, 0x00ff0000, 0x00ff0000 };
++static const TT_ALIGN16(uint32_t) Mask0000ff00[4] = { 0x0000ff00, 0x0000ff00, 0x0000ff00, 0x0000ff00 };
++/*
++static const __m128i Mask8000 = _mm_set1_epi16(0x8000);
++static const __m128i Mask00800000 = _mm_set1_epi32(0x00800000);
++static const __m128i Mask00ff0000 = _mm_set1_epi32(0x00ff0000);
++static const __m128i Mask0000ff00 = _mm_set1_epi32(0x0000ff00);
++*/
++
++static force_inline uint32_t
++transform_sse2(int distx, int idistx, int disty, int idisty,
++               uint32_t tl, uint32_t tr, uint32_t bl, uint32_t br)
++{
++    uint32_t r;
++    __m128i mZero = _mm_setzero_si128();
++
++    __m128i tlm = _mm_cvtsi32_si128(tl);
++    __m128i trm = _mm_cvtsi32_si128(tr);
++    __m128i blm = _mm_cvtsi32_si128(bl);
++    __m128i brm = _mm_cvtsi32_si128(br);
++
++    __m128i tlrm, blrm;
++    __m128i ftm, fbm;
++    __m128i rm;
++
++    __m128i distxm, distym;
++    distxm = _mm_set1_epi32((distx << 16) | idistx);
++    distym = _mm_set1_epi32((disty << 16) | idisty);
++
++    tlrm = _mm_unpacklo_epi8(tlm, trm);
++    tlrm = _mm_unpacklo_epi8(tlrm, mZero);
++    ftm = _mm_madd_epi16(tlrm, distxm);
++
++    blrm = _mm_unpacklo_epi8(blm, brm);
++    blrm = _mm_unpacklo_epi8(blrm, mZero);
++    fbm = _mm_madd_epi16(blrm, distxm);
++
++    rm = _mm_or_si128(_mm_slli_epi32(fbm, 16), ftm);
++    rm = _mm_add_epi16(rm, *(__m128i*)Mask8000);
++    rm = _mm_madd_epi16(rm, distym);
++    rm = _mm_add_epi32(rm, *(__m128i*)Mask00800000);
++
++    rm = _mm_and_si128(rm, *(__m128i*)Mask00ff0000);
++    rm = _mm_srli_epi64(rm, 16);
++    rm = _mm_packs_epi32(rm, mZero);
++    rm = _mm_packus_epi16(rm, mZero);
++    r = _mm_cvtsi128_si32(rm);
++    return r;
++}
++#undef  transform_mmx
++#define transform_mmx(distx, idistx, disty, idisty, tl, tr, bl, br) \
++        transform_sse2((distx), (idistx), (disty), (idisty), (tl), (tr), (bl), (br))
++
++static force_inline uint32_t
++transform_sse2_same_height(int distx, int idistx, uint32_t tl, uint32_t tr)
++{
++    uint32_t r;
++    __m128i mZero = _mm_setzero_si128();
++
++    __m128i tlm = _mm_cvtsi32_si128(tl);
++    __m128i trm = _mm_cvtsi32_si128(tr);
++
++    __m128i tlrm;
++    __m128i ftm;
++    __m128i rm;
++
++    __m128i distxm = _mm_set1_epi32((distx << 16) | idistx);
++
++    tlrm = _mm_unpacklo_epi8(tlm, trm);
++    tlrm = _mm_unpacklo_epi8(tlrm, mZero);
++    ftm = _mm_madd_epi16(tlrm, distxm);
++
++    rm = _mm_and_si128(ftm, *(__m128i*)Mask0000ff00);
++    rm = _mm_srli_epi16(rm, 8);
++    rm = _mm_packs_epi32(rm, mZero);
++    rm = _mm_packus_epi16(rm, mZero);
++    r = _mm_cvtsi128_si32(rm);
++    return r;
++}
++#undef  transform_mmx_same_height
++#define transform_mmx_same_height(distx, idistx, tl, tr) \
++        transform_sse2_same_height((distx), (idistx), (tl), (tr))
++
++#if defined(_MSC_VER) && (_M_IX86_FP >= 2) && !defined(_WIN64)
++static force_inline uint32_t
++transform_sse2_vc86(int _distx, int _idistx, int _disty, int _idisty,
++                    uint32_t _tl, uint32_t _tr, uint32_t _bl, uint32_t _br)
++{
++    __asm
++    {
++        mov         eax, _distx
++        shl         eax, 16
++        or          eax, _idistx
++        movd        xmm5, eax
++        pxor        xmm0, xmm0
++        pshufd      xmm5, xmm5, _MM_SHUFFLE(0, 0, 0, 0)
++
++        movd        xmm1, _tl
++        movd        xmm2, _tr
++        punpcklbw   xmm1, xmm2
++        punpcklbw   xmm1, xmm0
++        pmaddwd     xmm1, xmm5
++
++    mov         eax, _disty
++    shl         eax, 16
++    or          eax, _idisty
++    movd        xmm6, eax
++
++        movd        xmm3, _bl
++        movd        xmm4, _br
++        punpcklbw   xmm3, xmm4
++        punpcklbw   xmm3, xmm0
++        pmaddwd     xmm3, xmm5
++
++    pshufd      xmm6, xmm6, _MM_SHUFFLE(0, 0, 0, 0)
++
++        pslld       xmm3, 16
++        por         xmm3, xmm1
++        paddw       xmm3, Mask8000
++        pmaddwd     xmm3, xmm6
++        paddd       xmm3, Mask00800000
++
++        pand        xmm3, Mask00ff0000
++        psrlq       xmm3, 16
++        packssdw    xmm3, xmm0
++        packuswb    xmm3, xmm0
++        movd        eax, xmm3
++    }
++}
++#undef  transform_mmx
++#define transform_mmx(distx, idistx, disty, idisty, tl, tr, bl, br) \
++        transform_sse2_vc86((distx), (idistx), (disty), (idisty), (tl), (tr), (bl), (br))
++
++static force_inline uint32_t
++transform_sse2_same_height_vc86(int _distx, int _idistx, uint32_t _tl, uint32_t _tr)
++{
++    __asm
++    {
++        mov         eax, _distx
++        shl         eax, 16
++        or          eax, _idistx
++        movd        xmm5, eax
++        pxor        xmm0, xmm0
++        pshufd      xmm5, xmm5, _MM_SHUFFLE(0, 0, 0, 0)
++
++        movd        xmm1, _tl
++        movd        xmm2, _tr
++        punpcklbw   xmm1, xmm2
++        punpcklbw   xmm1, xmm0
++        pmaddwd     xmm1, xmm5
++
++        pand        xmm1, Mask0000ff00
++        psrlw       xmm1, 8
++        packssdw    xmm1, xmm0
++        packuswb    xmm1, xmm0
++        movd        eax, xmm1
++    }
++}
++#undef  transform_mmx_same_height
++#define transform_mmx_same_height(distx, idistx, tl, tr) \
++        transform_sse2_same_height_vc86((distx), (idistx), (tl), (tr))
++#endif /* defined(_MSC_VER) && (_M_IX86_FP >= 2) && !defined(_WIN64) */
++
++#endif /* (_M_IX86_FP >= 2) || defined(__SSE2__) || defined(_WIN64) */
++
++
++#ifdef _MSC_VER
++#undef MOD
++#define MOD(a, b) ((a) >= 0 ? MOD_TT(a, b) : ((b) - MOD_TT(-(a) - 1, b)) - 1)
++#ifndef PIXMAN_FB_ACCESSORS
++extern
++#endif
++int __fastcall MOD_TT(int a, int b);
++#endif
++
++
++#define fetch_pixel_32_x8r8g8b8_opt(pict, offset, lineaddr) \
++    (uint32_t)(READ((pict), (uint32_t *)(lineaddr) + (offset)) | 0xff000000)
++#define fetch_pixel_32_a8r8g8b8_opt(pict, offset, lineaddr) \
++    (uint32_t)(READ((pict), (uint32_t *)(lineaddr) + (offset)))
++
++static force_inline uint32_t
++get_pixel_orig (bits_image_t *image, int x, int y, pixman_bool_t check_bounds)
++{
++  if (check_bounds &&
++(x < 0 || x >= image->width || y < 0 || y >= image->height))
++  {
++return 0;
++  }
++
++  return image->fetch_pixel_32 (image, x, y);
++}
++
++static force_inline uint32_t
++get_pixel (bits_image_t *image, int x, int y, pixman_bool_t check_bounds,
++           uint32_t *lineaddr, pixman_bool_t use_pxmask, uint32_t pxmask)
++{
++    if (check_bounds &&
++	(x < 0 || x >= image->width || y < 0 || y >= image->height))
++    {
++	return 0;
++    }
++
++    if (use_pxmask)
++    {
++        return (uint32_t)(READ(image, (uint32_t *)lineaddr + x) | pxmask);
++    }
++    else
++    {
++        if (PIXMAN_x8r8g8b8 == image->format)
++        {
++           return fetch_pixel_32_x8r8g8b8_opt(image, x, lineaddr);
++        }
++        else if (PIXMAN_a8r8g8b8 == image->format)
++        {
++           return fetch_pixel_32_a8r8g8b8_opt(image, x, lineaddr);
++        }
++        else
++        {
++            return image->fetch_pixel_32 (image, x, y);
++        }
++    }
++}
++
++typedef struct
++{
++  int y_old;
++  int y_mod_or_cliped_old;
++  uint32_t *y_line;
++} fetch_nearest_info_tt;
+ 
+ static force_inline uint32_t
+ bits_image_fetch_pixel_nearest (bits_image_t   *image,
+ 				pixman_fixed_t  x,
+ 				pixman_fixed_t  y,
+-				get_pixel_t	get_pixel)
++
++				pixman_repeat_t repeat_mode,
++				fetch_nearest_info_tt *fni,
++				pixman_bool_t use_pxmask,
++				uint32_t pxmask)
+ {
+     int x0 = pixman_fixed_to_int (x - pixman_fixed_e);
+     int y0 = pixman_fixed_to_int (y - pixman_fixed_e);
+ 
+-    if (image->common.repeat != PIXMAN_REPEAT_NONE)
++    if (repeat_mode != PIXMAN_REPEAT_NONE)
+     {
+ 	repeat (image->common.repeat, &x0, image->width);
+-	repeat (image->common.repeat, &y0, image->height);
+-
+-	return get_pixel (image, x0, y0, FALSE);
++	if (fni->y_old != y0)
++	{
++		fni->y_old = y0;
++		repeat (image->common.repeat, image->height, &y0);
++		fni->y_mod_or_cliped_old = y0;
++		fni->y_line = image->bits + y0 * image->rowstride;
++	}
++	else
++	{
++		y0 = fni->y_mod_or_cliped_old;
++	}
++	return get_pixel (image, x0, y0, FALSE, fni->y_line, use_pxmask, pxmask);
+     }
+     else
+     {
+-	return get_pixel (image, x0, y0, TRUE);
+-    }
++		if (fni->y_old != y0)
++		{
++			fni->y_old = y0;
++			fni->y_line = image->bits + y0 * image->rowstride;
++		}
++	return get_pixel (image, x0, y0, TRUE, fni->y_line, use_pxmask, pxmask);
++   }
+ }
+ 
++typedef struct
++{
++  int y1_old;
++  int y1_mod_or_cliped_old;
++  int y2_mod_or_cliped_old;
++  uint32_t *y1_line;
++  uint32_t *y2_line;
++} fetch_bilinear_info_tt;
++
+ static force_inline uint32_t
+ bits_image_fetch_pixel_bilinear (bits_image_t   *image,
+ 				 pixman_fixed_t  x,
+ 				 pixman_fixed_t  y,
+-				 get_pixel_t	 get_pixel)
++
++				 pixman_repeat_t repeat_mode,
++				 fetch_bilinear_info_tt *fbi,
++				 pixman_bool_t use_pxmask,
++				 uint32_t pxmask)
+ {
+-    pixman_repeat_t repeat_mode = image->common.repeat;
+     int width = image->width;
+     int height = image->height;
+     int x1, y1, x2, y2;
+@@ -139,22 +669,82 @@
+ 
+     if (repeat_mode != PIXMAN_REPEAT_NONE)
+     {
+-	repeat (repeat_mode, &x1, width);
+-	repeat (repeat_mode, &y1, height);
+-	repeat (repeat_mode, &x2, width);
+-	repeat (repeat_mode, &y2, height);
+-
+-	tl = get_pixel (image, x1, y1, FALSE);
+-	bl = get_pixel (image, x1, y2, FALSE);
+-	tr = get_pixel (image, x2, y1, FALSE);
+-	br = get_pixel (image, x2, y2, FALSE);
++        if (PIXMAN_REPEAT_PAD == repeat_mode)
++        {
++            if (x1 < 0 || x2 >= width)
++            {
++                repeat (repeat_mode, width, &x1);
++                repeat (repeat_mode, width, &x2);
++            }
++        }
++        else
++        {
++            repeat (repeat_mode, width, &x1);
++            repeat (repeat_mode, width, &x2);
++        }
++
++        if (fbi->y1_old != y1)
++        {
++            fbi->y1_old = y1;
++            repeat (repeat_mode, height, &y1);
++            repeat (repeat_mode, height, &y2);
++            fbi->y1_mod_or_cliped_old = y1;
++            fbi->y2_mod_or_cliped_old = y2;
++            fbi->y1_line = image->bits + y1 * image->rowstride;
++            fbi->y2_line = image->bits + y2 * image->rowstride;
++        }
++        else
++        {
++            y1 = fbi->y1_mod_or_cliped_old;
++            y2 = fbi->y2_mod_or_cliped_old;
++        }
++
++        tl = get_pixel (image, x1, y1, FALSE, fbi->y1_line, use_pxmask, pxmask);
++        tr = get_pixel (image, x2, y1, FALSE, fbi->y1_line, use_pxmask, pxmask);
++        if (0 != disty)
++        {
++            bl = get_pixel (image, x1, y2, FALSE, fbi->y2_line, use_pxmask, pxmask);
++            br = get_pixel (image, x2, y2, FALSE, fbi->y2_line, use_pxmask, pxmask);
++            if (tl != br || tl != tr || tl != bl)
++                return bilinear_interpolation (tl, tr, bl, br, distx, disty);
++            else
++                return tl;
++        }
++        else
++        {
++            if (tl != tr)
++                return transform_mmx_same_height(distx, 256 - distx, tl, tr);
++            else
++                return tl;
++        }
+     }
+     else
+     {
+-	tl = get_pixel (image, x1, y1, TRUE);
+-	tr = get_pixel (image, x2, y1, TRUE);
+-	bl = get_pixel (image, x1, y2, TRUE);
+-	br = get_pixel (image, x2, y2, TRUE);
++        if (fbi->y1_old != y1)
++        {
++            fbi->y1_old = y1;
++            fbi->y1_line = image->bits + y1 * image->rowstride;
++            fbi->y2_line = image->bits + y2 * image->rowstride;
++        }
++
++        tl = get_pixel (image, x1, y1, TRUE, fbi->y1_line, use_pxmask, pxmask);
++        tr = get_pixel (image, x2, y1, TRUE, fbi->y1_line, use_pxmask, pxmask);
++        if (0 != disty)
++        {
++            bl = get_pixel (image, x1, y2, TRUE, fbi->y2_line, use_pxmask, pxmask);
++            br = get_pixel (image, x2, y2, TRUE, fbi->y2_line, use_pxmask, pxmask);
++            if (tl != br || tl != tr || tl != bl)
++                return bilinear_interpolation (tl, tr, bl, br, distx, disty);
++            else
++                return tl;
++        }
++        else
++        {
++            if (tl != tr)
++                return transform_mmx_same_height(distx, 256 - distx, tl, tr);
++            else
++                return tl;
++        }
+     }
+ 
+     return bilinear_interpolation (tl, tr, bl, br, distx, disty);
+@@ -365,6 +955,10 @@
+ 	mask += mask_inc;
+     }
+ 
++#if (_M_IX86_FP < 2) && !defined(__SSE2__)
++    _mm_empty();
++#endif
++
+     /* Zero fill to the left of the image */
+     while (buffer < end)
+ 	*buffer++ = 0;
+@@ -374,7 +968,8 @@
+ bits_image_fetch_pixel_convolution (bits_image_t   *image,
+ 				    pixman_fixed_t  x,
+ 				    pixman_fixed_t  y,
+-				    get_pixel_t     get_pixel)
++
++				    pixman_repeat_t repeat_mode)
+ {
+     pixman_fixed_t *params = image->common.filter_params;
+     int x_off = (params[0] - pixman_fixed_1) >> 1;
+@@ -383,7 +978,6 @@
+     int32_t cheight = pixman_fixed_to_int (params[1]);
+     int32_t srtot, sgtot, sbtot, satot;
+     int32_t i, j, x1, x2, y1, y2;
+-    pixman_repeat_t repeat_mode = image->common.repeat;
+     int width = image->width;
+     int height = image->height;
+ 
+@@ -414,11 +1008,11 @@
+ 		    repeat (repeat_mode, &rx, width);
+ 		    repeat (repeat_mode, &ry, height);
+ 
+-		    pixel = get_pixel (image, rx, ry, FALSE);
++		    pixel = get_pixel_orig (image, rx, ry, FALSE);
+ 		}
+ 		else
+ 		{
+-		    pixel = get_pixel (image, rx, ry, TRUE);
++		    pixel = get_pixel_orig (image, rx, ry, TRUE);
+ 		}
+ 
+ 		srtot += RED_8 (pixel) * f;
+@@ -444,82 +1038,37 @@
+     return ((satot << 24) | (srtot << 16) | (sgtot <<  8) | (sbtot));
+ }
+ 
+-static force_inline uint32_t
+-bits_image_fetch_pixel_filtered (bits_image_t *image,
+-				 pixman_fixed_t x,
+-				 pixman_fixed_t y,
+-				 get_pixel_t    get_pixel)
++static force_inline void
++fetch_scanline_a8r8g8b8 (pixman_image_t *image,
++                         int             x,
++                         int             y,
++                         int             width,
++                         uint32_t *      buffer,
++                         const uint32_t *mask,
++                         uint32_t        mask_bits)
+ {
+-    switch (image->common.filter)
+-    {
+-    case PIXMAN_FILTER_NEAREST:
+-    case PIXMAN_FILTER_FAST:
+-	return bits_image_fetch_pixel_nearest (image, x, y, get_pixel);
+-	break;
+-
+-    case PIXMAN_FILTER_BILINEAR:
+-    case PIXMAN_FILTER_GOOD:
+-    case PIXMAN_FILTER_BEST:
+-	return bits_image_fetch_pixel_bilinear (image, x, y, get_pixel);
+-	break;
+-
+-    case PIXMAN_FILTER_CONVOLUTION:
+-	return bits_image_fetch_pixel_convolution (image, x, y, get_pixel);
+-	break;
+-
+-    default:
+-        break;
+-    }
+-
+-    return 0;
++    const uint32_t *bits = image->bits.bits + y * image->bits.rowstride;
++    
++    MEMCPY_WRAPPED (image,
++                    buffer, (const uint32_t *)bits + x,
++                    width * sizeof(uint32_t));
+ }
+ 
+-static void
+-bits_image_fetch_affine_no_alpha (pixman_image_t * image,
+-				  int              offset,
+-				  int              line,
+-				  int              width,
+-				  uint32_t *       buffer,
+-				  const uint32_t * mask)
++static force_inline void
++fetch_scanline_x8r8g8b8 (pixman_image_t *image,
++                         int             x,
++                         int             y,
++                         int             width,
++                         uint32_t *      buffer,
++                         const uint32_t *mask,
++                         uint32_t        mask_bits)
+ {
+-    pixman_fixed_t x, y;
+-    pixman_fixed_t ux, uy;
+-    pixman_vector_t v;
+-    int i;
+-
+-    /* reference point is the center of the pixel */
+-    v.vector[0] = pixman_int_to_fixed (offset) + pixman_fixed_1 / 2;
+-    v.vector[1] = pixman_int_to_fixed (line) + pixman_fixed_1 / 2;
+-    v.vector[2] = pixman_fixed_1;
+-
+-    if (image->common.transform)
+-    {
+-	if (!pixman_transform_point_3d (image->common.transform, &v))
+-	    return;
+-
+-	ux = image->common.transform->matrix[0][0];
+-	uy = image->common.transform->matrix[1][0];
+-    }
+-    else
+-    {
+-	ux = pixman_fixed_1;
+-	uy = 0;
+-    }
+-
+-    x = v.vector[0];
+-    y = v.vector[1];
+-
+-    for (i = 0; i < width; ++i)
+-    {
+-	if (!mask || mask[i])
+-	{
+-	    buffer[i] = bits_image_fetch_pixel_filtered (
+-		&image->bits, x, y, fetch_pixel_no_alpha);
+-	}
+-
+-	x += ux;
+-	y += uy;
+-    }
++    const uint32_t *bits = image->bits.bits + y * image->bits.rowstride;
++    const uint32_t *pixel = (const uint32_t *)bits + x;
++    const uint32_t *end = pixel + width;
++    
++    while (pixel < end)
++	*buffer++ = READ (image, pixel++) | 0xff000000;
+ }
+ 
+ /* General fetcher */
+@@ -601,30 +1150,276 @@
+     y = v.vector[1];
+     w = v.vector[2];
+ 
+-    for (i = 0; i < width; ++i)
++    if (w == pixman_fixed_1 && uw == 0) /* Affine */
+     {
+-	pixman_fixed_t x0, y0;
+-
+-	if (!mask || mask[i])
+-	{
+-	    if (w != 0)
+-	    {
+-		x0 = ((pixman_fixed_48_16_t)x << 16) / w;
+-		y0 = ((pixman_fixed_48_16_t)y << 16) / w;
+-	    }
+-	    else
+-	    {
+-		x0 = 0;
+-		y0 = 0;
+-	    }
+-
+-	    buffer[i] = bits_image_fetch_pixel_filtered (
+-		&image->bits, x0, y0, fetch_pixel_general);
+-	}
+-
+-	x += ux;
+-	y += uy;
+-	w += uw;
++        const pixman_bool_t use_pxmask = (PIXMAN_x8r8g8b8 == image->bits.format || PIXMAN_a8r8g8b8 == image->bits.format);
++        const uint32_t pxmask = (PIXMAN_x8r8g8b8 == image->bits.format ? 0xff000000 : 0);
++
++        if ((PIXMAN_REPEAT_NORMAL == image->common.repeat || PIXMAN_REPEAT_PAD == image->common.repeat) &&
++            use_pxmask)
++        {
++            switch (image->common.filter)
++            {
++            case PIXMAN_FILTER_NEAREST:
++            case PIXMAN_FILTER_FAST:
++                {
++                    pixman_repeat_t repeat_mode = image->common.repeat;
++                    fetch_nearest_info_tt fni = { 0, 0, image->bits.bits };
++
++                    switch (repeat_mode)
++                    {
++                    case PIXMAN_REPEAT_NORMAL:
++                        for (i = 0; i < width; ++i)
++                        {
++                          if (!mask || mask[i])
++                          {
++                              buffer[i] =
++                                  bits_image_fetch_pixel_nearest (&image->bits, x, y, repeat_mode, &fni, use_pxmask, pxmask);
++                          }
++
++                          x += ux;
++                          y += uy;
++                        }
++                        break;
++
++                    case PIXMAN_REPEAT_PAD:
++                        for (i = 0; i < width; ++i)
++                        {
++                          if (!mask || mask[i])
++                          {
++                              buffer[i] =
++                                  bits_image_fetch_pixel_nearest (&image->bits, x, y, repeat_mode, &fni, use_pxmask, pxmask);
++                          }
++
++                          x += ux;
++                          y += uy;
++                        }
++                        break;
++                    }
++                }
++                break;
++
++            case PIXMAN_FILTER_BILINEAR:
++            case PIXMAN_FILTER_GOOD:
++            case PIXMAN_FILTER_BEST:
++                {
++                    pixman_repeat_t repeat_mode = image->common.repeat;
++                    fetch_bilinear_info_tt fbi = { INT_MIN, 0, 0, image->bits.bits, image->bits.bits };
++
++                    switch (repeat_mode)
++                    {
++                    case PIXMAN_REPEAT_NORMAL:
++                        for (i = 0; i < width; ++i)
++                        {
++                          if (!mask || mask[i])
++                          {
++                              buffer[i] =
++                                  bits_image_fetch_pixel_bilinear (&image->bits, x, y, repeat_mode, &fbi, use_pxmask, pxmask);
++                          }
++
++                          x += ux;
++                          y += uy;
++                        }
++#if (_M_IX86_FP < 2) && !defined(__SSE2__)
++                        _mm_empty();
++#endif
++                        break;
++
++                    case PIXMAN_REPEAT_PAD:
++                        for (i = 0; i < width; ++i)
++                        {
++                          if (!mask || mask[i])
++                          {
++                              buffer[i] =
++                                  bits_image_fetch_pixel_bilinear (&image->bits, x, y, repeat_mode, &fbi, use_pxmask, pxmask);
++                          }
++
++                          x += ux;
++                          y += uy;
++                        }
++#if (_M_IX86_FP < 2) && !defined(__SSE2__)
++                        _mm_empty();
++#endif
++                        break;
++                    }
++
++                }
++                break;
++
++            case PIXMAN_FILTER_CONVOLUTION:
++                {
++                    pixman_repeat_t repeat_mode = image->common.repeat;
++
++                    for (i = 0; i < width; ++i)
++                    {
++                      if (!mask || mask[i])
++                      {
++                          buffer[i] =
++                              bits_image_fetch_pixel_convolution (&image->bits, x, y, repeat_mode);
++                      }
++
++                      x += ux;
++                      y += uy;
++                    }
++                }
++                break;
++            }
++        }
++        else
++        {
++            switch (image->common.filter)
++            {
++            case PIXMAN_FILTER_NEAREST:
++            case PIXMAN_FILTER_FAST:
++                {
++                    pixman_repeat_t repeat_mode = image->common.repeat;
++                    fetch_nearest_info_tt fni = { 0, 0, image->bits.bits };
++
++                    for (i = 0; i < width; ++i)
++                    {
++                      if (!mask || mask[i])
++                      {
++                          buffer[i] =
++                              bits_image_fetch_pixel_nearest (&image->bits, x, y, repeat_mode, &fni, use_pxmask, pxmask);
++                      }
++
++                      x += ux;
++                      y += uy;
++                    }
++                }
++                break;
++
++            case PIXMAN_FILTER_BILINEAR:
++            case PIXMAN_FILTER_GOOD:
++            case PIXMAN_FILTER_BEST:
++                {
++                    pixman_repeat_t repeat_mode = image->common.repeat;
++                    fetch_bilinear_info_tt fbi = { INT_MIN, 0, 0, image->bits.bits, image->bits.bits };
++
++                    for (i = 0; i < width; ++i)
++                    {
++                      if (!mask || mask[i])
++                      {
++                          buffer[i] =
++                              bits_image_fetch_pixel_bilinear (&image->bits, x, y, repeat_mode, &fbi, use_pxmask, pxmask);
++                      }
++
++                      x += ux;
++                      y += uy;
++                    }
++#if (_M_IX86_FP < 2) && !defined(__SSE2__)
++                    _mm_empty();
++#endif
++                }
++                break;
++
++            case PIXMAN_FILTER_CONVOLUTION:
++                {
++                    pixman_repeat_t repeat_mode = image->common.repeat;
++
++                    for (i = 0; i < width; ++i)
++                    {
++                      if (!mask || mask[i])
++                      {
++                          buffer[i] =
++                              bits_image_fetch_pixel_convolution (&image->bits, x, y, repeat_mode);
++                      }
++
++                      x += ux;
++                      y += uy;
++                    }
++                }
++                break;
++            }
++        }
++    }
++    else
++    {
++        const pixman_bool_t use_pxmask = (PIXMAN_x8r8g8b8 == image->bits.format || PIXMAN_a8r8g8b8 == image->bits.format);
++        const uint32_t pxmask = (PIXMAN_x8r8g8b8 == image->bits.format ? 0xff000000 : 0);
++
++        switch (image->common.filter)
++        {
++        case PIXMAN_FILTER_NEAREST:
++        case PIXMAN_FILTER_FAST:
++            {
++                pixman_repeat_t repeat_mode = image->common.repeat;
++                fetch_nearest_info_tt fni = { 0, 0, image->bits.bits };
++
++                for (i = 0; i < width; ++i)
++                {
++                    pixman_fixed_t x0, y0;
++
++                    if (!mask || mask[i])
++                    {
++                        x0 = ((pixman_fixed_48_16_t)x << 16) / w;
++                        y0 = ((pixman_fixed_48_16_t)y << 16) / w;
++
++                        buffer[i] =
++                            bits_image_fetch_pixel_nearest (&image->bits, x0, y0, repeat_mode, &fni, use_pxmask, pxmask);
++                    }
++
++                    x += ux;
++                    y += uy;
++                    w += uw;
++                }
++            }
++            break;
++
++        case PIXMAN_FILTER_BILINEAR:
++        case PIXMAN_FILTER_GOOD:
++        case PIXMAN_FILTER_BEST:
++            {
++                pixman_repeat_t repeat_mode = image->common.repeat;
++                fetch_bilinear_info_tt fbi = { INT_MIN, 0, 0, image->bits.bits, image->bits.bits };
++
++                for (i = 0; i < width; ++i)
++                {
++                    pixman_fixed_t x0, y0;
++
++                    if (!mask || mask[i])
++                    {
++                        x0 = ((pixman_fixed_48_16_t)x << 16) / w;
++                        y0 = ((pixman_fixed_48_16_t)y << 16) / w;
++
++                        buffer[i] =
++                            bits_image_fetch_pixel_bilinear (&image->bits, x0, y0, repeat_mode, &fbi, use_pxmask, pxmask);
++                    }
++
++                    x += ux;
++                    y += uy;
++                    w += uw;
++                }
++#if (_M_IX86_FP < 2) && !defined(__SSE2__)
++                _mm_empty();
++#endif
++            }
++            break;
++
++        case PIXMAN_FILTER_CONVOLUTION:
++            {
++                pixman_repeat_t repeat_mode = image->common.repeat;
++
++                for (i = 0; i < width; ++i)
++                {
++                    pixman_fixed_t x0, y0;
++
++                    if (!mask || mask[i])
++                    {
++                        x0 = ((pixman_fixed_48_16_t)x << 16) / w;
++                        y0 = ((pixman_fixed_48_16_t)y << 16) / w;
++
++                        buffer[i] =
++                            bits_image_fetch_pixel_convolution (&image->bits, x0, y0, repeat_mode);
++                    }
++
++                    x += ux;
++                    y += uy;
++                    w += uw;
++                }
++            }
++            break;
++        }
+     }
+ }
+ 
+@@ -784,6 +1579,10 @@
+ 	x += ux;
+ 	y += uy;
+     }
++
++#if (_M_IX86_FP < 2) && !defined(__SSE2__)
++    _mm_empty();
++#endif
+ }
+ 
+ static force_inline void
+@@ -1193,7 +1992,7 @@
+     /* Affine, no alpha */
+     { PIXMAN_any,
+       (FAST_PATH_NO_ALPHA_MAP | FAST_PATH_HAS_TRANSFORM | FAST_PATH_AFFINE_TRANSFORM),
+-      bits_image_fetch_affine_no_alpha,
++      bits_image_fetch_general,
+       _pixman_image_get_scanline_generic_64
+     },
+ 
+@@ -1512,3 +2311,1225 @@
+ 
+     return image;
+ }
++
++#if defined(_MSC_VER) && !defined(PIXMAN_FB_ACCESSORS)
++#define CASEMOD(b) case (b): return a % (b)
++int __fastcall MOD_TT(int a, int b)
++{
++  switch (b)
++  {
++  CASEMOD(1);
++  CASEMOD(2);
++  CASEMOD(3);
++  CASEMOD(4);
++  CASEMOD(5);
++  CASEMOD(6);
++  CASEMOD(7);
++  CASEMOD(8);
++  CASEMOD(9);
++  CASEMOD(10);
++
++  CASEMOD(11);
++  CASEMOD(12);
++  CASEMOD(13);
++  CASEMOD(14);
++  CASEMOD(15);
++  CASEMOD(16);
++  CASEMOD(17);
++  CASEMOD(18);
++  CASEMOD(19);
++  CASEMOD(20);
++
++  CASEMOD(21);
++  CASEMOD(22);
++  CASEMOD(23);
++  CASEMOD(24);
++  CASEMOD(25);
++  CASEMOD(26);
++  CASEMOD(27);
++  CASEMOD(28);
++  CASEMOD(29);
++  CASEMOD(30);
++
++  CASEMOD(31);
++  CASEMOD(32);
++  CASEMOD(33);
++  CASEMOD(34);
++  CASEMOD(35);
++  CASEMOD(36);
++  CASEMOD(37);
++  CASEMOD(38);
++  CASEMOD(39);
++  CASEMOD(40);
++
++  CASEMOD(41);
++  CASEMOD(42);
++  CASEMOD(43);
++  CASEMOD(44);
++  CASEMOD(45);
++  CASEMOD(46);
++  CASEMOD(47);
++  CASEMOD(48);
++  CASEMOD(49);
++  CASEMOD(50);
++
++  CASEMOD(51);
++  CASEMOD(52);
++  CASEMOD(53);
++  CASEMOD(54);
++  CASEMOD(55);
++  CASEMOD(56);
++  CASEMOD(57);
++  CASEMOD(58);
++  CASEMOD(59);
++  CASEMOD(60);
++
++  CASEMOD(61);
++  CASEMOD(62);
++  CASEMOD(63);
++  CASEMOD(64);
++  CASEMOD(65);
++  CASEMOD(66);
++  CASEMOD(67);
++  CASEMOD(68);
++  CASEMOD(69);
++  CASEMOD(70);
++
++  CASEMOD(71);
++  CASEMOD(72);
++  CASEMOD(73);
++  CASEMOD(74);
++  CASEMOD(75);
++  CASEMOD(76);
++  CASEMOD(77);
++  CASEMOD(78);
++  CASEMOD(79);
++  CASEMOD(80);
++
++  CASEMOD(81);
++  CASEMOD(82);
++  CASEMOD(83);
++  CASEMOD(84);
++  CASEMOD(85);
++  CASEMOD(86);
++  CASEMOD(87);
++  CASEMOD(88);
++  CASEMOD(89);
++  CASEMOD(90);
++
++  CASEMOD(91);
++  CASEMOD(92);
++  CASEMOD(93);
++  CASEMOD(94);
++  CASEMOD(95);
++  CASEMOD(96);
++  CASEMOD(97);
++  CASEMOD(98);
++  CASEMOD(99);
++  CASEMOD(100);
++
++  CASEMOD(101);
++  CASEMOD(102);
++  CASEMOD(103);
++  CASEMOD(104);
++  CASEMOD(105);
++  CASEMOD(106);
++  CASEMOD(107);
++  CASEMOD(108);
++  CASEMOD(109);
++  CASEMOD(110);
++
++  CASEMOD(111);
++  CASEMOD(112);
++  CASEMOD(113);
++  CASEMOD(114);
++  CASEMOD(115);
++  CASEMOD(116);
++  CASEMOD(117);
++  CASEMOD(118);
++  CASEMOD(119);
++  CASEMOD(120);
++
++  CASEMOD(121);
++  CASEMOD(122);
++  CASEMOD(123);
++  CASEMOD(124);
++  CASEMOD(125);
++  CASEMOD(126);
++  CASEMOD(127);
++  CASEMOD(128);
++  CASEMOD(129);
++  CASEMOD(130);
++
++  CASEMOD(131);
++  CASEMOD(132);
++  CASEMOD(133);
++  CASEMOD(134);
++  CASEMOD(135);
++  CASEMOD(136);
++  CASEMOD(137);
++  CASEMOD(138);
++  CASEMOD(139);
++  CASEMOD(140);
++
++  CASEMOD(141);
++  CASEMOD(142);
++  CASEMOD(143);
++  CASEMOD(144);
++  CASEMOD(145);
++  CASEMOD(146);
++  CASEMOD(147);
++  CASEMOD(148);
++  CASEMOD(149);
++  CASEMOD(150);
++
++  CASEMOD(151);
++  CASEMOD(152);
++  CASEMOD(153);
++  CASEMOD(154);
++  CASEMOD(155);
++  CASEMOD(156);
++  CASEMOD(157);
++  CASEMOD(158);
++  CASEMOD(159);
++  CASEMOD(160);
++
++  CASEMOD(161);
++  CASEMOD(162);
++  CASEMOD(163);
++  CASEMOD(164);
++  CASEMOD(165);
++  CASEMOD(166);
++  CASEMOD(167);
++  CASEMOD(168);
++  CASEMOD(169);
++  CASEMOD(170);
++
++  CASEMOD(171);
++  CASEMOD(172);
++  CASEMOD(173);
++  CASEMOD(174);
++  CASEMOD(175);
++  CASEMOD(176);
++  CASEMOD(177);
++  CASEMOD(178);
++  CASEMOD(179);
++  CASEMOD(180);
++
++  CASEMOD(181);
++  CASEMOD(182);
++  CASEMOD(183);
++  CASEMOD(184);
++  CASEMOD(185);
++  CASEMOD(186);
++  CASEMOD(187);
++  CASEMOD(188);
++  CASEMOD(189);
++  CASEMOD(190);
++
++  CASEMOD(191);
++  CASEMOD(192);
++  CASEMOD(193);
++  CASEMOD(194);
++  CASEMOD(195);
++  CASEMOD(196);
++  CASEMOD(197);
++  CASEMOD(198);
++  CASEMOD(199);
++  CASEMOD(200);
++
++  CASEMOD(201);
++  CASEMOD(202);
++  CASEMOD(203);
++  CASEMOD(204);
++  CASEMOD(205);
++  CASEMOD(206);
++  CASEMOD(207);
++  CASEMOD(208);
++  CASEMOD(209);
++  CASEMOD(210);
++
++  CASEMOD(211);
++  CASEMOD(212);
++  CASEMOD(213);
++  CASEMOD(214);
++  CASEMOD(215);
++  CASEMOD(216);
++  CASEMOD(217);
++  CASEMOD(218);
++  CASEMOD(219);
++  CASEMOD(220);
++
++  CASEMOD(221);
++  CASEMOD(222);
++  CASEMOD(223);
++  CASEMOD(224);
++  CASEMOD(225);
++  CASEMOD(226);
++  CASEMOD(227);
++  CASEMOD(228);
++  CASEMOD(229);
++  CASEMOD(230);
++
++  CASEMOD(231);
++  CASEMOD(232);
++  CASEMOD(233);
++  CASEMOD(234);
++  CASEMOD(235);
++  CASEMOD(236);
++  CASEMOD(237);
++  CASEMOD(238);
++  CASEMOD(239);
++  CASEMOD(240);
++
++  CASEMOD(241);
++  CASEMOD(242);
++  CASEMOD(243);
++  CASEMOD(244);
++  CASEMOD(245);
++  CASEMOD(246);
++  CASEMOD(247);
++  CASEMOD(248);
++  CASEMOD(249);
++  CASEMOD(250);
++
++  CASEMOD(251);
++  CASEMOD(252);
++  CASEMOD(253);
++  CASEMOD(254);
++  CASEMOD(255);
++  CASEMOD(256);
++  CASEMOD(257);
++  CASEMOD(258);
++  CASEMOD(259);
++  CASEMOD(260);
++
++  CASEMOD(261);
++  CASEMOD(262);
++  CASEMOD(263);
++  CASEMOD(264);
++  CASEMOD(265);
++  CASEMOD(266);
++  CASEMOD(267);
++  CASEMOD(268);
++  CASEMOD(269);
++  CASEMOD(270);
++
++  CASEMOD(271);
++  CASEMOD(272);
++  CASEMOD(273);
++  CASEMOD(274);
++  CASEMOD(275);
++  CASEMOD(276);
++  CASEMOD(277);
++  CASEMOD(278);
++  CASEMOD(279);
++  CASEMOD(280);
++
++  CASEMOD(281);
++  CASEMOD(282);
++  CASEMOD(283);
++  CASEMOD(284);
++  CASEMOD(285);
++  CASEMOD(286);
++  CASEMOD(287);
++  CASEMOD(288);
++  CASEMOD(289);
++  CASEMOD(290);
++
++  CASEMOD(291);
++  CASEMOD(292);
++  CASEMOD(293);
++  CASEMOD(294);
++  CASEMOD(295);
++  CASEMOD(296);
++  CASEMOD(297);
++  CASEMOD(298);
++  CASEMOD(299);
++  CASEMOD(300);
++
++  CASEMOD(301);
++  CASEMOD(302);
++  CASEMOD(303);
++  CASEMOD(304);
++  CASEMOD(305);
++  CASEMOD(306);
++  CASEMOD(307);
++  CASEMOD(308);
++  CASEMOD(309);
++  CASEMOD(310);
++
++  CASEMOD(311);
++  CASEMOD(312);
++  CASEMOD(313);
++  CASEMOD(314);
++  CASEMOD(315);
++  CASEMOD(316);
++  CASEMOD(317);
++  CASEMOD(318);
++  CASEMOD(319);
++  CASEMOD(320);
++
++  CASEMOD(321);
++  CASEMOD(322);
++  CASEMOD(323);
++  CASEMOD(324);
++  CASEMOD(325);
++  CASEMOD(326);
++  CASEMOD(327);
++  CASEMOD(328);
++  CASEMOD(329);
++  CASEMOD(330);
++
++  CASEMOD(331);
++  CASEMOD(332);
++  CASEMOD(333);
++  CASEMOD(334);
++  CASEMOD(335);
++  CASEMOD(336);
++  CASEMOD(337);
++  CASEMOD(338);
++  CASEMOD(339);
++  CASEMOD(340);
++
++  CASEMOD(341);
++  CASEMOD(342);
++  CASEMOD(343);
++  CASEMOD(344);
++  CASEMOD(345);
++  CASEMOD(346);
++  CASEMOD(347);
++  CASEMOD(348);
++  CASEMOD(349);
++  CASEMOD(350);
++
++  CASEMOD(351);
++  CASEMOD(352);
++  CASEMOD(353);
++  CASEMOD(354);
++  CASEMOD(355);
++  CASEMOD(356);
++  CASEMOD(357);
++  CASEMOD(358);
++  CASEMOD(359);
++  CASEMOD(360);
++
++  CASEMOD(361);
++  CASEMOD(362);
++  CASEMOD(363);
++  CASEMOD(364);
++  CASEMOD(365);
++  CASEMOD(366);
++  CASEMOD(367);
++  CASEMOD(368);
++  CASEMOD(369);
++  CASEMOD(370);
++
++  CASEMOD(371);
++  CASEMOD(372);
++  CASEMOD(373);
++  CASEMOD(374);
++  CASEMOD(375);
++  CASEMOD(376);
++  CASEMOD(377);
++  CASEMOD(378);
++  CASEMOD(379);
++  CASEMOD(380);
++
++  CASEMOD(381);
++  CASEMOD(382);
++  CASEMOD(383);
++  CASEMOD(384);
++  CASEMOD(385);
++  CASEMOD(386);
++  CASEMOD(387);
++  CASEMOD(388);
++  CASEMOD(389);
++  CASEMOD(390);
++
++  CASEMOD(391);
++  CASEMOD(392);
++  CASEMOD(393);
++  CASEMOD(394);
++  CASEMOD(395);
++  CASEMOD(396);
++  CASEMOD(397);
++  CASEMOD(398);
++  CASEMOD(399);
++  CASEMOD(400);
++
++  CASEMOD(401);
++  CASEMOD(402);
++  CASEMOD(403);
++  CASEMOD(404);
++  CASEMOD(405);
++  CASEMOD(406);
++  CASEMOD(407);
++  CASEMOD(408);
++  CASEMOD(409);
++  CASEMOD(410);
++
++  CASEMOD(411);
++  CASEMOD(412);
++  CASEMOD(413);
++  CASEMOD(414);
++  CASEMOD(415);
++  CASEMOD(416);
++  CASEMOD(417);
++  CASEMOD(418);
++  CASEMOD(419);
++  CASEMOD(420);
++
++  CASEMOD(421);
++  CASEMOD(422);
++  CASEMOD(423);
++  CASEMOD(424);
++  CASEMOD(425);
++  CASEMOD(426);
++  CASEMOD(427);
++  CASEMOD(428);
++  CASEMOD(429);
++  CASEMOD(430);
++
++  CASEMOD(431);
++  CASEMOD(432);
++  CASEMOD(433);
++  CASEMOD(434);
++  CASEMOD(435);
++  CASEMOD(436);
++  CASEMOD(437);
++  CASEMOD(438);
++  CASEMOD(439);
++  CASEMOD(440);
++
++  CASEMOD(441);
++  CASEMOD(442);
++  CASEMOD(443);
++  CASEMOD(444);
++  CASEMOD(445);
++  CASEMOD(446);
++  CASEMOD(447);
++  CASEMOD(448);
++  CASEMOD(449);
++  CASEMOD(450);
++
++  CASEMOD(451);
++  CASEMOD(452);
++  CASEMOD(453);
++  CASEMOD(454);
++  CASEMOD(455);
++  CASEMOD(456);
++  CASEMOD(457);
++  CASEMOD(458);
++  CASEMOD(459);
++  CASEMOD(460);
++
++  CASEMOD(461);
++  CASEMOD(462);
++  CASEMOD(463);
++  CASEMOD(464);
++  CASEMOD(465);
++  CASEMOD(466);
++  CASEMOD(467);
++  CASEMOD(468);
++  CASEMOD(469);
++  CASEMOD(470);
++
++  CASEMOD(471);
++  CASEMOD(472);
++  CASEMOD(473);
++  CASEMOD(474);
++  CASEMOD(475);
++  CASEMOD(476);
++  CASEMOD(477);
++  CASEMOD(478);
++  CASEMOD(479);
++  CASEMOD(480);
++
++  CASEMOD(481);
++  CASEMOD(482);
++  CASEMOD(483);
++  CASEMOD(484);
++  CASEMOD(485);
++  CASEMOD(486);
++  CASEMOD(487);
++  CASEMOD(488);
++  CASEMOD(489);
++  CASEMOD(490);
++
++  CASEMOD(491);
++  CASEMOD(492);
++  CASEMOD(493);
++  CASEMOD(494);
++  CASEMOD(495);
++  CASEMOD(496);
++  CASEMOD(497);
++  CASEMOD(498);
++  CASEMOD(499);
++  CASEMOD(500);
++
++  CASEMOD(501);
++  CASEMOD(502);
++  CASEMOD(503);
++  CASEMOD(504);
++  CASEMOD(505);
++  CASEMOD(506);
++  CASEMOD(507);
++  CASEMOD(508);
++  CASEMOD(509);
++  CASEMOD(510);
++
++  CASEMOD(511);
++  CASEMOD(512);
++  CASEMOD(513);
++  CASEMOD(514);
++  CASEMOD(515);
++  CASEMOD(516);
++  CASEMOD(517);
++  CASEMOD(518);
++  CASEMOD(519);
++  CASEMOD(520);
++
++  CASEMOD(521);
++  CASEMOD(522);
++  CASEMOD(523);
++  CASEMOD(524);
++  CASEMOD(525);
++  CASEMOD(526);
++  CASEMOD(527);
++  CASEMOD(528);
++  CASEMOD(529);
++  CASEMOD(530);
++
++  CASEMOD(531);
++  CASEMOD(532);
++  CASEMOD(533);
++  CASEMOD(534);
++  CASEMOD(535);
++  CASEMOD(536);
++  CASEMOD(537);
++  CASEMOD(538);
++  CASEMOD(539);
++  CASEMOD(540);
++
++  CASEMOD(541);
++  CASEMOD(542);
++  CASEMOD(543);
++  CASEMOD(544);
++  CASEMOD(545);
++  CASEMOD(546);
++  CASEMOD(547);
++  CASEMOD(548);
++  CASEMOD(549);
++  CASEMOD(550);
++
++  CASEMOD(551);
++  CASEMOD(552);
++  CASEMOD(553);
++  CASEMOD(554);
++  CASEMOD(555);
++  CASEMOD(556);
++  CASEMOD(557);
++  CASEMOD(558);
++  CASEMOD(559);
++  CASEMOD(560);
++
++  CASEMOD(561);
++  CASEMOD(562);
++  CASEMOD(563);
++  CASEMOD(564);
++  CASEMOD(565);
++  CASEMOD(566);
++  CASEMOD(567);
++  CASEMOD(568);
++  CASEMOD(569);
++  CASEMOD(570);
++
++  CASEMOD(571);
++  CASEMOD(572);
++  CASEMOD(573);
++  CASEMOD(574);
++  CASEMOD(575);
++  CASEMOD(576);
++  CASEMOD(577);
++  CASEMOD(578);
++  CASEMOD(579);
++  CASEMOD(580);
++
++  CASEMOD(581);
++  CASEMOD(582);
++  CASEMOD(583);
++  CASEMOD(584);
++  CASEMOD(585);
++  CASEMOD(586);
++  CASEMOD(587);
++  CASEMOD(588);
++  CASEMOD(589);
++  CASEMOD(590);
++
++  CASEMOD(591);
++  CASEMOD(592);
++  CASEMOD(593);
++  CASEMOD(594);
++  CASEMOD(595);
++  CASEMOD(596);
++  CASEMOD(597);
++  CASEMOD(598);
++  CASEMOD(599);
++  CASEMOD(600);
++
++  CASEMOD(601);
++  CASEMOD(602);
++  CASEMOD(603);
++  CASEMOD(604);
++  CASEMOD(605);
++  CASEMOD(606);
++  CASEMOD(607);
++  CASEMOD(608);
++  CASEMOD(609);
++  CASEMOD(610);
++
++  CASEMOD(611);
++  CASEMOD(612);
++  CASEMOD(613);
++  CASEMOD(614);
++  CASEMOD(615);
++  CASEMOD(616);
++  CASEMOD(617);
++  CASEMOD(618);
++  CASEMOD(619);
++  CASEMOD(620);
++
++  CASEMOD(621);
++  CASEMOD(622);
++  CASEMOD(623);
++  CASEMOD(624);
++  CASEMOD(625);
++  CASEMOD(626);
++  CASEMOD(627);
++  CASEMOD(628);
++  CASEMOD(629);
++  CASEMOD(630);
++
++  CASEMOD(631);
++  CASEMOD(632);
++  CASEMOD(633);
++  CASEMOD(634);
++  CASEMOD(635);
++  CASEMOD(636);
++  CASEMOD(637);
++  CASEMOD(638);
++  CASEMOD(639);
++  CASEMOD(640);
++
++  CASEMOD(641);
++  CASEMOD(642);
++  CASEMOD(643);
++  CASEMOD(644);
++  CASEMOD(645);
++  CASEMOD(646);
++  CASEMOD(647);
++  CASEMOD(648);
++  CASEMOD(649);
++  CASEMOD(650);
++
++  CASEMOD(651);
++  CASEMOD(652);
++  CASEMOD(653);
++  CASEMOD(654);
++  CASEMOD(655);
++  CASEMOD(656);
++  CASEMOD(657);
++  CASEMOD(658);
++  CASEMOD(659);
++  CASEMOD(660);
++
++  CASEMOD(661);
++  CASEMOD(662);
++  CASEMOD(663);
++  CASEMOD(664);
++  CASEMOD(665);
++  CASEMOD(666);
++  CASEMOD(667);
++  CASEMOD(668);
++  CASEMOD(669);
++  CASEMOD(670);
++
++  CASEMOD(671);
++  CASEMOD(672);
++  CASEMOD(673);
++  CASEMOD(674);
++  CASEMOD(675);
++  CASEMOD(676);
++  CASEMOD(677);
++  CASEMOD(678);
++  CASEMOD(679);
++  CASEMOD(680);
++
++  CASEMOD(681);
++  CASEMOD(682);
++  CASEMOD(683);
++  CASEMOD(684);
++  CASEMOD(685);
++  CASEMOD(686);
++  CASEMOD(687);
++  CASEMOD(688);
++  CASEMOD(689);
++  CASEMOD(690);
++
++  CASEMOD(691);
++  CASEMOD(692);
++  CASEMOD(693);
++  CASEMOD(694);
++  CASEMOD(695);
++  CASEMOD(696);
++  CASEMOD(697);
++  CASEMOD(698);
++  CASEMOD(699);
++  CASEMOD(700);
++
++  CASEMOD(701);
++  CASEMOD(702);
++  CASEMOD(703);
++  CASEMOD(704);
++  CASEMOD(705);
++  CASEMOD(706);
++  CASEMOD(707);
++  CASEMOD(708);
++  CASEMOD(709);
++  CASEMOD(710);
++
++  CASEMOD(711);
++  CASEMOD(712);
++  CASEMOD(713);
++  CASEMOD(714);
++  CASEMOD(715);
++  CASEMOD(716);
++  CASEMOD(717);
++  CASEMOD(718);
++  CASEMOD(719);
++  CASEMOD(720);
++
++  CASEMOD(721);
++  CASEMOD(722);
++  CASEMOD(723);
++  CASEMOD(724);
++  CASEMOD(725);
++  CASEMOD(726);
++  CASEMOD(727);
++  CASEMOD(728);
++  CASEMOD(729);
++  CASEMOD(730);
++
++  CASEMOD(731);
++  CASEMOD(732);
++  CASEMOD(733);
++  CASEMOD(734);
++  CASEMOD(735);
++  CASEMOD(736);
++  CASEMOD(737);
++  CASEMOD(738);
++  CASEMOD(739);
++  CASEMOD(740);
++
++  CASEMOD(741);
++  CASEMOD(742);
++  CASEMOD(743);
++  CASEMOD(744);
++  CASEMOD(745);
++  CASEMOD(746);
++  CASEMOD(747);
++  CASEMOD(748);
++  CASEMOD(749);
++  CASEMOD(750);
++
++  CASEMOD(751);
++  CASEMOD(752);
++  CASEMOD(753);
++  CASEMOD(754);
++  CASEMOD(755);
++  CASEMOD(756);
++  CASEMOD(757);
++  CASEMOD(758);
++  CASEMOD(759);
++  CASEMOD(760);
++
++  CASEMOD(761);
++  CASEMOD(762);
++  CASEMOD(763);
++  CASEMOD(764);
++  CASEMOD(765);
++  CASEMOD(766);
++  CASEMOD(767);
++  CASEMOD(768);
++  CASEMOD(769);
++  CASEMOD(770);
++
++  CASEMOD(771);
++  CASEMOD(772);
++  CASEMOD(773);
++  CASEMOD(774);
++  CASEMOD(775);
++  CASEMOD(776);
++  CASEMOD(777);
++  CASEMOD(778);
++  CASEMOD(779);
++  CASEMOD(780);
++
++  CASEMOD(781);
++  CASEMOD(782);
++  CASEMOD(783);
++  CASEMOD(784);
++  CASEMOD(785);
++  CASEMOD(786);
++  CASEMOD(787);
++  CASEMOD(788);
++  CASEMOD(789);
++  CASEMOD(790);
++
++  CASEMOD(791);
++  CASEMOD(792);
++  CASEMOD(793);
++  CASEMOD(794);
++  CASEMOD(795);
++  CASEMOD(796);
++  CASEMOD(797);
++  CASEMOD(798);
++  CASEMOD(799);
++  CASEMOD(800);
++
++  CASEMOD(801);
++  CASEMOD(802);
++  CASEMOD(803);
++  CASEMOD(804);
++  CASEMOD(805);
++  CASEMOD(806);
++  CASEMOD(807);
++  CASEMOD(808);
++  CASEMOD(809);
++  CASEMOD(810);
++
++  CASEMOD(811);
++  CASEMOD(812);
++  CASEMOD(813);
++  CASEMOD(814);
++  CASEMOD(815);
++  CASEMOD(816);
++  CASEMOD(817);
++  CASEMOD(818);
++  CASEMOD(819);
++  CASEMOD(820);
++
++  CASEMOD(821);
++  CASEMOD(822);
++  CASEMOD(823);
++  CASEMOD(824);
++  CASEMOD(825);
++  CASEMOD(826);
++  CASEMOD(827);
++  CASEMOD(828);
++  CASEMOD(829);
++  CASEMOD(830);
++
++  CASEMOD(831);
++  CASEMOD(832);
++  CASEMOD(833);
++  CASEMOD(834);
++  CASEMOD(835);
++  CASEMOD(836);
++  CASEMOD(837);
++  CASEMOD(838);
++  CASEMOD(839);
++  CASEMOD(840);
++
++  CASEMOD(841);
++  CASEMOD(842);
++  CASEMOD(843);
++  CASEMOD(844);
++  CASEMOD(845);
++  CASEMOD(846);
++  CASEMOD(847);
++  CASEMOD(848);
++  CASEMOD(849);
++  CASEMOD(850);
++
++  CASEMOD(851);
++  CASEMOD(852);
++  CASEMOD(853);
++  CASEMOD(854);
++  CASEMOD(855);
++  CASEMOD(856);
++  CASEMOD(857);
++  CASEMOD(858);
++  CASEMOD(859);
++  CASEMOD(860);
++
++  CASEMOD(861);
++  CASEMOD(862);
++  CASEMOD(863);
++  CASEMOD(864);
++  CASEMOD(865);
++  CASEMOD(866);
++  CASEMOD(867);
++  CASEMOD(868);
++  CASEMOD(869);
++  CASEMOD(870);
++
++  CASEMOD(871);
++  CASEMOD(872);
++  CASEMOD(873);
++  CASEMOD(874);
++  CASEMOD(875);
++  CASEMOD(876);
++  CASEMOD(877);
++  CASEMOD(878);
++  CASEMOD(879);
++  CASEMOD(880);
++
++  CASEMOD(881);
++  CASEMOD(882);
++  CASEMOD(883);
++  CASEMOD(884);
++  CASEMOD(885);
++  CASEMOD(886);
++  CASEMOD(887);
++  CASEMOD(888);
++  CASEMOD(889);
++  CASEMOD(890);
++
++  CASEMOD(891);
++  CASEMOD(892);
++  CASEMOD(893);
++  CASEMOD(894);
++  CASEMOD(895);
++  CASEMOD(896);
++  CASEMOD(897);
++  CASEMOD(898);
++  CASEMOD(899);
++  CASEMOD(900);
++
++  CASEMOD(901);
++  CASEMOD(902);
++  CASEMOD(903);
++  CASEMOD(904);
++  CASEMOD(905);
++  CASEMOD(906);
++  CASEMOD(907);
++  CASEMOD(908);
++  CASEMOD(909);
++  CASEMOD(910);
++
++  CASEMOD(911);
++  CASEMOD(912);
++  CASEMOD(913);
++  CASEMOD(914);
++  CASEMOD(915);
++  CASEMOD(916);
++  CASEMOD(917);
++  CASEMOD(918);
++  CASEMOD(919);
++  CASEMOD(920);
++
++  CASEMOD(921);
++  CASEMOD(922);
++  CASEMOD(923);
++  CASEMOD(924);
++  CASEMOD(925);
++  CASEMOD(926);
++  CASEMOD(927);
++  CASEMOD(928);
++  CASEMOD(929);
++  CASEMOD(930);
++
++  CASEMOD(931);
++  CASEMOD(932);
++  CASEMOD(933);
++  CASEMOD(934);
++  CASEMOD(935);
++  CASEMOD(936);
++  CASEMOD(937);
++  CASEMOD(938);
++  CASEMOD(939);
++  CASEMOD(940);
++
++  CASEMOD(941);
++  CASEMOD(942);
++  CASEMOD(943);
++  CASEMOD(944);
++  CASEMOD(945);
++  CASEMOD(946);
++  CASEMOD(947);
++  CASEMOD(948);
++  CASEMOD(949);
++  CASEMOD(950);
++
++  CASEMOD(951);
++  CASEMOD(952);
++  CASEMOD(953);
++  CASEMOD(954);
++  CASEMOD(955);
++  CASEMOD(956);
++  CASEMOD(957);
++  CASEMOD(958);
++  CASEMOD(959);
++  CASEMOD(960);
++
++  CASEMOD(961);
++  CASEMOD(962);
++  CASEMOD(963);
++  CASEMOD(964);
++  CASEMOD(965);
++  CASEMOD(966);
++  CASEMOD(967);
++  CASEMOD(968);
++  CASEMOD(969);
++  CASEMOD(970);
++
++  CASEMOD(971);
++  CASEMOD(972);
++  CASEMOD(973);
++  CASEMOD(974);
++  CASEMOD(975);
++  CASEMOD(976);
++  CASEMOD(977);
++  CASEMOD(978);
++  CASEMOD(979);
++  CASEMOD(980);
++
++  CASEMOD(981);
++  CASEMOD(982);
++  CASEMOD(983);
++  CASEMOD(984);
++  CASEMOD(985);
++  CASEMOD(986);
++  CASEMOD(987);
++  CASEMOD(988);
++  CASEMOD(989);
++  CASEMOD(990);
++
++  CASEMOD(991);
++  CASEMOD(992);
++  CASEMOD(993);
++  CASEMOD(994);
++  CASEMOD(995);
++  CASEMOD(996);
++  CASEMOD(997);
++  CASEMOD(998);
++  CASEMOD(999);
++  CASEMOD(1000);
++
++  CASEMOD(1001);
++  CASEMOD(1002);
++  CASEMOD(1003);
++  CASEMOD(1004);
++  CASEMOD(1005);
++  CASEMOD(1006);
++  CASEMOD(1007);
++  CASEMOD(1008);
++  CASEMOD(1009);
++  CASEMOD(1010);
++
++  CASEMOD(1011);
++  CASEMOD(1012);
++  CASEMOD(1013);
++  CASEMOD(1014);
++  CASEMOD(1015);
++  CASEMOD(1016);
++  CASEMOD(1017);
++  CASEMOD(1018);
++  CASEMOD(1019);
++  CASEMOD(1020);
++
++  CASEMOD(1021);
++  CASEMOD(1022);
++  CASEMOD(1023);
++  CASEMOD(1024);
++  CASEMOD(1025);
++  CASEMOD(1026);
++  CASEMOD(1027);
++  CASEMOD(1028);
++  CASEMOD(1029);
++  CASEMOD(1030);
++
++  CASEMOD(1031);
++  CASEMOD(1032);
++  CASEMOD(1033);
++  CASEMOD(1034);
++  CASEMOD(1035);
++  CASEMOD(1036);
++  CASEMOD(1037);
++  CASEMOD(1038);
++  CASEMOD(1039);
++  CASEMOD(1040);
++
++  CASEMOD(1041);
++  CASEMOD(1042);
++  CASEMOD(1043);
++  CASEMOD(1044);
++  CASEMOD(1045);
++  CASEMOD(1046);
++  CASEMOD(1047);
++  CASEMOD(1048);
++  CASEMOD(1049);
++  CASEMOD(1050);
++
++  CASEMOD(1051);
++  CASEMOD(1052);
++  CASEMOD(1053);
++  CASEMOD(1054);
++  CASEMOD(1055);
++  CASEMOD(1056);
++  CASEMOD(1057);
++  CASEMOD(1058);
++  CASEMOD(1059);
++  CASEMOD(1060);
++
++  CASEMOD(1061);
++  CASEMOD(1062);
++  CASEMOD(1063);
++  CASEMOD(1064);
++  CASEMOD(1065);
++  CASEMOD(1066);
++  CASEMOD(1067);
++  CASEMOD(1068);
++  CASEMOD(1069);
++  CASEMOD(1070);
++
++  CASEMOD(1071);
++  CASEMOD(1072);
++  CASEMOD(1073);
++  CASEMOD(1074);
++  CASEMOD(1075);
++  CASEMOD(1076);
++  CASEMOD(1077);
++  CASEMOD(1078);
++  CASEMOD(1079);
++  CASEMOD(1080);
++
++  CASEMOD(1081);
++  CASEMOD(1082);
++  CASEMOD(1083);
++  CASEMOD(1084);
++  CASEMOD(1085);
++  CASEMOD(1086);
++  CASEMOD(1087);
++  CASEMOD(1088);
++  CASEMOD(1089);
++  CASEMOD(1090);
++
++  CASEMOD(1091);
++  CASEMOD(1092);
++  CASEMOD(1093);
++  CASEMOD(1094);
++  CASEMOD(1095);
++  CASEMOD(1096);
++  CASEMOD(1097);
++  CASEMOD(1098);
++  CASEMOD(1099);
++  CASEMOD(1100);
++
++  default:
++    return a % b;
++  }
++}
++#endif
+diff -r d1452658046f gfx/cairo/libpixman/src/pixman-cpu.c
+--- a/gfx/cairo/libpixman/src/pixman-cpu.c	Tue Jul 03 17:04:45 2012 -0400
++++ b/gfx/cairo/libpixman/src/pixman-cpu.c	Thu Jul 05 02:37:37 2012 +0900
+@@ -35,6 +35,10 @@
+ #include "TargetConditionals.h"
+ #endif
+ 
++#ifdef _MSC_VER
++#include <windows.h>
++#endif
++
+ #include "pixman-private.h"
+ 
+ #ifdef USE_VMX
+diff -r d1452658046f gfx/cairo/libpixman/src/pixman-edge.c
+--- a/gfx/cairo/libpixman/src/pixman-edge.c	Tue Jul 03 17:04:45 2012 -0400
++++ b/gfx/cairo/libpixman/src/pixman-edge.c	Thu Jul 05 02:37:37 2012 +0900
+@@ -166,6 +166,8 @@
+     uint32_t *buf = (image)->bits.bits;
+     int stride = (image)->bits.rowstride;
+     int width = (image)->bits.width;
++    pixman_fixed_t rx_old = 0;
++    int rxs_old = 0, rxi_old = 0;
+ 
+     line = buf + pixman_fixed_to_int (y) * stride;
+ 
+@@ -197,12 +199,29 @@
+             int lxs, rxs;
+ 
+             /* Find pixel bounds for span. */
+-            lxi = pixman_fixed_to_int (lx);
+-            rxi = pixman_fixed_to_int (rx);
++            /* Sample coverage for edge pixels */
++            if (lx == 0)
++            {
++                lxi = 0;
++                lxs = 0;
++            }
++            else
++            {
++                lxi = pixman_fixed_to_int (lx);
++                lxs = RENDER_SAMPLES_X (lx, 8);
++            }
+ 
+-            /* Sample coverage for edge pixels */
+-            lxs = RENDER_SAMPLES_X (lx, 8);
+-            rxs = RENDER_SAMPLES_X (rx, 8);
++            if (rx == rx_old)
++            {
++                rxi = rxi_old;
++                rxs = rxs_old;
++            }
++            else
++            {
++                rxi_old = rxi = pixman_fixed_to_int (rx);
++                rxs_old = rxs = RENDER_SAMPLES_X (rx, 8);
++                rx_old = rx;
++            }
+ 
+             /* Add coverage across row */
+             if (lxi == rxi)
+diff -r d1452658046f gfx/cairo/libpixman/src/pixman-mmx.c
+--- a/gfx/cairo/libpixman/src/pixman-mmx.c	Tue Jul 03 17:04:45 2012 -0400
++++ b/gfx/cairo/libpixman/src/pixman-mmx.c	Thu Jul 05 02:37:37 2012 +0900
+@@ -35,6 +35,11 @@
+ 
+ #if defined USE_X86_MMX || defined USE_ARM_IWMMXT
+ 
++#if (_M_IX86_FP >= 1) || defined(__SSE__)
++#include <xmmintrin.h>
++#define USE_SSE
++#endif
++
+ #include <mmintrin.h>
+ #include "pixman-private.h"
+ #include "pixman-combine32.h"
+@@ -267,6 +272,28 @@
+     return _mm_adds_pu8 (a, b);
+ }
+ 
++#ifdef USE_SSE
++
++static force_inline __m64
++expand_alpha (__m64 pixel)
++{
++    return _mm_shuffle_pi16 (pixel, _MM_SHUFFLE(3, 3, 3, 3));
++}
++
++static force_inline __m64
++expand_alpha_rev (__m64 pixel)
++{
++    return _mm_shuffle_pi16 (pixel, _MM_SHUFFLE(0, 0, 0, 0));
++}
++
++static force_inline __m64
++invert_colors (__m64 pixel)
++{
++    return _mm_shuffle_pi16 (pixel, _MM_SHUFFLE(3, 0, 1, 2));
++}
++
++#else
++
+ static force_inline __m64
+ expand_alpha (__m64 pixel)
+ {
+@@ -285,6 +312,8 @@
+     return _mm_shuffle_pi16 (pixel, _MM_SHUFFLE (3, 0, 1, 2));
+ }
+ 
++#endif
++
+ static force_inline __m64
+ over (__m64 src,
+       __m64 srca,
+@@ -2931,6 +2960,7 @@
+ 	return FALSE;
+     }
+ 
++
+     while (height--)
+     {
+ 	int w;
+@@ -3014,6 +3044,7 @@
+ 	    s += 64;
+ 	    d += 64;
+ 	}
++
+ 	while (w >= 4)
+ 	{
+ 	    *(uint32_t *)d = ldl_u((uint32_t *)s);
+diff -r d1452658046f gfx/cairo/libpixman/src/pixman-private.h
+--- a/gfx/cairo/libpixman/src/pixman-private.h	Tue Jul 03 17:04:45 2012 -0400
++++ b/gfx/cairo/libpixman/src/pixman-private.h	Thu Jul 05 02:37:37 2012 +0900
+@@ -981,4 +981,9 @@
+ 
+ #endif /* PIXMAN_TIMERS */
+ 
++#ifdef _MSC_VER
++#define OMP_MAX_THREAD_COUNTS_TT   4
++extern int omp_thread_counts;
++#endif /* _MSC_VER */
++
+ #endif /* PIXMAN_PRIVATE_H */
+diff -r d1452658046f gfx/cairo/libpixman/src/pixman-sse2.c
+--- a/gfx/cairo/libpixman/src/pixman-sse2.c	Tue Jul 03 17:04:45 2012 -0400
++++ b/gfx/cairo/libpixman/src/pixman-sse2.c	Thu Jul 05 02:37:37 2012 +0900
+@@ -354,6 +354,13 @@
+     _mm_stream_si128 (dst, data);
+ }
+ 
++/* save 1 pixels using Write Combining memory */
++static force_inline void
++save_32_write_combining (int* dst, int data)
++{
++    _mm_stream_si32 (dst, data);
++}
++
+ /* save 4 pixels on a 16-byte boundary aligned address */
+ static force_inline void
+ save_128_aligned (__m128i* dst,
+@@ -3229,7 +3236,6 @@
+ 	    dst++;
+ 	}
+     }
+-
+ }
+ 
+ static pixman_bool_t
+@@ -4563,7 +4569,6 @@
+ 	}
+     }
+ 
+-
+     return TRUE;
+ }
+ 
+diff -r d1452658046f gfx/cairo/libpixman/src/pixman-trap.c
+--- a/gfx/cairo/libpixman/src/pixman-trap.c	Tue Jul 03 17:04:45 2012 -0400
++++ b/gfx/cairo/libpixman/src/pixman-trap.c	Thu Jul 05 02:37:37 2012 +0900
+@@ -25,6 +25,8 @@
+ #include <config.h>
+ #endif
+ 
++#include <limits.h>
++
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include "pixman-private.h"
+@@ -40,6 +42,26 @@
+     pixman_fixed_t f = pixman_fixed_frac (y);
+     pixman_fixed_t i = pixman_fixed_floor (y);
+ 
++if (8 == n)
++{
++    f = DIV (f - Y_FRAC_FIRST (8) + (STEP_Y_SMALL (8) - pixman_fixed_e), STEP_Y_SMALL (8)) * STEP_Y_SMALL (8) +
++	Y_FRAC_FIRST (8);
++    
++    if (f > Y_FRAC_LAST (8))
++    {
++	if (pixman_fixed_to_int (i) == 0x7fff)
++	{
++	    f = 0xffff; /* saturate */
++	}
++	else
++	{
++	    f = Y_FRAC_FIRST (8);
++	    i += pixman_fixed_1;
++	}
++    }
++}
++else
++{
+     f = DIV (f - Y_FRAC_FIRST (n) + (STEP_Y_SMALL (n) - pixman_fixed_e), STEP_Y_SMALL (n)) * STEP_Y_SMALL (n) +
+ 	Y_FRAC_FIRST (n);
+     
+@@ -55,6 +77,7 @@
+ 	    i += pixman_fixed_1;
+ 	}
+     }
++}
+     return (i | f);
+ }
+ 
+@@ -69,6 +92,26 @@
+     pixman_fixed_t f = pixman_fixed_frac (y);
+     pixman_fixed_t i = pixman_fixed_floor (y);
+ 
++if (8 == n)
++{
++    f = DIV (f - pixman_fixed_e - Y_FRAC_FIRST (8), STEP_Y_SMALL (8)) * STEP_Y_SMALL (8) +
++	Y_FRAC_FIRST (8);
++
++    if (f < Y_FRAC_FIRST (8))
++    {
++	if (pixman_fixed_to_int (i) == 0x8000)
++	{
++	    f = 0; /* saturate */
++	}
++	else
++	{
++	    f = Y_FRAC_LAST (8);
++	    i -= pixman_fixed_1;
++	}
++    }
++}
++else
++{
+     f = DIV (f - pixman_fixed_e - Y_FRAC_FIRST (n), STEP_Y_SMALL (n)) * STEP_Y_SMALL (n) +
+ 	Y_FRAC_FIRST (n);
+ 
+@@ -84,6 +127,8 @@
+ 	    i -= pixman_fixed_1;
+ 	}
+     }
++}
++
+     return (i | f);
+ }
+ 
+@@ -104,7 +149,18 @@
+     {
+ 	if (ne > 0)
+ 	{
+-	    int nx = (ne + e->dy - 1) / e->dy;
++	    pixman_fixed_48_16_t neTemp = (ne + e->dy - 1);
++	    int nx;
++
++	    if (neTemp >= (pixman_fixed_48_16_t)INT_MIN &&
++	        neTemp <= (pixman_fixed_48_16_t)INT_MAX)
++	    {
++	        nx = (int)neTemp / e->dy;
++	    }
++	    else
++	    {
++	        nx = neTemp / e->dy;
++	    }
+ 	    e->e = ne - nx * (pixman_fixed_48_16_t) e->dy;
+ 	    e->x += nx * e->signdx;
+ 	}
+@@ -138,9 +194,18 @@
+ 
+     if (ne > 0)
+     {
+-	int nx = ne / e->dy;
+-	ne -= nx * (pixman_fixed_48_16_t)e->dy;
+-	stepx += nx * e->signdx;
++        int nx;
++
++        if (ne <= (pixman_fixed_48_16_t)INT_MAX)
++        {
++            nx = (int)ne / e->dy;
++        }
++        else
++        {
++            nx = ne / e->dy;
++        }
++        ne -= nx * e->dy;
++        stepx += nx * e->signdx;
+     }
+ 
+     *dx_p = ne;
+@@ -186,11 +251,22 @@
+ 	    e->e = 0;
+ 	}
+ 
++if (8 == n)
++{
++	_pixman_edge_multi_init (e, STEP_Y_SMALL (8),
++				 &e->stepx_small, &e->dx_small);
++
++	_pixman_edge_multi_init (e, STEP_Y_BIG (8),
++				 &e->stepx_big, &e->dx_big);
++}
++else
++{
+ 	_pixman_edge_multi_init (e, STEP_Y_SMALL (n),
+ 				 &e->stepx_small, &e->dx_small);
+ 
+ 	_pixman_edge_multi_init (e, STEP_Y_BIG (n),
+ 				 &e->stepx_big, &e->dx_big);
++}
+     }
+     pixman_edge_step (e, y_start - y_top);
+ }
+diff -r d1452658046f gfx/qcms/transform.c
+--- a/gfx/qcms/transform.c	Tue Jul 03 17:04:45 2012 -0400
++++ b/gfx/qcms/transform.c	Thu Jul 05 02:37:37 2012 +0900
+@@ -35,6 +35,65 @@
+ #define X86
+ #endif /* _M_IX86 || __i386__ || __i386 || _M_AMD64 || __x86_64__ || __x86_64 */
+ 
++#ifdef X86
++#if _MSC_VER == 1400
++#include <emmintrin.h>
++#else  /* _MSC_VER == 1400 */
++#include <smmintrin.h>
++#endif /* _MSC_VER == 1400 */
++#include "mozilla/Attributes.h"
++
++#if defined(_M_IX86) && _MSC_VER == 1400
++__declspec(naked) __declspec(noinline)
++void __fastcall floor_ps_sse4_1(const __m128 * __restrict src, __m128i * __restrict dest) {
++	__asm {
++		/* roundps  xmm0, xmmword ptr [ecx], 1 */
++		__asm _emit 0x66
++		__asm _emit 0x0F
++		__asm _emit 0x3A
++		__asm _emit 0x08
++		__asm _emit 0x01
++		__asm _emit 0x01
++		cvttps2dq   xmm0, xmm0
++		movdqa      xmmword ptr [edx], xmm0
++		ret
++	}
++}
++
++__declspec(naked) __declspec(noinline)
++void __fastcall ceil_ps_sse4_1(const __m128 * __restrict src, __m128i * __restrict dest) {
++	__asm {
++		/* roundps  xmm0, xmmword ptr [ecx], 2 */
++		__asm _emit 0x66
++		__asm _emit 0x0F
++		__asm _emit 0x3A
++		__asm _emit 0x08
++		__asm _emit 0x01
++		__asm _emit 0x02
++		cvttps2dq   xmm0, xmm0
++		movdqa      xmmword ptr [edx], xmm0
++		ret
++	}
++}
++#endif
++
++int sse_version_available(void);
++
++static const ALIGN float ps255[4]  = { 255, 255, 255, 255 };
++static const ALIGN float psZero[4] = {   0,   0,   0,   0 };
++static const ALIGN float psHalf[4] = { 0.5, 0.5, 0.5, 0.5 };
++
++MOZ_ALWAYS_INLINE
++void clamp_u8_sse2(const __m128 *src, __m128i *dest) {
++	__m128 x = *src;
++
++	x = _mm_mul_ps(x, *(__m128 *)&ps255);
++	x = _mm_min_ps(x, *(__m128 *)&ps255);
++	x = _mm_max_ps(x, *(__m128 *)&psZero);
++	*dest = _mm_cvttps_epi32(_mm_add_ps(x, *(__m128 *)&psHalf));
++}
++#endif /* X86 */
++
+ // Build a White point, primary chromas transfer matrix from RGB to CIE XYZ
+ // This is just an approximation, I am not handling all the non-linear
+ // aspects of the RGB to XYZ process, and assumming that the gamma correction
+@@ -229,38 +288,13 @@
+ 	return true;
+ }
+ 
+-#if 0
+-static void qcms_transform_data_rgb_out_pow(qcms_transform *transform, unsigned char *src, unsigned char *dest, size_t length)
+-{
+-	int i;
+-	float (*mat)[4] = transform->matrix;
+-	for (i=0; i<length; i++) {
+-		unsigned char device_r = *src++;
+-		unsigned char device_g = *src++;
+-		unsigned char device_b = *src++;
+-
+-		float linear_r = transform->input_gamma_table_r[device_r];
+-		float linear_g = transform->input_gamma_table_g[device_g];
+-		float linear_b = transform->input_gamma_table_b[device_b];
+-
+-		float out_linear_r = mat[0][0]*linear_r + mat[1][0]*linear_g + mat[2][0]*linear_b;
+-		float out_linear_g = mat[0][1]*linear_r + mat[1][1]*linear_g + mat[2][1]*linear_b;
+-		float out_linear_b = mat[0][2]*linear_r + mat[1][2]*linear_g + mat[2][2]*linear_b;
+-
+-		float out_device_r = pow(out_linear_r, transform->out_gamma_r);
+-		float out_device_g = pow(out_linear_g, transform->out_gamma_g);
+-		float out_device_b = pow(out_linear_b, transform->out_gamma_b);
+-
+-		*dest++ = clamp_u8(255*out_device_r);
+-		*dest++ = clamp_u8(255*out_device_g);
+-		*dest++ = clamp_u8(255*out_device_b);
+-	}
+-}
+-#endif
+-
+ static void qcms_transform_data_gray_out_lut(qcms_transform *transform, unsigned char *src, unsigned char *dest, size_t length)
+ {
+ 	unsigned int i;
++#ifdef X86
++	__m128 xm;
++	__m128i xi;
++#endif
+ 	for (i = 0; i < length; i++) {
+ 		float out_device_r, out_device_g, out_device_b;
+ 		unsigned char device = *src++;
+@@ -271,9 +305,24 @@
+ 		out_device_g = lut_interp_linear(linear, transform->output_gamma_lut_g, transform->output_gamma_lut_g_length);
+ 		out_device_b = lut_interp_linear(linear, transform->output_gamma_lut_b, transform->output_gamma_lut_b_length);
+ 
+-		*dest++ = clamp_u8(out_device_r*255);
+-		*dest++ = clamp_u8(out_device_g*255);
+-		*dest++ = clamp_u8(out_device_b*255);
++#ifdef X86
++		if (sse_version_available() >= 2) {
++			xm.m128_f32[0] = out_device_r;
++			xm.m128_f32[1] = out_device_g;
++			xm.m128_f32[2] = out_device_b;
++			clamp_u8_sse2(&xm, &xi);
++
++			*dest++ = xi.m128i_u32[0];
++			*dest++ = xi.m128i_u32[1];
++			*dest++ = xi.m128i_u32[2];
++		} else {
++#endif
++			*dest++ = clamp_u8(out_device_r*255);
++			*dest++ = clamp_u8(out_device_g*255);
++			*dest++ = clamp_u8(out_device_b*255);
++#ifdef X86
++		}
++#endif
+ 	}
+ }
+ 
+@@ -286,6 +335,10 @@
+ static void qcms_transform_data_graya_out_lut(qcms_transform *transform, unsigned char *src, unsigned char *dest, size_t length)
+ {
+ 	unsigned int i;
++#ifdef X86
++	__m128 xm;
++	__m128i xi;
++#endif
+ 	for (i = 0; i < length; i++) {
+ 		float out_device_r, out_device_g, out_device_b;
+ 		unsigned char device = *src++;
+@@ -297,9 +350,24 @@
+ 		out_device_g = lut_interp_linear(linear, transform->output_gamma_lut_g, transform->output_gamma_lut_g_length);
+ 		out_device_b = lut_interp_linear(linear, transform->output_gamma_lut_b, transform->output_gamma_lut_b_length);
+ 
+-		*dest++ = clamp_u8(out_device_r*255);
+-		*dest++ = clamp_u8(out_device_g*255);
+-		*dest++ = clamp_u8(out_device_b*255);
++#ifdef X86
++		if (sse_version_available() >= 2) {
++			xm.m128_f32[0] = out_device_r;
++			xm.m128_f32[1] = out_device_g;
++			xm.m128_f32[2] = out_device_b;
++			clamp_u8_sse2(&xm, &xi);
++
++			*dest++ = xi.m128i_u32[0];
++			*dest++ = xi.m128i_u32[1];
++			*dest++ = xi.m128i_u32[2];
++		} else {
++#endif
++			*dest++ = clamp_u8(out_device_r*255);
++			*dest++ = clamp_u8(out_device_g*255);
++			*dest++ = clamp_u8(out_device_b*255);
++#ifdef X86
++		}
++#endif
+ 		*dest++ = alpha;
+ 	}
+ }
+@@ -411,93 +479,87 @@
+ 	}
+ }
+ 
+-// Not used
+-/* 
+-static void qcms_transform_data_clut(qcms_transform *transform, unsigned char *src, unsigned char *dest, size_t length) {
+-	unsigned int i;
++
++// Using lcms' tetra interpolation algorithm.
++static void qcms_transform_data_tetra_clut_rgba(qcms_transform *transform, unsigned char *src, unsigned char *dest, size_t length) {
++	int64_t i;
+ 	int xy_len = 1;
+ 	int x_len = transform->grid_size;
+ 	int len = x_len * x_len;
+ 	float* r_table = transform->r_clut;
+ 	float* g_table = transform->g_clut;
+ 	float* b_table = transform->b_clut;
+-  
++	float rcp255 = 1.0f / 255.0f;
++
+ 	for (i = 0; i < length; i++) {
+-		unsigned char in_r = *src++;
+-		unsigned char in_g = *src++;
+-		unsigned char in_b = *src++;
+-		float linear_r = in_r/255.0f, linear_g=in_g/255.0f, linear_b = in_b/255.0f;
++		float c0_r, c1_r, c2_r, c3_r;
++		float c0_g, c1_g, c2_g, c3_g;
++		float c0_b, c1_b, c2_b, c3_b;
++		float clut_r, clut_g, clut_b;
++		unsigned char in_r = src[i * 4 + 0];
++		unsigned char in_g = src[i * 4 + 1];
++		unsigned char in_b = src[i * 4 + 2];
++		unsigned char in_a = src[i * 4 + 3];
++		float linear_r = in_r*rcp255, linear_g=in_g*rcp255, linear_b = in_b*rcp255;
++#ifdef X86
++		__m128 xm;
++		__m128i xi;
++#endif
+ 
+-		int x = floor(linear_r * (transform->grid_size-1));
+-		int y = floor(linear_g * (transform->grid_size-1));
+-		int z = floor(linear_b * (transform->grid_size-1));
+-		int x_n = ceil(linear_r * (transform->grid_size-1));
+-		int y_n = ceil(linear_g * (transform->grid_size-1));
+-		int z_n = ceil(linear_b * (transform->grid_size-1));
+-		float x_d = linear_r * (transform->grid_size-1) - x; 
+-		float y_d = linear_g * (transform->grid_size-1) - y;
+-		float z_d = linear_b * (transform->grid_size-1) - z; 
++		int x;
++		int y;
++		int z;
++		int x_n;
++		int y_n;
++		int z_n;
++		float rx;
++		float ry;
++		float rz;
++		float lr = linear_r * (transform->grid_size-1);
++		float lg = linear_g * (transform->grid_size-1);
++		float lb = linear_b * (transform->grid_size-1);
+ 
+-		float r_x1 = lerp(CLU(r_table,x,y,z), CLU(r_table,x_n,y,z), x_d);
+-		float r_x2 = lerp(CLU(r_table,x,y_n,z), CLU(r_table,x_n,y_n,z), x_d);
+-		float r_y1 = lerp(r_x1, r_x2, y_d);
+-		float r_x3 = lerp(CLU(r_table,x,y,z_n), CLU(r_table,x_n,y,z_n), x_d);
+-		float r_x4 = lerp(CLU(r_table,x,y_n,z_n), CLU(r_table,x_n,y_n,z_n), x_d);
+-		float r_y2 = lerp(r_x3, r_x4, y_d);
+-		float clut_r = lerp(r_y1, r_y2, z_d);
++#if defined(X86) && !(defined(_M_AMD64) && _MSC_VER == 1400)
++		if (sse_version_available() >= 4) {
++			xm.m128_f32[0] = lr;
++			xm.m128_f32[1] = lg;
++			xm.m128_f32[2] = lb;
+ 
+-		float g_x1 = lerp(CLU(g_table,x,y,z), CLU(g_table,x_n,y,z), x_d);
+-		float g_x2 = lerp(CLU(g_table,x,y_n,z), CLU(g_table,x_n,y_n,z), x_d);
+-		float g_y1 = lerp(g_x1, g_x2, y_d);
+-		float g_x3 = lerp(CLU(g_table,x,y,z_n), CLU(g_table,x_n,y,z_n), x_d);
+-		float g_x4 = lerp(CLU(g_table,x,y_n,z_n), CLU(g_table,x_n,y_n,z_n), x_d);
+-		float g_y2 = lerp(g_x3, g_x4, y_d);
+-		float clut_g = lerp(g_y1, g_y2, z_d);
++#if _MSC_VER == 1400
++			floor_ps_sse4_1(&xm, &xi);
++#else
++			xi = _mm_cvttps_epi32(_mm_floor_ps(xm));
++#endif
++			x = _mm_cvtsi128_si32(xi);
++			y = _mm_cvtsi128_si32(xi = _mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
++			z = _mm_cvtsi128_si32(_mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
+ 
+-		float b_x1 = lerp(CLU(b_table,x,y,z), CLU(b_table,x_n,y,z), x_d);
+-		float b_x2 = lerp(CLU(b_table,x,y_n,z), CLU(b_table,x_n,y_n,z), x_d);
+-		float b_y1 = lerp(b_x1, b_x2, y_d);
+-		float b_x3 = lerp(CLU(b_table,x,y,z_n), CLU(b_table,x_n,y,z_n), x_d);
+-		float b_x4 = lerp(CLU(b_table,x,y_n,z_n), CLU(b_table,x_n,y_n,z_n), x_d);
+-		float b_y2 = lerp(b_x3, b_x4, y_d);
+-		float clut_b = lerp(b_y1, b_y2, z_d);
++#if _MSC_VER == 1400
++			ceil_ps_sse4_1(&xm, &xi);
++#else
++			xi = _mm_cvttps_epi32(_mm_ceil_ps(xm));
++#endif
++			x_n = _mm_cvtsi128_si32(xi);
++			y_n = _mm_cvtsi128_si32(xi = _mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
++			z_n = _mm_cvtsi128_si32(_mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
+ 
+-		*dest++ = clamp_u8(clut_r*255.0f);
+-		*dest++ = clamp_u8(clut_g*255.0f);
+-		*dest++ = clamp_u8(clut_b*255.0f);
+-	}	
+-}
+-*/
+-
+-// Using lcms' tetra interpolation algorithm.
+-static void qcms_transform_data_tetra_clut_rgba(qcms_transform *transform, unsigned char *src, unsigned char *dest, size_t length) {
+-	unsigned int i;
+-	int xy_len = 1;
+-	int x_len = transform->grid_size;
+-	int len = x_len * x_len;
+-	float* r_table = transform->r_clut;
+-	float* g_table = transform->g_clut;
+-	float* b_table = transform->b_clut;
+-	float c0_r, c1_r, c2_r, c3_r;
+-	float c0_g, c1_g, c2_g, c3_g;
+-	float c0_b, c1_b, c2_b, c3_b;
+-	float clut_r, clut_g, clut_b;
+-	for (i = 0; i < length; i++) {
+-		unsigned char in_r = *src++;
+-		unsigned char in_g = *src++;
+-		unsigned char in_b = *src++;
+-		unsigned char in_a = *src++;
+-		float linear_r = in_r/255.0f, linear_g=in_g/255.0f, linear_b = in_b/255.0f;
+-
+-		int x = floor(linear_r * (transform->grid_size-1));
+-		int y = floor(linear_g * (transform->grid_size-1));
+-		int z = floor(linear_b * (transform->grid_size-1));
+-		int x_n = ceil(linear_r * (transform->grid_size-1));
+-		int y_n = ceil(linear_g * (transform->grid_size-1));
+-		int z_n = ceil(linear_b * (transform->grid_size-1));
+-		float rx = linear_r * (transform->grid_size-1) - x; 
+-		float ry = linear_g * (transform->grid_size-1) - y;
+-		float rz = linear_b * (transform->grid_size-1) - z; 
++			rx = lr - x; 
++			ry = lg - y;
++			rz = lb - z; 
++		} else {
++#endif /* defined(X86) && !(defined(_M_AMD64) && _MSC_VER == 1400) */
++			x = floor(lr);
++			y = floor(lg);
++			z = floor(lb);
++			x_n = ceil(lr);
++			y_n = ceil(lg);
++			z_n = ceil(lb);
++			rx = lr - x; 
++			ry = lg - y;
++			rz = lb - z; 
++#if defined(X86) && !(defined(_M_AMD64) && _MSC_VER == 1400)
++		}
++#endif
+ 
+ 		c0_r = CLU(r_table, x, y, z);
+ 		c0_g = CLU(g_table, x, y, z);
+@@ -577,10 +639,25 @@
+ 		clut_g = c0_g + c1_g*rx + c2_g*ry + c3_g*rz;
+ 		clut_b = c0_b + c1_b*rx + c2_b*ry + c3_b*rz;
+ 
+-		*dest++ = clamp_u8(clut_r*255.0f);
+-		*dest++ = clamp_u8(clut_g*255.0f);
+-		*dest++ = clamp_u8(clut_b*255.0f);
+-		*dest++ = in_a;
++#ifdef X86
++		if (sse_version_available() >= 2) {
++			xm.m128_f32[0] = clut_r;
++			xm.m128_f32[1] = clut_g;
++			xm.m128_f32[2] = clut_b;
++			clamp_u8_sse2(&xm, &xi);
++
++			dest[i * 4 + 0] = _mm_cvtsi128_si32(xi);
++			dest[i * 4 + 1] = _mm_cvtsi128_si32(xi = _mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
++			dest[i * 4 + 2] = _mm_cvtsi128_si32(_mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
++		} else {
++#endif
++			dest[i * 4 + 0] = clamp_u8(clut_r*255.0f);
++			dest[i * 4 + 1] = clamp_u8(clut_g*255.0f);
++			dest[i * 4 + 2] = clamp_u8(clut_b*255.0f);
++#ifdef X86
++		}
++#endif
++		dest[i * 4 + 3] = in_a;
+ 	}	
+ }
+ 
+@@ -593,25 +670,76 @@
+ 	float* r_table = transform->r_clut;
+ 	float* g_table = transform->g_clut;
+ 	float* b_table = transform->b_clut;
+-	float c0_r, c1_r, c2_r, c3_r;
+-	float c0_g, c1_g, c2_g, c3_g;
+-	float c0_b, c1_b, c2_b, c3_b;
+-	float clut_r, clut_g, clut_b;
++	float rcp255 = 1.0f / 255.0f;
++
+ 	for (i = 0; i < length; i++) {
+-		unsigned char in_r = *src++;
+-		unsigned char in_g = *src++;
+-		unsigned char in_b = *src++;
+-		float linear_r = in_r/255.0f, linear_g=in_g/255.0f, linear_b = in_b/255.0f;
++		float c0_r, c1_r, c2_r, c3_r;
++		float c0_g, c1_g, c2_g, c3_g;
++		float c0_b, c1_b, c2_b, c3_b;
++		float clut_r, clut_g, clut_b;
++		unsigned char in_r = src[i * 3 + 0];
++		unsigned char in_g = src[i * 3 + 1];
++		unsigned char in_b = src[i * 3 + 2];
++		float linear_r = in_r*rcp255, linear_g=in_g*rcp255, linear_b = in_b*rcp255;
++#ifdef X86
++		__m128 xm;
++		__m128i xi;
++#endif
+ 
+-		int x = floor(linear_r * (transform->grid_size-1));
+-		int y = floor(linear_g * (transform->grid_size-1));
+-		int z = floor(linear_b * (transform->grid_size-1));
+-		int x_n = ceil(linear_r * (transform->grid_size-1));
+-		int y_n = ceil(linear_g * (transform->grid_size-1));
+-		int z_n = ceil(linear_b * (transform->grid_size-1));
+-		float rx = linear_r * (transform->grid_size-1) - x; 
+-		float ry = linear_g * (transform->grid_size-1) - y;
+-		float rz = linear_b * (transform->grid_size-1) - z; 
++		int x;
++		int y;
++		int z;
++		int x_n;
++		int y_n;
++		int z_n;
++		float rx;
++		float ry;
++		float rz;
++		float lr = linear_r * (transform->grid_size-1);
++		float lg = linear_g * (transform->grid_size-1);
++		float lb = linear_b * (transform->grid_size-1);
++
++#if defined(X86) && !(defined(_M_AMD64) && _MSC_VER == 1400)
++		if (sse_version_available() >= 4) {
++			xm.m128_f32[0] = lr;
++			xm.m128_f32[1] = lg;
++			xm.m128_f32[2] = lb;
++
++#if _MSC_VER == 1400
++			floor_ps_sse4_1(&xm, &xi);
++#else
++			xi = _mm_cvttps_epi32(_mm_floor_ps(xm));
++#endif
++			x = _mm_cvtsi128_si32(xi);
++			y = _mm_cvtsi128_si32(xi = _mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
++			z = _mm_cvtsi128_si32(_mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
++
++#if _MSC_VER == 1400
++			ceil_ps_sse4_1(&xm, &xi);
++#else
++			xi = _mm_cvttps_epi32(_mm_ceil_ps(xm));
++#endif
++			x_n = _mm_cvtsi128_si32(xi);
++			y_n = _mm_cvtsi128_si32(xi = _mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
++			z_n = _mm_cvtsi128_si32(_mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
++
++			rx = lr - x; 
++			ry = lg - y;
++			rz = lb - z; 
++		} else {
++#endif /* defined(X86) && !(defined(_M_AMD64) && _MSC_VER == 1400) */
++			x = floor(lr);
++			y = floor(lg);
++			z = floor(lb);
++			x_n = ceil(lr);
++			y_n = ceil(lg);
++			z_n = ceil(lb);
++			rx = lr - x; 
++			ry = lg - y;
++			rz = lb - z; 
++#if defined(X86) && !(defined(_M_AMD64) && _MSC_VER == 1400)
++		}
++#endif
+ 
+ 		c0_r = CLU(r_table, x, y, z);
+ 		c0_g = CLU(g_table, x, y, z);
+@@ -691,9 +819,24 @@
+ 		clut_g = c0_g + c1_g*rx + c2_g*ry + c3_g*rz;
+ 		clut_b = c0_b + c1_b*rx + c2_b*ry + c3_b*rz;
+ 
+-		*dest++ = clamp_u8(clut_r*255.0f);
+-		*dest++ = clamp_u8(clut_g*255.0f);
+-		*dest++ = clamp_u8(clut_b*255.0f);
++#ifdef X86
++		if (sse_version_available() >= 2) {
++			xm.m128_f32[0] = clut_r;
++			xm.m128_f32[1] = clut_g;
++			xm.m128_f32[2] = clut_b;
++			clamp_u8_sse2(&xm, &xi);
++
++			dest[i * 3 + 0] = _mm_cvtsi128_si32(xi);
++			dest[i * 3 + 1] = _mm_cvtsi128_si32(xi = _mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
++			dest[i * 3 + 2] = _mm_cvtsi128_si32(_mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
++		} else {
++#endif
++			dest[i * 3 + 0] = clamp_u8(clut_r*255.0f);
++			dest[i * 3 + 1] = clamp_u8(clut_g*255.0f);
++			dest[i * 3 + 2] = clamp_u8(clut_b*255.0f);
++#ifdef X86
++		}
++#endif
+ 	}	
+ }
+ 
+@@ -701,6 +844,10 @@
+ {
+ 	unsigned int i;
+ 	float (*mat)[4] = transform->matrix;
++#ifdef X86
++	__m128 xm;
++	__m128i xi;
++#endif
+ 	for (i = 0; i < length; i++) {
+ 		unsigned char device_r = *src++;
+ 		unsigned char device_g = *src++;
+@@ -726,9 +873,24 @@
+ 		out_device_b = lut_interp_linear(out_linear_b, 
+ 				transform->output_gamma_lut_b, transform->output_gamma_lut_b_length);
+ 
+-		*dest++ = clamp_u8(out_device_r*255);
+-		*dest++ = clamp_u8(out_device_g*255);
+-		*dest++ = clamp_u8(out_device_b*255);
++#ifdef X86
++		if (sse_version_available() >= 2) {
++			xm.m128_f32[0] = out_device_r;
++			xm.m128_f32[1] = out_device_g;
++			xm.m128_f32[2] = out_device_b;
++			clamp_u8_sse2(&xm, &xi);
++
++			*dest++ = xi.m128i_u32[0];
++			*dest++ = xi.m128i_u32[1];
++			*dest++ = xi.m128i_u32[2];
++		} else {
++#endif
++			*dest++ = clamp_u8(out_device_r*255);
++			*dest++ = clamp_u8(out_device_g*255);
++			*dest++ = clamp_u8(out_device_b*255);
++#ifdef X86
++		}
++#endif
+ 	}
+ }
+ 
+@@ -736,6 +898,10 @@
+ {
+ 	unsigned int i;
+ 	float (*mat)[4] = transform->matrix;
++#ifdef X86
++	__m128 xm;
++	__m128i xi;
++#endif
+ 	for (i = 0; i < length; i++) {
+ 		unsigned char device_r = *src++;
+ 		unsigned char device_g = *src++;
+@@ -762,38 +928,28 @@
+ 		out_device_b = lut_interp_linear(out_linear_b, 
+ 				transform->output_gamma_lut_b, transform->output_gamma_lut_b_length);
+ 
+-		*dest++ = clamp_u8(out_device_r*255);
+-		*dest++ = clamp_u8(out_device_g*255);
+-		*dest++ = clamp_u8(out_device_b*255);
++#ifdef X86
++		if (sse_version_available() >= 2) {
++			xm.m128_f32[0] = out_device_r;
++			xm.m128_f32[1] = out_device_g;
++			xm.m128_f32[2] = out_device_b;
++			clamp_u8_sse2(&xm, &xi);
++
++			*dest++ = xi.m128i_u32[0];
++			*dest++ = xi.m128i_u32[1];
++			*dest++ = xi.m128i_u32[2];
++		} else {
++#endif
++			*dest++ = clamp_u8(out_device_r*255);
++			*dest++ = clamp_u8(out_device_g*255);
++			*dest++ = clamp_u8(out_device_b*255);
++#ifdef X86
++		}
++#endif
+ 		*dest++ = alpha;
+ 	}
+ }
+ 
+-#if 0
+-static void qcms_transform_data_rgb_out_linear(qcms_transform *transform, unsigned char *src, unsigned char *dest, size_t length)
+-{
+-	int i;
+-	float (*mat)[4] = transform->matrix;
+-	for (i = 0; i < length; i++) {
+-		unsigned char device_r = *src++;
+-		unsigned char device_g = *src++;
+-		unsigned char device_b = *src++;
+-
+-		float linear_r = transform->input_gamma_table_r[device_r];
+-		float linear_g = transform->input_gamma_table_g[device_g];
+-		float linear_b = transform->input_gamma_table_b[device_b];
+-
+-		float out_linear_r = mat[0][0]*linear_r + mat[1][0]*linear_g + mat[2][0]*linear_b;
+-		float out_linear_g = mat[0][1]*linear_r + mat[1][1]*linear_g + mat[2][1]*linear_b;
+-		float out_linear_b = mat[0][2]*linear_r + mat[1][2]*linear_g + mat[2][2]*linear_b;
+-
+-		*dest++ = clamp_u8(out_linear_r*255);
+-		*dest++ = clamp_u8(out_linear_g*255);
+-		*dest++ = clamp_u8(out_linear_b*255);
+-	}
+-}
+-#endif
+-
+ static struct precache_output *precache_reference(struct precache_output *p)
+ {
+ 	p->ref_count++;
+@@ -885,48 +1041,81 @@
+ 	transform_free(t);
+ }
+ 
+-#ifdef X86
+-// Determine if we can build with SSE2 (this was partly copied from jmorecfg.h in
+-// mozilla/jpeg)
+- // -------------------------------------------------------------------------
+-#if defined(_M_IX86) && defined(_MSC_VER)
+-#define HAS_CPUID
+-/* Get us a CPUID function. Avoid clobbering EBX because sometimes it's the PIC
+-   register - I'm not sure if that ever happens on windows, but cpuid isn't
+-   on the critical path so we just preserve the register to be safe and to be
+-   consistent with the non-windows version. */
+-static void cpuid(uint32_t fxn, uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *d) {
+-       uint32_t a_, b_, c_, d_;
+-       __asm {
+-              xchg   ebx, esi
+-              mov    eax, fxn
+-              cpuid
+-              mov    a_, eax
+-              mov    b_, ebx
+-              mov    c_, ecx
+-              mov    d_, edx
+-              xchg   ebx, esi
+-       }
+-       *a = a_;
+-       *b = b_;
+-       *c = c_;
+-       *d = d_;
++// -------------------------__cpuid Detection----------------------------------
++
++// The following code was largely taken from xpcom/glue/SSE.cpp and
++// made a little simpler.
++enum CPUIDRegister { eax = 0, ebx = 1, ecx = 2, edx = 3 };
++
++#ifdef HAVE_CPUID_H
++
++// cpuid.h is available on gcc 4.3 and higher on i386 and x86_64
++#include <cpuid.h>
++
++static void
++__cpuid(int CPUInfo[4], int InfoType)
++{
++  __get_cpuid(InfoType,
++    (unsigned int*)&CPUInfo[0],
++    (unsigned int*)&CPUInfo[1],
++    (unsigned int*)&CPUInfo[2],
++    (unsigned int*)&CPUInfo[3]);
+ }
+-#elif (defined(__GNUC__) || defined(__SUNPRO_C)) && (defined(__i386__) || defined(__i386))
+-#define HAS_CPUID
+-/* Get us a CPUID function. We can't use ebx because it's the PIC register on
+-   some platforms, so we use ESI instead and save ebx to avoid clobbering it. */
+-static void cpuid(uint32_t fxn, uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *d) {
+ 
+-	uint32_t a_, b_, c_, d_;
+-       __asm__ __volatile__ ("xchgl %%ebx, %%esi; cpuid; xchgl %%ebx, %%esi;" 
+-                             : "=a" (a_), "=S" (b_), "=c" (c_), "=d" (d_) : "a" (fxn));
+-	   *a = a_;
+-	   *b = b_;
+-	   *c = c_;
+-	   *d = d_;
++#define HAVE_CPU_DETECTION
++#else /* HAVE_CPUID_H */
++
++#if defined(_MSC_VER) && _MSC_VER >= 1600 && (defined(_M_IX86) || defined(_M_AMD64))
++// MSVC 2005 or later supports __cpuid by intrin.h
++// But it does't work on MSVC 2005 with SDK 7.1 (Bug 753772)
++#include <intrin.h>
++
++#define HAVE_CPU_DETECTION
++#elif defined(__SUNPRO_CC) && (defined(__i386) || defined(__x86_64__))
++
++// Define a function identical to MSVC function.
++#ifdef __i386
++static void
++__cpuid(int CPUInfo[4], int InfoType)
++{
++  asm (
++    "xchg %esi, %ebx\n"
++    "cpuid\n"
++    "movl %eax, (%edi)\n"
++    "movl %ebx, 4(%edi)\n"
++    "movl %ecx, 8(%edi)\n"
++    "movl %edx, 12(%edi)\n"
++    "xchg %esi, %ebx\n"
++    :
++    : "a"(InfoType), // %eax
++      "D"(CPUInfo) // %edi
++    : "%ecx", "%edx", "%esi"
++  );
+ }
++#else
++static void
++__cpuid(int CPUInfo[4], int InfoType)
++{
++  asm (
++    "xchg %rsi, %rbx\n"
++    "cpuid\n"
++    "movl %eax, (%rdi)\n"
++    "movl %ebx, 4(%rdi)\n"
++    "movl %ecx, 8(%rdi)\n"
++    "movl %edx, 12(%rdi)\n"
++    "xchg %rsi, %rbx\n"
++    :
++    : "a"(InfoType), // %eax
++      "D"(CPUInfo) // %rdi
++    : "%ecx", "%edx", "%rsi"
++  );
++}
++
++#define HAVE_CPU_DETECTION
+ #endif
++#endif
++
++#endif /* HAVE_CPUID_H */
+ 
+ // -------------------------Runtime SSEx Detection-----------------------------
+ 
+@@ -935,27 +1124,24 @@
+ #define SSE1_EDX_MASK (1UL << 25)
+ #define SSE2_EDX_MASK (1UL << 26)
+ #define SSE3_ECX_MASK (1UL <<  0)
++#define SSE4_ECX_MASK (1UL << 19)
+ 
+ static int sse_version_available(void)
+ {
+-#if defined(__x86_64__) || defined(__x86_64) || defined(_M_AMD64)
+-	/* we know at build time that 64-bit CPUs always have SSE2
+-	 * this tells the compiler that non-SSE2 branches will never be
+-	 * taken (i.e. OK to optimze away the SSE1 and non-SIMD code */
+-	return 2;
+-#elif defined(HAS_CPUID)
++#if defined(HAVE_CPU_DETECTION)
+ 	static int sse_version = -1;
+-	uint32_t a, b, c, d;
+-	uint32_t function = 0x00000001;
+ 
+ 	if (sse_version == -1) {
++		volatile int regs[4];
+ 		sse_version = 0;
+-		cpuid(function, &a, &b, &c, &d);
+-		if (c & SSE3_ECX_MASK)
++		__cpuid((int *)regs, 1);
++		if (regs[2] & SSE4_ECX_MASK)
++			sse_version = 4;
++		else if (regs[2] & SSE3_ECX_MASK)
+ 			sse_version = 3;
+-		else if (d & SSE2_EDX_MASK)
++		else if (regs[3] & SSE2_EDX_MASK)
+ 			sse_version = 2;
+-		else if (d & SSE1_EDX_MASK)
++		else if (regs[3] & SSE1_EDX_MASK)
+ 			sse_version = 1;
+ 	}
+ 
+@@ -964,7 +1150,6 @@
+ 	return 0;
+ #endif
+ }
+-#endif
+ 
+ static const struct matrix bradford_matrix = {{	{ 0.8951f, 0.2664f,-0.1614f},
+ 						{-0.7502f, 1.7135f, 0.0367f},
+diff -r d1452658046f gfx/thebes/gfxContext.h
+--- a/gfx/thebes/gfxContext.h	Tue Jul 03 17:04:45 2012 -0400
++++ b/gfx/thebes/gfxContext.h	Thu Jul 05 02:37:37 2012 +0900
+@@ -686,7 +686,11 @@
+         /**
+          * Disable copying of backgrounds in PushGroupAndCopyBackground.
+          */
+-        FLAG_DISABLE_COPY_BACKGROUND = (1 << 2)
++        FLAG_DISABLE_COPY_BACKGROUND = (1 << 2),
++        /**
++         * tete009 extension
++         */
++        FLAG_DRAW_SINGLE_IMAGE_TT = (1 << 20)
+     };
+ 
+     void SetFlag(PRInt32 aFlag) { mFlags |= aFlag; }
+diff -r d1452658046f gfx/thebes/gfxUtils.cpp
+--- a/gfx/thebes/gfxUtils.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/gfx/thebes/gfxUtils.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -494,6 +494,9 @@
+                            PRUint32         aImageFlags)
+ {
+     SAMPLE_LABEL("gfxUtils", "DrawPixelSnapped");
++    bool drawSingleImage = (aContext->GetFlags() & gfxContext::FLAG_DRAW_SINGLE_IMAGE_TT);
++    aContext->ClearFlag(gfxContext::FLAG_DRAW_SINGLE_IMAGE_TT);
++
+     bool doTile = !aImageRect.Contains(aSourceRect) &&
+                   !(aImageFlags & imgIContainer::FLAG_CLAMP);
+ 
+diff -r d1452658046f js/src/Makefile.in
+--- a/js/src/Makefile.in	Tue Jul 03 17:04:45 2012 -0400
++++ b/js/src/Makefile.in	Thu Jul 05 02:37:37 2012 +0900
+@@ -73,10 +73,6 @@
+ 
+ LIBS		= $(NSPR_LIBS) 
+ 
+-ifeq ($(OS_ARCH),WINNT)
+-NO_PROFILE_GUIDED_OPTIMIZE = 1
+-endif
+-
+ # JavaScript must be built shared, even for static builds, as it is used by
+ # other modules which are always built shared. Failure to do so results in
+ # the js code getting copied into xpinstall and jsd as well as mozilla-bin,
+@@ -904,3 +900,27 @@
+ # END kludges for the Nitro assembler
+ ###############################################
+ 
++ifeq (WINNT_1,$(OS_ARCH)_$(MOZ_PROFILE_GENERATE)$(MOZ_PROFILE_USE))
++# Optimizer bug with MSVC PGO (Bug 595653)
++YarrPattern.$(OBJ_SUFFIX): YarrPattern.cpp $(GLOBAL_DEPS)
++	$(REPORT_BUILD)
++	@$(MAKE_DEPS_AUTO_CXX)
++	$(ELOG) $(CCC) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS:arch:SSE2=arch:SSE) $(_VPATH_SRCS)
++
++# -LTCG:PGINSTRUMENT bug of MSVC PGO
++PolyIC.$(OBJ_SUFFIX): PolyIC.cpp $(GLOBAL_DEPS)
++	$(REPORT_BUILD)
++	@$(MAKE_DEPS_AUTO_CXX)
++	$(ELOG) $(CCC) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS) -GL- $(_VPATH_SRCS)
++
++# Optimizer bug with MSVC PGO
++FrameState.$(OBJ_SUFFIX): FrameState.cpp $(GLOBAL_DEPS)
++	$(REPORT_BUILD)
++	@$(MAKE_DEPS_AUTO_CXX)
++	$(ELOG) $(CCC) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS) -GL- $(_VPATH_SRCS)
++
++FastOps.$(OBJ_SUFFIX): FastOps.cpp $(GLOBAL_DEPS)
++	$(REPORT_BUILD)
++	@$(MAKE_DEPS_AUTO_CXX)
++	$(ELOG) $(CCC) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS) -GL- $(_VPATH_SRCS)
++endif
+diff -r d1452658046f js/src/jscntxt.h
+--- a/js/src/jscntxt.h	Tue Jul 03 17:04:45 2012 -0400
++++ b/js/src/jscntxt.h	Thu Jul 05 02:37:37 2012 +0900
+@@ -64,6 +64,8 @@
+ #include "js/Vector.h"
+ #include "vm/Stack.h"
+ 
++#include <emmintrin.h>
++
+ #ifdef _MSC_VER
+ #pragma warning(push)
+ #pragma warning(disable:4100) /* Silence unreferenced formal parameter warnings */
+diff -r d1452658046f js/src/jsdhash.cpp
+--- a/js/src/jsdhash.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/js/src/jsdhash.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -43,6 +43,9 @@
+  *
+  * Try to keep this file in sync with xpcom/glue/pldhash.cpp.
+  */
++#if _MSC_VER >= 1400
++#include <intrin.h>
++#endif
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+@@ -168,13 +171,29 @@
+                       const JSDHashEntryHdr *from,
+                       JSDHashEntryHdr *to)
+ {
++#if _MSC_VER >= 1400
++    if ((table->entrySize & 3) == 0) {
++        __movsd((unsigned long*)to, (unsigned long*)from, table->entrySize >> 2);
++    } else {
++        memcpy(to, from, table->entrySize);
++    }
++#else
+     js_memcpy(to, from, table->entrySize);
++#endif
+ }
+ 
+ JS_PUBLIC_API(void)
+ JS_DHashClearEntryStub(JSDHashTable *table, JSDHashEntryHdr *entry)
+ {
++#if _MSC_VER >= 1400
++    if ((table->entrySize & 3) == 0) {
++        __stosd((unsigned long*)entry, 0, table->entrySize >> 2);
++    } else {
++        memset(entry, 0, table->entrySize);
++    }
++#else
+     memset(entry, 0, table->entrySize);
++#endif
+ }
+ 
+ JS_PUBLIC_API(void)
+diff -r d1452658046f js/src/jsgc.cpp
+--- a/js/src/jsgc.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/js/src/jsgc.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -72,6 +72,9 @@
+  * barriers on them.
+  */
+ 
++#if (_M_IX86_FP >= 1) || defined(__SSE__) || defined(_M_AMD64) || defined(__amd64__)
++#include <xmmintrin.h>
++#endif
+ #include <math.h>
+ #include <string.h>     /* for memset used when DEBUG */
+ 
+@@ -300,6 +303,9 @@
+     DebugOnly<size_t> nmarked = 0;
+     for (;; thing += thingSize) {
+         JS_ASSERT(thing <= lastByte + 1);
++#if (_M_IX86_FP >= 1) || defined(__SSE__) || defined(_M_AMD64) || defined(__amd64__)
++        _mm_prefetch((char *)(thing + sizeof(T) * 4), _MM_HINT_NTA);
++#endif
+         if (thing == nextFree.first) {
+             JS_ASSERT(nextFree.last <= lastByte);
+             if (nextFree.last == lastByte)
+@@ -372,6 +378,9 @@
+     ArenaHeader **ap = &al->head;
+     size_t thingSize = Arena::thingSize(thingKind);
+     while (ArenaHeader *aheader = *ap) {
++#if (_M_IX86_FP >= 1) || defined(__SSE__) || defined(_M_AMD64) || defined(__amd64__)
++        _mm_prefetch((char *)aheader->next, _MM_HINT_NTA);
++#endif
+         bool allClear = aheader->getArena()->finalize<T>(fop, thingKind, thingSize);
+         if (allClear) {
+             *ap = aheader->next;
+diff -r d1452658046f js/src/jsinterp.h
+--- a/js/src/jsinterp.h	Tue Jul 03 17:04:45 2012 -0400
++++ b/js/src/jsinterp.h	Thu Jul 05 02:37:37 2012 +0900
+@@ -49,6 +49,8 @@
+ 
+ #include "vm/Stack.h"
+ 
++#include <emmintrin.h>
++
+ namespace js {
+ 
+ /*
+@@ -241,6 +243,10 @@
+ extern JS_NEVER_INLINE bool
+ Interpret(JSContext *cx, StackFrame *stopFp, InterpMode mode = JSINTERP_NORMAL);
+ 
++#ifdef _MSC_VER
++/* hack to avoid the bug of PGO */
++__declspec(dllexport)
++#endif
+ extern bool
+ RunScript(JSContext *cx, JSScript *script, StackFrame *fp);
+ 
+diff -r d1452658046f js/src/jsmath.cpp
+--- a/js/src/jsmath.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/js/src/jsmath.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -59,6 +59,20 @@
+ #include "jsinferinlines.h"
+ #include "jsobjinlines.h"
+ 
++#if defined JS_CPU_X86 || defined JS_CPU_X64
++#if _MSC_VER == 1400
++#include <emmintrin.h>
++#else  /* _MSC_VER == 1400 */
++#include <smmintrin.h>
++#endif /* _MSC_VER == 1400 */
++#endif /* defined JS_CPU_X86 || defined JS_CPU_X64 */
++
++# include "assembler/assembler/MacroAssembler.h"
++
++#if (_M_IX86_FP >= 2)
++#pragma function(floor)
++#endif
++
+ using namespace js;
+ 
+ #ifndef M_E
+@@ -250,13 +264,42 @@
+     return JS_TRUE;
+ }
+ 
+-double
++JS_ALWAYS_INLINE double
+ js_math_ceil_impl(double x)
+ {
+ #ifdef __APPLE__
+     if (x < 0 && x > -1.0)
+         return js_copysign(0, -1);
+ #endif
++
++#if defined JS_CPU_X86 || defined JS_CPU_X64
++    if (JSC::MacroAssemblerX86Common::getSSEState() >=
++        JSC::MacroAssemblerX86Common::HasSSE4_1) {
++#if _MSC_VER != 1400
++        __m128d xd = _mm_load_sd(&x);
++        double d;
++
++        xd = _mm_ceil_sd(xd, xd);
++        _mm_store_sd(&d, xd);
++        return d;
++#elif defined JS_CPU_X86
++        double d;
++
++        __asm {
++            movsd       xmm0, x
++            /* roundsd  xmm0, xmm0, 2 */
++            __asm _emit 0x66
++            __asm _emit 0x0F
++            __asm _emit 0x3A
++            __asm _emit 0x0B
++            __asm _emit 0xC0
++            __asm _emit 0x02
++            movsd       d, xmm0
++        }
++        return d;
++#endif
++    }
++#endif /* defined JS_CPU_X86 || defined JS_CPU_X64 */
+     return ceil(x);
+ }
+ 
+@@ -328,9 +371,37 @@
+     return JS_TRUE;
+ }
+ 
+-double
++JS_ALWAYS_INLINE double
+ js_math_floor_impl(double x)
+ {
++#if defined JS_CPU_X86 || defined JS_CPU_X64
++    if (JSC::MacroAssemblerX86Common::getSSEState() >=
++        JSC::MacroAssemblerX86Common::HasSSE4_1) {
++#if _MSC_VER != 1400
++        __m128d xd = _mm_load_sd(&x);
++        double d;
++
++        xd = _mm_floor_sd(xd, xd);
++        _mm_store_sd(&d, xd);
++        return d;
++#elif defined JS_CPU_X86
++        double d;
++
++        __asm {
++            movsd       xmm0, x
++            /* roundsd  xmm0, xmm0, 1 */
++            __asm _emit 0x66
++            __asm _emit 0x0F
++            __asm _emit 0x3A
++            __asm _emit 0x0B
++            __asm _emit 0xC0
++            __asm _emit 0x01
++            movsd       d, xmm0
++        }
++        return d;
++#endif
++    }
++#endif /* defined JS_CPU_X86 || defined JS_CPU_X64 */
+     return floor(x);
+ }
+ 
+diff -r d1452658046f js/src/jsstr.h
+--- a/js/src/jsstr.h	Tue Jul 03 17:04:45 2012 -0400
++++ b/js/src/jsstr.h	Thu Jul 05 02:37:37 2012 +0900
+@@ -220,11 +220,30 @@
+ extern jschar *
+ js_strchr_limit(const jschar *s, jschar c, const jschar *limit);
+ 
++#if _MSC_VER >= 1400
++/* #include <intrin.h> */
++#ifdef  __cplusplus
++extern "C" {
++#endif
++#ifdef _WIN64
++#include <intrin.h>
++#else /* WIN64 */
++void __movsw(unsigned short *Dest, unsigned short *Source, size_t Count);
++#pragma intrinsic(__movsw)
++#endif /* WIN64 */
++#define js_strncpy(dst, src, nelem)   (((nelem) <= 30) ? \
++    (__movsw((unsigned short *)(dst), (unsigned short *)(src), (nelem)), (dst)) : \
++    (js::PodCopy((dst), (src), (nelem))))
++#ifdef  __cplusplus
++}
++#endif
++#else /* _MSC_VER >= 1400 */
+ static JS_ALWAYS_INLINE void
+ js_strncpy(jschar *dst, const jschar *src, size_t nelem)
+ {
+     return js::PodCopy(dst, src, nelem);
+ }
++#endif /* _MSC_VER >= 1400 */
+ 
+ namespace js {
+ 
+diff -r d1452658046f js/src/yarr/YarrInterpreter.cpp
+--- a/js/src/yarr/YarrInterpreter.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/js/src/yarr/YarrInterpreter.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -1853,7 +1853,13 @@
+     unsigned m_currentAlternativeIndex;
+     Vector<ParenthesesStackEntry> m_parenthesesStack;
+     Vector<ByteDisjunction*> m_allParenthesesInfo;
++#ifdef _MSC_VER
++#pragma optimize("g", off)
++#endif
+ };
++#ifdef _MSC_VER
++#pragma optimize("g", on)
++#endif
+ 
+ PassOwnPtr<BytecodePattern> byteCompile(YarrPattern& pattern, BumpPointerAllocator* allocator)
+ {
+diff -r d1452658046f layout/base/nsLayoutUtils.cpp
+--- a/layout/base/nsLayoutUtils.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/layout/base/nsLayoutUtils.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -3566,7 +3566,8 @@
+                   const nsPoint&       aAnchor,
+                   const nsRect&        aDirty,
+                   const nsIntSize&     aImageSize,
+-                  PRUint32             aImageFlags)
++                  PRUint32             aImageFlags,
++                  const PRBool         aSingleImage = PR_FALSE)
+ {
+   if (aDest.Contains(aFill)) {
+     aImageFlags |= imgIContainer::FLAG_CLAMP;
+@@ -3586,6 +3587,10 @@
+     ctx->IdentityMatrix();
+   }
+ 
++  if (aSingleImage) {
++    ctx->SetFlag(gfxContext::FLAG_DRAW_SINGLE_IMAGE_TT);
++  }
++
+   aImage->Draw(ctx, aGraphicsFilter, drawingParams.mUserSpaceToImageSpace,
+                drawingParams.mFillRect, drawingParams.mSubimage, aImageSize,
+                aImageFlags);
+@@ -3666,7 +3671,7 @@
+   fill.IntersectRect(fill, dest);
+   return DrawImageInternal(aRenderingContext, aImage, aGraphicsFilter,
+                            dest, fill, aDest, aDirty ? *aDirty : dest,
+-                           imageSize, aImageFlags);
++                           imageSize, aImageFlags, PR_TRUE);
+ }
+ 
+ /* static */ nsresult
+@@ -3705,7 +3710,7 @@
+   nsRect fill;
+   fill.IntersectRect(aDest, dest);
+   return DrawImageInternal(aRenderingContext, aImage, aGraphicsFilter, dest, fill,
+-                           fill.TopLeft(), aDirty, imageSize, aImageFlags);
++                           fill.TopLeft(), aDirty, imageSize, aImageFlags, PR_TRUE);
+ }
+ 
+ /* static */ void
+diff -r d1452658046f layout/generic/nsContainerFrame.cpp
+--- a/layout/generic/nsContainerFrame.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/layout/generic/nsContainerFrame.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -299,6 +299,10 @@
+   }
+ }
+ 
++#ifdef _MSC_VER
++#pragma optimize("g", on)
++#endif
++
+ static void AppendIfNonempty(const nsIFrame* aFrame,
+                             FramePropertyTable* aPropTable,
+                             const FramePropertyDescriptor* aProperty,
+@@ -1245,6 +1249,10 @@
+   return removed ? NS_OK : NS_ERROR_UNEXPECTED;
+ }
+ 
++#ifdef _MSC_VER
++#pragma optimize("g", off)
++#endif
++
+ nsFrameList
+ nsContainerFrame::StealFramesAfter(nsIFrame* aChild)
+ {
+diff -r d1452658046f layout/style/nsCSSDataBlock.cpp
+--- a/layout/style/nsCSSDataBlock.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/layout/style/nsCSSDataBlock.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -341,6 +341,10 @@
+     }
+ }
+ 
++#ifdef _MSC_VER
++#pragma optimize("g", off)
++#endif
++
+ void
+ nsCSSExpandedDataBlock::Compress(nsCSSCompressedDataBlock **aNormalBlock,
+                                  nsCSSCompressedDataBlock **aImportantBlock)
+@@ -403,6 +407,10 @@
+     *aImportantBlock = result_important.forget();
+ }
+ 
++#ifdef _MSC_VER
++#pragma optimize("g", on)
++#endif
++
+ void
+ nsCSSExpandedDataBlock::AddLonghandProperty(nsCSSProperty aProperty,
+                                             const nsCSSValue& aValue)
+diff -r d1452658046f layout/style/nsCSSRuleProcessor.cpp
+--- a/layout/style/nsCSSRuleProcessor.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/layout/style/nsCSSRuleProcessor.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -1593,11 +1593,22 @@
+ //    which is done only when SelectorMatches calls itself recursively
+ //  * what it points to should be set to true whenever a test is skipped
+ //    because of aStateMask
+-static bool SelectorMatches(Element* aElement,
+-                              nsCSSSelector* aSelector,
+-                              NodeMatchContext& aNodeMatchContext,
+-                              TreeMatchContext& aTreeMatchContext,
+-                              bool* const aDependence = nsnull)
++PRBool SelectorMatchesComponent(Element* aElement,
++                                nsCSSSelector* aSelector,
++                                NodeMatchContext& aNodeMatchContext,
++                                TreeMatchContext& aTreeMatchContext,
++                                PRBool* const aDependence);
++
++#ifdef _MSC_VER
++__forceinline
++#else
++inline
++#endif
++PRBool SelectorMatches(Element* aElement,
++                       nsCSSSelector* aSelector,
++                       NodeMatchContext& aNodeMatchContext,
++                       TreeMatchContext& aTreeMatchContext,
++                       PRBool* const aDependence = nsnull)
+ 
+ {
+   NS_PRECONDITION(!aSelector->IsPseudoElement(),
+@@ -1623,6 +1634,21 @@
+     }
+   }
+ 
++  return SelectorMatchesComponent(aElement,
++                                  aSelector,
++                                  aNodeMatchContext,
++                                  aTreeMatchContext,
++                                  aDependence);
++}
++
++#define isNegated (aDependence != nsnull)
++
++static PRBool SelectorMatchesComponent(Element* aElement,
++                                       nsCSSSelector* aSelector,
++                                       NodeMatchContext& aNodeMatchContext,
++                                       TreeMatchContext& aTreeMatchContext,
++                                       PRBool* const aDependence)
++{
+   nsAtomList* IDList = aSelector->mIDList;
+   if (IDList) {
+     nsIAtom* id = aElement->GetID();
+@@ -1680,7 +1706,6 @@
+     }
+   }
+ 
+-  const bool isNegated = (aDependence != nsnull);
+   // The selectors for which we set node bits are, unfortunately, early
+   // in this function (because they're pseudo-classes, which are
+   // generally quick to test, and thus earlier).  If they were later,
+@@ -2161,7 +2186,7 @@
+   if (!isNegated) {
+     for (nsCSSSelector *negation = aSelector->mNegations;
+          result && negation; negation = negation->mNegations) {
+-      bool dependence = false;
++      PRBool dependence = false;
+       result = !SelectorMatches(aElement, negation, aNodeMatchContext,
+                                 aTreeMatchContext, &dependence);
+       // If the selector does match due to the dependence on aStateMask,
+diff -r d1452658046f layout/svg/base/src/nsSVGMaskFrame.cpp
+--- a/layout/svg/base/src/nsSVGMaskFrame.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/layout/svg/base/src/nsSVGMaskFrame.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -157,7 +157,7 @@
+                    ((pixel[GFX_ARGB32_OFFSET_R] * 0.2125 +
+                         pixel[GFX_ARGB32_OFFSET_G] * 0.7154 +
+                         pixel[GFX_ARGB32_OFFSET_B] * 0.0721) *
+-                       (pixel[GFX_ARGB32_OFFSET_A] / 255.0) * aOpacity);
++                       (pixel[GFX_ARGB32_OFFSET_A] * 0.003921568627451) * aOpacity);
+ 
+       memset(pixel, alpha, 4);
+     }
+diff -r d1452658046f memory/jemalloc/jemalloc.c
+--- a/memory/jemalloc/jemalloc.c	Tue Jul 03 17:04:45 2012 -0400
++++ b/memory/jemalloc/jemalloc.c	Thu Jul 05 02:37:37 2012 +0900
+@@ -100,6 +100,8 @@
+  *******************************************************************************
+  */
+ 
++#define _CRT_RAND_S
++
+ #ifdef MOZ_MEMORY_ANDROID
+ #define NO_TLS
+ #define _pthread_self() pthread_self()
+@@ -235,6 +237,26 @@
+ #define __crtInitCritSecAndSpinCount InitializeCriticalSectionAndSpinCount
+ #include <io.h>
+ #include <windows.h>
++#include <intrin.h>
++#if defined _M_IX86 || defined _M_AMD64
++#if _MSC_VER == 1400
++#include <emmintrin.h>
++#else  /* _MSC_VER == 1400 */
++#include <smmintrin.h>
++#endif /* _MSC_VER == 1400 */
++#endif /* defined _M_IX86 || defined _M_AMD64 */
++
++#if _MSC_VER >= 1400
++#ifdef _WIN64
++unsigned __int64 __readgsqword(unsigned long Offset);
++#pragma intrinsic(__readgsqword)
++#define TlsGetValue(x) (LPVOID)(__readgsqword((x) * 8 + 0x1480))
++#else /* _WIN64 */
++unsigned long __readfsdword(unsigned long Offset);
++#pragma intrinsic(__readfsdword)
++#define TlsGetValue(x) (LPVOID)(*(unsigned long *)(__readfsdword(0x18) + (x) * 4 + 3600))
++#endif /* _WIN64 */
++#endif /* _MSC_VER >= 1400 */
+ 
+ #pragma warning( disable: 4267 4996 4146 )
+ 
+@@ -251,6 +273,17 @@
+ static unsigned long tlsIndex = 0xffffffff;
+ #endif 
+ 
++BOOL ReplaceAPICode(FARPROC lpProcAddr, LPBYTE lpCodeData, int nCodeDataSize);
++static BOOL use_win2kstyle_rand_s = FALSE;
++static BOOL sse4_1_supported = FALSE;
++typedef struct
++{
++  int EAX;
++  int EBX;
++  int ECX;
++  int EDX;
++} CPU_INFO;
++
+ #define	__thread
+ #define	_pthread_self() __threadid()
+ #define	issetugid() 0
+@@ -5620,6 +5653,23 @@
+ #ifdef MOZ_MEMORY_WINDOWS
+ 	/* get a thread local storage index */
+ 	tlsIndex = TlsAlloc();
++
++	use_win2kstyle_rand_s =
++		(NULL == GetProcAddress(GetModuleHandleA("advapi32.dll"), "SystemFunction036"));
++
++	{
++		CPU_INFO CPUInfo;
++
++		__cpuid((int*)&CPUInfo, 0);
++		if (CPUInfo.EAX >= 1)
++		{
++			__cpuid((int*)&CPUInfo, 1);
++			if (CPUInfo.ECX & (1 << 19))
++			{
++				sse4_1_supported = TRUE;
++			}
++		}
++	}
+ #endif
+ 
+ 	/* Get page size and number of CPUs */
+@@ -7185,3 +7235,115 @@
+ }
+ 
+ #endif
++
++
++#ifdef MOZ_MEMORY_WINDOWS
++#include <wincrypt.h>
++#include <math.h>
++
++errno_t __cdecl rand_s_tt(unsigned int *randomValue)
++{
++  if (!use_win2kstyle_rand_s)
++  {
++    return rand_s(randomValue);
++  }
++  else
++  {
++    if (randomValue)
++    {
++      BOOL bResult = FALSE;
++      HCRYPTPROV hProv;
++
++      if (CryptAcquireContext(&hProv, NULL, NULL, PROV_RSA_FULL,
++                              CRYPT_VERIFYCONTEXT | CRYPT_SILENT) ||
++         (GetLastError() == NTE_BAD_KEYSET &&
++          CryptAcquireContext(&hProv, NULL, NULL, PROV_RSA_FULL,
++                              CRYPT_VERIFYCONTEXT | CRYPT_SILENT | CRYPT_NEWKEYSET)))
++      {
++          if (CryptGenRandom(hProv, sizeof(unsigned int), (BYTE*)randomValue))
++          {
++              bResult = TRUE;
++          }
++          CryptReleaseContext(hProv, 0);
++      }
++
++      if (bResult)
++      {
++        return 0;
++      }
++    }
++
++    errno = ENOMEM;
++    return errno;
++  }
++}
++
++double __cdecl floor_tt(double x)
++{
++#if defined _M_IX86 || defined _M_AMD64
++  if (sse4_1_supported)
++  {
++#if _MSC_VER != 1400
++    __m128d xd = _mm_load_sd(&x);
++    double d;
++
++    xd = _mm_floor_sd(xd, xd);
++    _mm_store_sd(&d, xd);
++    return d;
++#elif defined _M_IX86
++    double d;
++
++    __asm
++    {
++      movsd       xmm0, x
++      /* roundsd  xmm0, xmm0, 1 */
++      __asm _emit 0x66
++      __asm _emit 0x0F
++      __asm _emit 0x3A
++      __asm _emit 0x0B
++      __asm _emit 0xC0
++      __asm _emit 0x01
++      movsd       d, xmm0
++    }
++    return d;
++#endif
++  }
++#endif /* defined _M_IX86 || defined _M_AMD64 */
++  return floor(x);
++}
++
++double __cdecl ceil_tt(double x)
++{
++#if defined _M_IX86 || defined _M_AMD64
++  if (sse4_1_supported)
++  {
++#if _MSC_VER != 1400
++    __m128d xd = _mm_load_sd(&x);
++    double d;
++
++    xd = _mm_ceil_sd(xd, xd);
++    _mm_store_sd(&d, xd);
++    return d;
++#elif defined _M_IX86
++    double d;
++
++    __asm
++    {
++      movsd       xmm0, x
++      /* roundsd  xmm0, xmm0, 2 */
++      __asm _emit 0x66
++      __asm _emit 0x0F
++      __asm _emit 0x3A
++      __asm _emit 0x0B
++      __asm _emit 0xC0
++      __asm _emit 0x02
++      movsd       d, xmm0
++    }
++    return d;
++#endif
++  }
++#endif /* defined _M_IX86 || defined _M_AMD64 */
++  return ceil(x);
++}
++
++#endif
+diff -r d1452658046f nsprpub/pr/include/md/_win95.h
+--- a/nsprpub/pr/include/md/_win95.h	Tue Jul 03 17:04:45 2012 -0400
++++ b/nsprpub/pr/include/md/_win95.h	Thu Jul 05 02:37:37 2012 +0900
+@@ -510,6 +510,17 @@
+ #define _MD_CURRENT_CPU() _pr_currentCPU
+ #define _MD_SET_CURRENT_CPU(_cpu) (_pr_currentCPU = 0)
+ #else /* _PR_USE_STATIC_TLS */
++#if _MSC_VER >= 1400
++#ifdef _WIN64
++unsigned __int64 __readgsqword(unsigned long Offset);
++#pragma intrinsic(__readgsqword)
++#define TlsGetValue(x) (LPVOID)(__readgsqword((x) * 8 + 0x1480))
++#else /* _WIN64 */
++unsigned long __readfsdword(unsigned long Offset);
++#pragma intrinsic(__readfsdword)
++#define TlsGetValue(x) (LPVOID)(*(unsigned long *)(__readfsdword(0x18) + (x) * 4 + 3600))
++#endif /* _WIN64 */
++#endif /* _MSC_VER >= 1400 */
+ extern DWORD _pr_currentThreadIndex;
+ #define _MD_GET_ATTACHED_THREAD() ((PRThread *) TlsGetValue(_pr_currentThreadIndex))
+ #define _MD_SET_CURRENT_THREAD(_thread) TlsSetValue(_pr_currentThreadIndex, (_thread))
+diff -r d1452658046f nsprpub/pr/src/io/prsocket.c
+--- a/nsprpub/pr/src/io/prsocket.c	Tue Jul 03 17:04:45 2012 -0400
++++ b/nsprpub/pr/src/io/prsocket.c	Thu Jul 05 02:37:37 2012 +0900
+@@ -320,14 +320,6 @@
+ 
+ #elif defined(WIN32) || defined(WIN16)
+ 
+-#if defined(WIN32)
+-    /*
+-     * The sleep circumvents a bug in Win32 WinSock.
+-     * See Microsoft Knowledge Base article ID: Q165989.
+-     */
+-    Sleep(0);
+-#endif /* WIN32 */
+-
+     if (out_flags & PR_POLL_EXCEPT) {
+         int len = sizeof(err);
+         if (getsockopt(osfd, (int)SOL_SOCKET, SO_ERROR, (char *) &err, &len)
+diff -r d1452658046f security/nss/lib/freebl/Makefile
+--- a/security/nss/lib/freebl/Makefile	Tue Jul 03 17:04:45 2012 -0400
++++ b/security/nss/lib/freebl/Makefile	Thu Jul 05 02:37:37 2012 +0900
+@@ -163,11 +163,10 @@
+     DEFINES += -DMP_NO_MP_WORD -DMP_USE_UINT_DIGIT
+ else
+ # MSVC
+-    MPI_SRCS += mpi_x86_asm.c
+     DEFINES += -DMP_ASSEMBLY_MULTIPLY -DMP_ASSEMBLY_SQUARE 
+     DEFINES += -DMP_ASSEMBLY_DIV_2DX1D -DMP_USE_UINT_DIGIT -DMP_NO_MP_WORD
+     ifdef BUILD_OPT
+-	OPTIMIZER += -Ox  # maximum optimization for freebl
++	OPTIMIZER += -O2  # maximum optimization for freebl
+     endif
+ endif
+ else
+diff -r d1452658046f security/nss/lib/freebl/manifest.mn
+--- a/security/nss/lib/freebl/manifest.mn	Tue Jul 03 17:04:45 2012 -0400
++++ b/security/nss/lib/freebl/manifest.mn	Thu Jul 05 02:37:37 2012 +0900
+@@ -100,7 +100,11 @@
+ 	$(NULL)
+ 
+ MPI_HDRS = mpi-config.h mpi.h mpi-priv.h mplogic.h mpprime.h logtab.h mp_gf2m.h
++ifdef USE_64
+ MPI_SRCS = mpprime.c mpmontg.c mplogic.c mpi.c mp_gf2m.c
++else
++MPI_SRCS = mpprime.c mpmontg.c mplogic.c mpi.c mp_gf2m.c mpi_x86_asm.c
++endif
+ 
+ 
+ ECL_HDRS = ecl-exp.h ecl.h ec2.h ecp.h ecl-priv.h
+diff -r d1452658046f toolkit/content/debug.js
+--- a/toolkit/content/debug.js	Tue Jul 03 17:04:45 2012 -0400
++++ b/toolkit/content/debug.js	Thu Jul 05 02:37:37 2012 +0900
+@@ -75,7 +75,7 @@
+     switch (defB.getCharPref("app.update.channel")) {
+       case "nightly":
+       case "beta":
+-      case "default":
++      // case "default":
+         releaseBuild = false;
+     }
+   } catch(ex) {}
+diff -r d1452658046f widget/windows/WinUtils.cpp
+--- a/widget/windows/WinUtils.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/widget/windows/WinUtils.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -176,16 +176,24 @@
+   return topWnd;
+ }
+ 
+-static PRUnichar*
+-GetNSWindowPropName()
++class CAtom_NSWindowPropName {
++public:
++  CAtom_NSWindowPropName() {
++    PRUnichar sPropName[40] = L"";
++    _snwprintf(sPropName, 39, L"MozillansIWidgetPtr%p", GetCurrentProcessId());
++    sPropName[39] = '\0';
++    atom = ::GlobalAddAtomW(sPropName);
++  }
++  ~CAtom_NSWindowPropName() {
++    ::GlobalDeleteAtom(atom);
++  }
++  ATOM atom;
++};
++
++static PRUnichar* GetNSWindowPropName()
+ {
+-  static PRUnichar sPropName[40] = L"";
+-  if (!*sPropName) {
+-    _snwprintf(sPropName, 39, L"MozillansIWidgetPtr%p",
+-               ::GetCurrentProcessId());
+-    sPropName[39] = '\0';
+-  }
+-  return sPropName;
++  static CAtom_NSWindowPropName gaNswpn;
++  return (PRUnichar*)(UINT_PTR)gaNswpn.atom;
+ }
+ 
+ /* static */
+diff -r d1452658046f widget/windows/nsWindow.cpp
+--- a/widget/windows/nsWindow.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/widget/windows/nsWindow.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -1951,7 +1951,18 @@
+ // Internally track the caption status via a window property. Required
+ // due to our internal handling of WM_NCACTIVATE when custom client
+ // margins are set.
+-static const PRUnichar kManageWindowInfoProperty[] = L"ManageWindowInfoProperty";
++class CAtom_ManageWindowInfoProperty {
++public:
++  CAtom_ManageWindowInfoProperty() {
++    atom = ::GlobalAddAtomW(L"ManageWindowInfoProperty");
++  }
++  ~CAtom_ManageWindowInfoProperty() {
++    ::GlobalDeleteAtom(atom);
++  }
++  ATOM atom;
++};
++static CAtom_ManageWindowInfoProperty gaMwip;
++#define kManageWindowInfoProperty ((LPCWSTR)(UINT_PTR)gaMwip.atom)
+ typedef BOOL (WINAPI *GetWindowInfoPtr)(HWND hwnd, PWINDOWINFO pwi);
+ static GetWindowInfoPtr sGetWindowInfoPtrStub = NULL;
+ 
+diff -r d1452658046f xpcom/glue/nsThreadUtils.cpp
+--- a/xpcom/glue/nsThreadUtils.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/xpcom/glue/nsThreadUtils.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -48,7 +48,18 @@
+ 
+ #ifdef XP_WIN
+ #include <windows.h>
+-#endif
++#if _MSC_VER >= 1400
++#ifdef _WIN64
++unsigned __int64 __readgsqword(unsigned long Offset);
++#pragma intrinsic(__readgsqword)
++#define TlsGetValue(x) (LPVOID)(__readgsqword((x) * 8 + 0x1480))
++#else /* _WIN64 */
++unsigned long __readfsdword(unsigned long Offset);
++#pragma intrinsic(__readfsdword)
++#define TlsGetValue(x) (LPVOID)(*(unsigned long *)(__readfsdword(0x18) + (x) * 4 + 3600))
++#endif /* _WIN64 */
++#endif /* _MSC_VER >= 1400 */
++#endif /* XP_WIN */
+ 
+ #ifndef XPCOM_GLUE_AVOID_NSPR
+ 
+diff -r d1452658046f xpcom/glue/pldhash.cpp
+--- a/xpcom/glue/pldhash.cpp	Tue Jul 03 17:04:45 2012 -0400
++++ b/xpcom/glue/pldhash.cpp	Thu Jul 05 02:37:37 2012 +0900
+@@ -43,6 +43,9 @@
+  *
+  * Try to keep this file in sync with js/src/jsdhash.cpp.
+  */
++#if _MSC_VER >= 1400
++#include <intrin.h>
++#endif
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+@@ -163,13 +166,29 @@
+                       const PLDHashEntryHdr *from,
+                       PLDHashEntryHdr *to)
+ {
++#if _MSC_VER >= 1400
++    if ((table->entrySize & 3) == 0) {
++        __movsd((unsigned long*)to, (unsigned long*)from, table->entrySize >> 2);
++    } else {
++        memcpy(to, from, table->entrySize);
++    }
++#else
+     memcpy(to, from, table->entrySize);
++#endif
+ }
+ 
+ void
+ PL_DHashClearEntryStub(PLDHashTable *table, PLDHashEntryHdr *entry)
+ {
++#if _MSC_VER >= 1400
++    if ((table->entrySize & 3) == 0) {
++        __stosd((unsigned long*)entry, 0, table->entrySize >> 2);
++    } else {
++        memset(entry, 0, table->entrySize);
++    }
++#else
+     memset(entry, 0, table->entrySize);
++#endif
+ }
+ 
+ void
+diff -r d1452658046f xpcom/string/public/nsCharTraits.h
+--- a/xpcom/string/public/nsCharTraits.h	Tue Jul 03 17:04:45 2012 -0400
++++ b/xpcom/string/public/nsCharTraits.h	Thu Jul 05 02:37:37 2012 +0900
+@@ -215,6 +215,10 @@
+     char_type*
+     copy( char_type* s1, const char_type* s2, size_t n )
+       {
++        if (1 == n) {
++          *s1 = *s2;
++          return s1;
++        }
+         return static_cast<char_type*>(memcpy(s1, s2, n * sizeof(char_type)));
+       }
+ 
