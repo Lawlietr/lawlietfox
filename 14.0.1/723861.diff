@@ -1,0 +1,37 @@
+diff -r 9a8c1d5f3912 xpcom/idl-parser/header.py
+--- a/xpcom/idl-parser/header.py	Tue Apr 24 18:02:41 2012 -0700
++++ b/xpcom/idl-parser/header.py	Thu Apr 26 23:34:53 2012 +0900
+@@ -40,7 +40,7 @@
+ 
+ """Print a C++ header file for the IDL files specified on the command line"""
+ 
+-import sys, os.path, re, xpidl, itertools, glob
++import sys, os.path, re, xpidl, itertools
+ 
+ printdoccomments = False
+ 
+@@ -499,21 +499,13 @@
+             os.mkdir(options.cachedir)
+         sys.path.append(options.cachedir)
+ 
++    # Instantiate the parser.
++    p = xpidl.IDLParser(outputdir=options.cachedir)
++
+     # The only thing special about a regen is that there are no input files.
+     if options.regen:
+         if options.cachedir is None:
+             print >>sys.stderr, "--regen useless without --cachedir"
+-        # Delete the lex/yacc files.  Ply is too stupid to regenerate them
+-        # properly
+-        deadfiles = os.path.join(options.cachedir, "*.py*")
+-        for filename in glob.glob(deadfiles):
+-            print filename
+-            os.remove(filename)
+-
+-    # Instantiate the parser.
+-    p = xpidl.IDLParser(outputdir=options.cachedir)
+-
+-    if options.regen:
+         sys.exit(0)
+ 
+     if options.depfile is not None and options.outfile is None:
