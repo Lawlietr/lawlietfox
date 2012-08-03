@@ -1,0 +1,272 @@
+diff -r 9f29daaecbcc modules/libbz2/src/LICENSE
+--- a/modules/libbz2/src/LICENSE	Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/LICENSE	Wed Dec 28 18:30:17 2011 +0900
+@@ -2,7 +2,7 @@
+ --------------------------------------------------------------------------
+ 
+ This program, "bzip2", the associated library "libbzip2", and all
+-documentation, are copyright (C) 1996-2006 Julian R Seward.  All
++documentation, are copyright (C) 1996-2010 Julian R Seward.  All
+ rights reserved.
+ 
+ Redistribution and use in source and binary forms, with or without
+@@ -36,8 +36,7 @@
+ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
+-Julian Seward, Cambridge, UK.
+-jseward@bzip.org
+-bzip2/libbzip2 version 1.0.4 of 20 December 2006
++Julian Seward, jseward@bzip.org
++bzip2/libbzip2 version 1.0.6 of 6 September 2010
+ 
+ --------------------------------------------------------------------------
+diff -r 9f29daaecbcc modules/libbz2/src/blocksort.c
+--- a/modules/libbz2/src/blocksort.c	Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/blocksort.c	Wed Dec 28 18:30:17 2011 +0900
+@@ -8,8 +8,8 @@
+    This file is part of bzip2/libbzip2, a program and library for
+    lossless, block-sorting data compression.
+ 
+-   bzip2/libbzip2 version 1.0.4 of 20 December 2006
+-   Copyright (C) 1996-2006 Julian Seward <jseward@bzip.org>
++   bzip2/libbzip2 version 1.0.6 of 6 September 2010
++   Copyright (C) 1996-2010 Julian Seward <jseward@bzip.org>
+ 
+    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
+    README file.
+diff -r 9f29daaecbcc modules/libbz2/src/bzlib.c
+--- a/modules/libbz2/src/bzlib.c	Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/bzlib.c	Wed Dec 28 18:30:17 2011 +0900
+@@ -8,8 +8,8 @@
+    This file is part of bzip2/libbzip2, a program and library for
+    lossless, block-sorting data compression.
+ 
+-   bzip2/libbzip2 version 1.0.4 of 20 December 2006
+-   Copyright (C) 1996-2006 Julian Seward <jseward@bzip.org>
++   bzip2/libbzip2 version 1.0.6 of 6 September 2010
++   Copyright (C) 1996-2010 Julian Seward <jseward@bzip.org>
+ 
+    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
+    README file.
+@@ -48,7 +48,7 @@
+       "component, you should also report this bug to the author(s)\n"
+       "of that program.  Please make an effort to report this bug;\n"
+       "timely and accurate bug reports eventually lead to higher\n"
+-      "quality software.  Thanks.  Julian Seward, 15 February 2005.\n\n",
++      "quality software.  Thanks.  Julian Seward, 10 December 2007.\n\n",
+       errcode,
+       BZ2_bzlibVersion()
+    );
+@@ -598,6 +598,7 @@
+       UInt32        c_tPos               = s->tPos;
+       char*         cs_next_out          = s->strm->next_out;
+       unsigned int  cs_avail_out         = s->strm->avail_out;
++      Int32         ro_blockSize100k     = s->blockSize100k;
+       /* end restore */
+ 
+       UInt32       avail_out_INIT = cs_avail_out;
+@@ -1371,23 +1372,7 @@
+ #ifndef BZ_NO_STDIO
+ /*---------------------------------------------------*/
+ 
+-#ifdef WINCE
+-#ifndef setmode
+-#define setmode _setmode
+-#endif
+-#ifndef O_BINARY
+-#define O_BINARY _O_BINARY
+-#endif
+-static
+-FILE * fdopen(int fd, const char *mode)
+-{
+-    wchar_t wMode[10];
+-    MultiByteToWideChar(CP_ACP, 0, mode, -1, wMode, 10);
+-    return _wfdopen((void*)fd, wMode);
+-}
+-#endif
+-
+-#if (defined(_WIN32) || defined(OS2) || defined(MSDOS))
++#if defined(_WIN32) || defined(OS2) || defined(MSDOS)
+ #   include <fcntl.h>
+ #   include <io.h>
+ #   define SET_BINARY_MODE(file) setmode(fileno(file),O_BINARY)
+diff -r 9f29daaecbcc modules/libbz2/src/bzlib.h
+--- a/modules/libbz2/src/bzlib.h	Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/bzlib.h	Wed Dec 28 18:30:17 2011 +0900
+@@ -8,8 +8,8 @@
+    This file is part of bzip2/libbzip2, a program and library for
+    lossless, block-sorting data compression.
+ 
+-   bzip2/libbzip2 version 1.0.4 of 20 December 2006
+-   Copyright (C) 1996-2006 Julian Seward <jseward@bzip.org>
++   bzip2/libbzip2 version 1.0.6 of 6 September 2010
++   Copyright (C) 1996-2010 Julian Seward <jseward@bzip.org>
+ 
+    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
+    README file.
+diff -r 9f29daaecbcc modules/libbz2/src/bzlib_private.h
+--- a/modules/libbz2/src/bzlib_private.h	Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/bzlib_private.h	Wed Dec 28 18:30:17 2011 +0900
+@@ -8,8 +8,8 @@
+    This file is part of bzip2/libbzip2, a program and library for
+    lossless, block-sorting data compression.
+ 
+-   bzip2/libbzip2 version 1.0.4 of 20 December 2006
+-   Copyright (C) 1996-2006 Julian Seward <jseward@bzip.org>
++   bzip2/libbzip2 version 1.0.6 of 6 September 2010
++   Copyright (C) 1996-2010 Julian Seward <jseward@bzip.org>
+ 
+    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
+    README file.
+@@ -36,7 +36,7 @@
+ 
+ /*-- General stuff. --*/
+ 
+-#define BZ_VERSION  "1.0.4, 20-Dec-2006"
++#define BZ_VERSION  "1.0.6, 6-Sept-2010"
+ 
+ typedef char            Char;
+ typedef unsigned char   Bool;
+@@ -442,11 +442,15 @@
+ /*-- Macros for decompression. --*/
+ 
+ #define BZ_GET_FAST(cccc)                     \
++    /* c_tPos is unsigned, hence test < 0 is pointless. */ \
++    if (s->tPos >= (UInt32)100000 * (UInt32)s->blockSize100k) return True; \
+     s->tPos = s->tt[s->tPos];                 \
+     cccc = (UChar)(s->tPos & 0xff);           \
+     s->tPos >>= 8;
+ 
+ #define BZ_GET_FAST_C(cccc)                   \
++    /* c_tPos is unsigned, hence test < 0 is pointless. */ \
++    if (c_tPos >= (UInt32)100000 * (UInt32)ro_blockSize100k) return True; \
+     c_tPos = c_tt[c_tPos];                    \
+     cccc = (UChar)(c_tPos & 0xff);            \
+     c_tPos >>= 8;
+@@ -469,8 +473,10 @@
+    (((UInt32)s->ll16[i]) | (GET_LL4(i) << 16))
+ 
+ #define BZ_GET_SMALL(cccc)                            \
+-      cccc = BZ2_indexIntoF ( s->tPos, s->cftab );    \
+-      s->tPos = GET_LL(s->tPos);
++    /* c_tPos is unsigned, hence test < 0 is pointless. */ \
++    if (s->tPos >= (UInt32)100000 * (UInt32)s->blockSize100k) return True; \
++    cccc = BZ2_indexIntoF ( s->tPos, s->cftab );    \
++    s->tPos = GET_LL(s->tPos);
+ 
+ 
+ /*-- externs for decompression. --*/
+diff -r 9f29daaecbcc modules/libbz2/src/compress.c
+--- a/modules/libbz2/src/compress.c	Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/compress.c	Wed Dec 28 18:30:17 2011 +0900
+@@ -8,8 +8,8 @@
+    This file is part of bzip2/libbzip2, a program and library for
+    lossless, block-sorting data compression.
+ 
+-   bzip2/libbzip2 version 1.0.4 of 20 December 2006
+-   Copyright (C) 1996-2006 Julian Seward <jseward@bzip.org>
++   bzip2/libbzip2 version 1.0.6 of 6 September 2010
++   Copyright (C) 1996-2010 Julian Seward <jseward@bzip.org>
+ 
+    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
+    README file.
+diff -r 9f29daaecbcc modules/libbz2/src/crctable.c
+--- a/modules/libbz2/src/crctable.c	Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/crctable.c	Wed Dec 28 18:30:17 2011 +0900
+@@ -8,8 +8,8 @@
+    This file is part of bzip2/libbzip2, a program and library for
+    lossless, block-sorting data compression.
+ 
+-   bzip2/libbzip2 version 1.0.4 of 20 December 2006
+-   Copyright (C) 1996-2006 Julian Seward <jseward@bzip.org>
++   bzip2/libbzip2 version 1.0.6 of 6 September 2010
++   Copyright (C) 1996-2010 Julian Seward <jseward@bzip.org>
+ 
+    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
+    README file.
+diff -r 9f29daaecbcc modules/libbz2/src/decompress.c
+--- a/modules/libbz2/src/decompress.c	Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/decompress.c	Wed Dec 28 18:30:17 2011 +0900
+@@ -8,8 +8,8 @@
+    This file is part of bzip2/libbzip2, a program and library for
+    lossless, block-sorting data compression.
+ 
+-   bzip2/libbzip2 version 1.0.4 of 20 December 2006
+-   Copyright (C) 1996-2006 Julian Seward <jseward@bzip.org>
++   bzip2/libbzip2 version 1.0.6 of 6 September 2010
++   Copyright (C) 1996-2010 Julian Seward <jseward@bzip.org>
+ 
+    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
+    README file.
+@@ -381,6 +381,13 @@
+             es = -1;
+             N = 1;
+             do {
++               /* Check that N doesn't get too big, so that es doesn't
++                  go negative.  The maximum value that can be
++                  RUNA/RUNB encoded is equal to the block size (post
++                  the initial RLE), viz, 900k, so bounding N at 2
++                  million should guard against overflow without
++                  rejecting any legitimate inputs. */
++               if (N >= 2*1024*1024) RETURN(BZ_DATA_ERROR);
+                if (nextSym == BZ_RUNA) es = es + (0+1) * N; else
+                if (nextSym == BZ_RUNB) es = es + (1+1) * N;
+                N = N * 2;
+@@ -485,15 +492,28 @@
+          RETURN(BZ_DATA_ERROR);
+ 
+       /*-- Set up cftab to facilitate generation of T^(-1) --*/
++      /* Check: unzftab entries in range. */
++      for (i = 0; i <= 255; i++) {
++         if (s->unzftab[i] < 0 || s->unzftab[i] > nblock)
++            RETURN(BZ_DATA_ERROR);
++      }
++      /* Actually generate cftab. */
+       s->cftab[0] = 0;
+       for (i = 1; i <= 256; i++) s->cftab[i] = s->unzftab[i-1];
+       for (i = 1; i <= 256; i++) s->cftab[i] += s->cftab[i-1];
++      /* Check: cftab entries in range. */
+       for (i = 0; i <= 256; i++) {
+          if (s->cftab[i] < 0 || s->cftab[i] > nblock) {
+             /* s->cftab[i] can legitimately be == nblock */
+             RETURN(BZ_DATA_ERROR);
+          }
+       }
++      /* Check: cftab entries non-descending. */
++      for (i = 1; i <= 256; i++) {
++         if (s->cftab[i-1] > s->cftab[i]) {
++            RETURN(BZ_DATA_ERROR);
++         }
++      }
+ 
+       s->state_out_len = 0;
+       s->state_out_ch  = 0;
+diff -r 9f29daaecbcc modules/libbz2/src/huffman.c
+--- a/modules/libbz2/src/huffman.c	Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/huffman.c	Wed Dec 28 18:30:17 2011 +0900
+@@ -8,8 +8,8 @@
+    This file is part of bzip2/libbzip2, a program and library for
+    lossless, block-sorting data compression.
+ 
+-   bzip2/libbzip2 version 1.0.4 of 20 December 2006
+-   Copyright (C) 1996-2006 Julian Seward <jseward@bzip.org>
++   bzip2/libbzip2 version 1.0.6 of 6 September 2010
++   Copyright (C) 1996-2010 Julian Seward <jseward@bzip.org>
+ 
+    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
+    README file.
+diff -r 9f29daaecbcc modules/libbz2/src/randtable.c
+--- a/modules/libbz2/src/randtable.c	Mon Dec 26 13:19:08 2011 +1300
++++ b/modules/libbz2/src/randtable.c	Wed Dec 28 18:30:17 2011 +0900
+@@ -8,8 +8,8 @@
+    This file is part of bzip2/libbzip2, a program and library for
+    lossless, block-sorting data compression.
+ 
+-   bzip2/libbzip2 version 1.0.4 of 20 December 2006
+-   Copyright (C) 1996-2006 Julian Seward <jseward@bzip.org>
++   bzip2/libbzip2 version 1.0.6 of 6 September 2010
++   Copyright (C) 1996-2010 Julian Seward <jseward@bzip.org>
+ 
+    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
+    README file.
