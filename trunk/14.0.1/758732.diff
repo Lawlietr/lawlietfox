@@ -1,0 +1,31 @@
+
+# HG changeset patch
+# User Honza Bambas <honzab.moz@firemni.cz>
+# Date 1337973512 -7200
+# Node ID e4574b46f0ba7999521cb1704de2eac75b017687
+# Parent  1987beeb0038e84eddd39d3026388ba361dc0cf2
+Bug 758732 - configure sometimes fails with rm: cannot lstat conftest.exe: Permission denied, r=ehsan
+
+diff --git a/configure.in b/configure.in
+--- a/configure.in
++++ b/configure.in
+@@ -509,17 +509,17 @@ if test -n "$CROSS_COMPILE" -a "$target"
+     AC_CHECK_PROGS(STRIP, $STRIP "${target_alias}-strip" "${target}-strip", :)
+     AC_CHECK_PROGS(WINDRES, $WINDRES "${target_alias}-windres" "${target}-windres", :)
+     AC_DEFINE(CROSS_COMPILE)
+ else
+     AC_PROG_CC
+     case "$target" in
+     *-mingw*)
+       # Work around the conftest.exe access problem on Windows
+-      sleep 1
++      sleep 2
+     esac
+     AC_PROG_CXX
+     AC_PROG_RANLIB
+     MOZ_PATH_PROGS(AS, $AS as, $CC)
+     AC_CHECK_PROGS(AR, ar, :)
+     AC_CHECK_PROGS(LD, ld, :)
+     AC_CHECK_PROGS(STRIP, strip, :)
+     AC_CHECK_PROGS(WINDRES, windres, :)
+
