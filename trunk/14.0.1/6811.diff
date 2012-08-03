@@ -1,0 +1,39 @@
+diff -r e60ca2e387a8 widget/gtk2/nsGtkIMModule.cpp
+--- a/widget/gtk2/nsGtkIMModule.cpp	Tue Apr 24 18:32:37 2012 -0400
++++ b/widget/gtk2/nsGtkIMModule.cpp	Wed Apr 25 20:08:01 2012 +0900
+@@ -1536,6 +1536,35 @@
+             mDispatchedCompositionString.Length(), mSelectedString);
+     }
+ 
++    // Remove composition string
++    if (mIsComposing && !mDispatchedCompositionString.IsEmpty()) {
++        PRUint32 compLength = mDispatchedCompositionString.Length();
++        textContent.Cut(mCompositionStart, compLength);
++
++        // Adjust selLen
++        PRUint32 selEnd = selOffset + selLength;
++        PRUint32 compEnd = mCompositionStart + compLength;
++        PRUint32 selStartInComposition =
++          NS_MIN(NS_MAX(selOffset, mCompositionStart), compEnd);
++        PRUint32 selEndInComposition =
++          NS_MAX(NS_MIN(selEnd, compEnd), mCompositionStart);
++        if (selStartInComposition < selEndInComposition) {
++            selLength -= (selEndInComposition - selStartInComposition);
++        }
++
++        // Adjust selOffset
++        if (selOffset >= compEnd) {
++            selOffset -= compLength;
++        } else if (selOffset >= mCompositionStart) {
++            selOffset = mCompositionStart;
++        }
++        PR_LOG(gGtkIMLog, PR_LOG_ALWAYS,
++            ("    mCompositionStart=%u, compLength=%u, selOffset=%u, "
++             "selLength=%u, selStartInComposition=%u, selEndInComposition=%u",
++             mCompositionStart, compLength, selOffset, selLength,
++             selStartInComposition, selEndInComposition));
++    }
++
+     // Get only the focused paragraph, by looking for newlines
+     PRInt32 parStart = (selOffset == 0) ? 0 :
+         textContent.RFind("\n", false, selOffset - 1, -1) + 1;
