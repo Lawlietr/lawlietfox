@@ -1,0 +1,238 @@
+diff -r 05cfe44826dd gfx/2d/2D.h
+--- a/gfx/2d/2D.h	Fri Apr 20 21:44:35 2012 -0400
++++ b/gfx/2d/2D.h	Wed May 02 13:47:49 2012 +0900
+@@ -753,9 +753,18 @@
+   void *GetUserData(UserDataKey *key) {
+     return mUserData.Get(key);
+   }
++
++  void SetOpaqueRect(const IntRect &aRect) {
++    mOpaqueRect = aRect;
++  }
++
++  const IntRect &GetOpaqueRect() const {
++    return mOpaqueRect;
++  }
+ protected:
+   UserData mUserData;
+   Matrix mTransform;
++  IntRect mOpaqueRect;
+   bool mTransformDirty : 1;
+ 
+   SurfaceFormat mFormat;
+diff -r 05cfe44826dd gfx/layers/basic/BasicLayers.cpp
+--- a/gfx/layers/basic/BasicLayers.cpp	Fri Apr 20 21:44:35 2012 -0400
++++ b/gfx/layers/basic/BasicLayers.cpp	Wed May 02 13:47:49 2012 +0900
+@@ -71,6 +71,8 @@
+ #define PIXMAN_DONT_DEFINE_STDINT
+ #include "pixman.h"
+ 
++using namespace mozilla::gfx;
++
+ namespace mozilla {
+ namespace layers {
+ 
+@@ -1910,19 +1912,40 @@
+ 
+   bool pushedTargetOpaqueRect = false;
+   nsRefPtr<gfxASurface> currentSurface = aTarget->CurrentSurface();
++  DrawTarget *dt = aTarget->GetDrawTarget();
+   const nsIntRect& bounds = visibleRegion.GetBounds();
+   
+-  if (aTarget->IsCairo()) {
+-    const gfxRect& targetOpaqueRect = currentSurface->GetOpaqueRect();
+-
+-    // Try to annotate currentSurface with a region of pixels that have been
+-    // (or will be) painted opaque, if no such region is currently set.
+-    if (targetOpaqueRect.IsEmpty() && visibleRegion.GetNumRects() == 1 &&
+-        (aLayer->GetContentFlags() & Layer::CONTENT_OPAQUE) &&
+-        !transform.HasNonAxisAlignedTransform()) {
+-      currentSurface->SetOpaqueRect(
+-          aTarget->UserToDevice(gfxRect(bounds.x, bounds.y, bounds.width, bounds.height)));
+-      pushedTargetOpaqueRect = true;
++  if (is2D) {
++    if (aTarget->IsCairo()) {
++      const gfxRect& targetOpaqueRect = currentSurface->GetOpaqueRect();
++
++      // Try to annotate currentSurface with a region of pixels that have been
++      // (or will be) painted opaque, if no such region is currently set.
++      if (targetOpaqueRect.IsEmpty() && visibleRegion.GetNumRects() == 1 &&
++          (aLayer->GetContentFlags() & Layer::CONTENT_OPAQUE) &&
++          !transform.HasNonAxisAlignedTransform()) {
++        currentSurface->SetOpaqueRect(
++            aTarget->UserToDevice(gfxRect(bounds.x, bounds.y, bounds.width, bounds.height)));
++        pushedTargetOpaqueRect = true;
++      }
++    } else {
++      const IntRect& targetOpaqueRect = dt->GetOpaqueRect();
++
++      // Try to annotate currentSurface with a region of pixels that have been
++      // (or will be) painted opaque, if no such region is currently set.
++      if (targetOpaqueRect.IsEmpty() && visibleRegion.GetNumRects() == 1 &&
++          (aLayer->GetContentFlags() & Layer::CONTENT_OPAQUE) &&
++          !transform.HasNonAxisAlignedTransform()) {
++
++        Rect opaqueRect = dt->GetTransform().TransformBounds(
++          Rect(bounds.x, bounds.y, bounds.width, bounds.height));
++        opaqueRect.RoundIn();
++        IntRect intOpaqueRect;
++        if (gfxUtils::RectToIntRect(opaqueRect, &intOpaqueRect)) {
++          aTarget->GetDrawTarget()->SetOpaqueRect(intOpaqueRect);
++          pushedTargetOpaqueRect = true;
++        }
++      }
+     }
+   }
+ 
+@@ -1934,7 +1957,11 @@
+                                                          gfxASurface::CONTENT_COLOR_ALPHA);
+     if (!untransformedSurface) {
+       if (pushedTargetOpaqueRect) {
+-        currentSurface->SetOpaqueRect(gfxRect(0, 0, 0, 0));
++        if (aTarget->IsCairo()) {
++          currentSurface->SetOpaqueRect(gfxRect(0, 0, 0, 0));
++        } else {
++          dt->SetOpaqueRect(IntRect());
++        }
+       }
+       NS_ASSERTION(needsSaveRestore, "Should always need to restore with 3d transforms!");
+       aTarget->Restore();
+@@ -2023,7 +2050,11 @@
+   }
+ 
+   if (pushedTargetOpaqueRect) {
+-    currentSurface->SetOpaqueRect(gfxRect(0, 0, 0, 0));
++    if (aTarget->IsCairo()) {
++      currentSurface->SetOpaqueRect(gfxRect(0, 0, 0, 0));
++    } else {
++      dt->SetOpaqueRect(IntRect());
++    }
+   }
+ 
+   if (needsSaveRestore) {
+diff -r 05cfe44826dd gfx/thebes/gfxContext.cpp
+--- a/gfx/thebes/gfxContext.cpp	Fri Apr 20 21:44:35 2012 -0400
++++ b/gfx/thebes/gfxContext.cpp	Wed May 02 13:47:49 2012 +0900
+@@ -1,4 +1,4 @@
+-/* -*- Mode: C++; tab-width: 20; indent-tabs-mode: nil; c-basic-offset: 4 -*-
++/* -*- Mode: C++; tab-width: 20; indent-tabs-mode: nil; c-basic-offset: 2 -*-
+  * ***** BEGIN LICENSE BLOCK *****
+  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+  *
+@@ -1515,39 +1515,53 @@
+ {
+   if (mCairo) {
+     if (content == gfxASurface::CONTENT_COLOR_ALPHA &&
+-        !(GetFlags() & FLAG_DISABLE_COPY_BACKGROUND)) {
+-        nsRefPtr<gfxASurface> s = CurrentSurface();
+-        if ((s->GetAllowUseAsSource() || s->GetType() == gfxASurface::SurfaceTypeTee) &&
+-            (s->GetContentType() == gfxASurface::CONTENT_COLOR ||
+-             s->GetOpaqueRect().Contains(GetRoundOutDeviceClipExtents(this)))) {
+-            cairo_push_group_with_content(mCairo, CAIRO_CONTENT_COLOR);
+-            nsRefPtr<gfxASurface> d = CurrentSurface();
++      !(GetFlags() & FLAG_DISABLE_COPY_BACKGROUND)) {
++      nsRefPtr<gfxASurface> s = CurrentSurface();
++      if ((s->GetAllowUseAsSource() || s->GetType() == gfxASurface::SurfaceTypeTee) &&
++          (s->GetContentType() == gfxASurface::CONTENT_COLOR ||
++              s->GetOpaqueRect().Contains(GetRoundOutDeviceClipExtents(this)))) {
++        cairo_push_group_with_content(mCairo, CAIRO_CONTENT_COLOR);
++        nsRefPtr<gfxASurface> d = CurrentSurface();
+ 
+-            if (d->GetType() == gfxASurface::SurfaceTypeTee) {
+-                NS_ASSERTION(s->GetType() == gfxASurface::SurfaceTypeTee, "Mismatched types");
+-                nsAutoTArray<nsRefPtr<gfxASurface>,2> ss;
+-                nsAutoTArray<nsRefPtr<gfxASurface>,2> ds;
+-                static_cast<gfxTeeSurface*>(s.get())->GetSurfaces(&ss);
+-                static_cast<gfxTeeSurface*>(d.get())->GetSurfaces(&ds);
+-                NS_ASSERTION(ss.Length() == ds.Length(), "Mismatched lengths");
+-                gfxPoint translation = d->GetDeviceOffset() - s->GetDeviceOffset();
+-                for (PRUint32 i = 0; i < ss.Length(); ++i) {
+-                    CopySurface(ss[i], ds[i], translation);
+-                }
+-            } else {
+-                CopySurface(s, d, gfxPoint(0, 0));
+-            }
+-            d->SetOpaqueRect(s->GetOpaqueRect());
+-            return;
++        if (d->GetType() == gfxASurface::SurfaceTypeTee) {
++          NS_ASSERTION(s->GetType() == gfxASurface::SurfaceTypeTee, "Mismatched types");
++          nsAutoTArray<nsRefPtr<gfxASurface>,2> ss;
++          nsAutoTArray<nsRefPtr<gfxASurface>,2> ds;
++          static_cast<gfxTeeSurface*>(s.get())->GetSurfaces(&ss);
++          static_cast<gfxTeeSurface*>(d.get())->GetSurfaces(&ds);
++          NS_ASSERTION(ss.Length() == ds.Length(), "Mismatched lengths");
++          gfxPoint translation = d->GetDeviceOffset() - s->GetDeviceOffset();
++          for (PRUint32 i = 0; i < ss.Length(); ++i) {
++              CopySurface(ss[i], ds[i], translation);
++          }
++        } else {
++          CopySurface(s, d, gfxPoint(0, 0));
+         }
++        d->SetOpaqueRect(s->GetOpaqueRect());
++        return;
++      }
+     }
+-    cairo_push_group_with_content(mCairo, (cairo_content_t) content);
+   } else {
+-    RefPtr<SourceSurface> source = mDT->Snapshot();
+-    PushGroup(content);
+-    Rect surfRect(0, 0, Float(mDT->GetSize().width), Float(mDT->GetSize().height));
+-    mDT->DrawSurface(source, surfRect, surfRect); 
++    IntRect clipExtents;
++    if (mDT->GetFormat() != FORMAT_B8G8R8X8) {
++      gfxRect clipRect = GetRoundOutDeviceClipExtents(this);
++      clipExtents = IntRect(clipRect.x, clipRect.y, clipRect.width, clipRect.height);
++    }
++    if (mDT->GetFormat() == FORMAT_B8G8R8X8 ||
++      mDT->GetOpaqueRect().Contains(clipExtents)) {
++      DrawTarget *oldDT = mDT;
++      RefPtr<SourceSurface> source = mDT->Snapshot();
++      PushGroup(content);
++      Rect surfRect(0, 0, Float(mDT->GetSize().width), Float(mDT->GetSize().height));
++      Matrix oldTransform = mDT->GetTransform();
++      mDT->SetTransform(Matrix());
++      mDT->DrawSurface(source, surfRect, surfRect); 
++      mDT->SetTransform(oldTransform);
++      mDT->SetOpaqueRect(oldDT->GetOpaqueRect());
++      return;
++    }
+   }
++  PushGroup(content);
+ }
+ 
+ already_AddRefed<gfxPattern>
+diff -r 05cfe44826dd gfx/thebes/gfxUtils.cpp
+--- a/gfx/thebes/gfxUtils.cpp	Fri Apr 20 21:44:35 2012 -0400
++++ b/gfx/thebes/gfxUtils.cpp	Wed May 02 13:47:49 2012 +0900
+@@ -522,6 +522,14 @@
+   return gfxRect(aOut->x, aOut->y, aOut->width, aOut->height).IsEqualEdges(aIn);
+ }
+ 
++bool
++gfxUtils::RectToIntRect(const Rect& aIn, IntRect* aOut)
++{
++  *aOut = IntRect(int32_t(aIn.X()), int32_t(aIn.Y()),
++                  int32_t(aIn.Width()), int32_t(aIn.Height()));
++  return Rect(aOut->x, aOut->y, aOut->width, aOut->height).IsEqualEdges(aIn);
++}
++
+ void
+ gfxUtils::GetYCbCrToRGBDestFormatAndSize(const PlanarYCbCrImage::Data& aData,
+                                          gfxASurface::gfxImageFormat& aSuggestedFormat,
+diff -r 05cfe44826dd gfx/thebes/gfxUtils.h
+--- a/gfx/thebes/gfxUtils.h	Fri Apr 20 21:44:35 2012 -0400
++++ b/gfx/thebes/gfxUtils.h	Wed May 02 13:47:49 2012 +0900
+@@ -121,6 +121,13 @@
+     static bool GfxRectToIntRect(const gfxRect& aIn, nsIntRect* aOut);
+ 
+     /**
++     * If aIn can be represented exactly using an nsIntRect (i.e.
++     * integer-aligned edges and coordinates in the PRInt32 range) then we
++     * set aOut to that rectangle, otherwise return failure.
++    */
++    static bool RectToIntRect(const mozilla::gfx::Rect& aIn, mozilla::gfx::IntRect* aOut);
++
++    /**
+      * Return the smallest power of kScaleResolution (2) greater than or equal to
+      * aVal.
+      */
