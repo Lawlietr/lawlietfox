@@ -1,0 +1,376 @@
+From: Jonathan Kew <jkew@mozilla.com>
+bug 754452 - use GDI synthetic italic rather than cairo font matrix when it's safe to do so, for better glyph spacing. try: -b do -p win32 -u all
+
+diff --git a/gfx/thebes/gfxFont.h b/gfx/thebes/gfxFont.h
+--- a/gfx/thebes/gfxFont.h
++++ b/gfx/thebes/gfxFont.h
+@@ -637,16 +637,27 @@ public:
+     // sort available fonts to put preferred (standard) faces towards the end
+     void SortAvailableFonts();
+ 
+     // check whether the family fits into the simple 4-face model,
+     // so we can use simplified style-matching;
+     // if so set the mIsSimpleFamily flag (defaults to False before we've checked)
+     void CheckForSimpleFamily();
+ 
++    // check whether the family has any faces that are marked as Italic
++    bool HasItalicFace() const {
++        size_t count = mAvailableFonts.Length();
++        for (size_t i = 0; i < count; ++i) {
++            if (mAvailableFonts[i] && mAvailableFonts[i]->IsItalic()) {
++                return true;
++            }
++        }
++        return false;
++    }
++
+     // For memory reporter
+     virtual void SizeOfExcludingThis(nsMallocSizeOfFun aMallocSizeOf,
+                                      FontListSizes*    aSizes) const;
+     virtual void SizeOfIncludingThis(nsMallocSizeOfFun aMallocSizeOf,
+                                      FontListSizes*    aSizes) const;
+ 
+ protected:
+     // fills in an array with weights of faces that match style,
+diff --git a/gfx/thebes/gfxGDIFont.cpp b/gfx/thebes/gfxGDIFont.cpp
+--- a/gfx/thebes/gfxGDIFont.cpp
++++ b/gfx/thebes/gfxGDIFont.cpp
+@@ -268,22 +268,23 @@ gfxGDIFont::Measure(gfxTextRun *aTextRun
+ #define OBLIQUE_SKEW_FACTOR 0.3
+ 
+ void
+ gfxGDIFont::Initialize()
+ {
+     NS_ASSERTION(!mMetrics, "re-creating metrics? this will leak");
+ 
+     LOGFONTW logFont;
++    bool fakeItalicApplied;
+ 
+     if (mAdjustedSize == 0.0) {
+         mAdjustedSize = mStyle.size;
+         if (mStyle.sizeAdjust != 0.0 && mAdjustedSize > 0.0) {
+             // to implement font-size-adjust, we first create the "unadjusted" font
+-            FillLogFont(logFont, mAdjustedSize);
++            fakeItalicApplied = FillLogFont(logFont, mAdjustedSize);
+             mFont = ::CreateFontIndirectW(&logFont);
+ 
+             // initialize its metrics so we can calculate size adjustment
+             Initialize();
+ 
+             // calculate the properly adjusted size, and then proceed
+             // to recreate mFont and recalculate metrics
+             gfxFloat aspect = mMetrics->xHeight / mMetrics->emHeight;
+@@ -301,17 +302,17 @@ gfxGDIFont::Initialize()
+     // as it could lead to a different, incompatible face being used
+     // but instead do our own multi-striking
+     if (mNeedsBold && GetFontEntry()->IsLocalUserFont()) {
+         mApplySyntheticBold = true;
+     }
+ 
+     // this may end up being zero
+     mAdjustedSize = ROUND(mAdjustedSize);
+-    FillLogFont(logFont, mAdjustedSize);
++    fakeItalicApplied = FillLogFont(logFont, mAdjustedSize);
+     mFont = ::CreateFontIndirectW(&logFont);
+ 
+     mMetrics = new gfxFont::Metrics;
+     ::memset(mMetrics, 0, sizeof(*mMetrics));
+ 
+     AutoDC dc;
+     SetGraphicsMode(dc.GetDC(), GM_ADVANCED);
+     AutoSelectFont selectFont(dc.GetDC(), mFont);
+@@ -423,28 +424,32 @@ gfxGDIFont::Initialize()
+ 
+     mFontFace = cairo_win32_font_face_create_for_logfontw_hfont(&logFont,
+                                                                 mFont);
+ 
+     cairo_matrix_t sizeMatrix, ctm;
+     cairo_matrix_init_identity(&ctm);
+     cairo_matrix_init_scale(&sizeMatrix, mAdjustedSize, mAdjustedSize);
+ 
+-    bool italic = (mStyle.style & (NS_FONT_STYLE_ITALIC | NS_FONT_STYLE_OBLIQUE));
+-    if (italic && !mFontEntry->IsItalic()) {
+-        double skewfactor = OBLIQUE_SKEW_FACTOR;
+-        cairo_matrix_t style;
+-        cairo_matrix_init(&style,
+-                          1,                //xx
+-                          0,                //yx
+-                          -1 * skewfactor,  //xy
+-                          1,                //yy
+-                          0,                //x0
+-                          0);               //y0
+-        cairo_matrix_multiply(&sizeMatrix, &sizeMatrix, &style);
++    if (!fakeItalicApplied) {
++        // Only skew the matrix to do fake italic if it wasn't already applied
++        // via the LOGFONT
++        bool italic = (mStyle.style & (NS_FONT_STYLE_ITALIC | NS_FONT_STYLE_OBLIQUE));
++        if (italic && !mFontEntry->IsItalic()) {
++            double skewfactor = OBLIQUE_SKEW_FACTOR;
++            cairo_matrix_t style;
++            cairo_matrix_init(&style,
++                              1,                //xx
++                              0,                //yx
++                              -1 * skewfactor,  //xy
++                              1,                //yy
++                              0,                //x0
++                              0);               //y0
++            cairo_matrix_multiply(&sizeMatrix, &sizeMatrix, &style);
++        }
+     }
+ 
+     cairo_font_options_t *fontOptions = cairo_font_options_create();
+     if (mAntialiasOption != kAntialiasDefault) {
+         cairo_font_options_set_antialias(fontOptions,
+             GetCairoAntialiasOption(mAntialiasOption));
+     }
+     mScaledFont = cairo_scaled_font_create(mFontFace, &sizeMatrix,
+@@ -473,17 +478,17 @@ gfxGDIFont::Initialize()
+     printf("    internalLeading: %f externalLeading: %f\n", mMetrics->internalLeading, mMetrics->externalLeading);
+     printf("    spaceWidth: %f aveCharWidth: %f xHeight: %f\n", mMetrics->spaceWidth, mMetrics->aveCharWidth, mMetrics->xHeight);
+     printf("    uOff: %f uSize: %f stOff: %f stSize: %f supOff: %f subOff: %f\n",
+            mMetrics->underlineOffset, mMetrics->underlineSize, mMetrics->strikeoutOffset, mMetrics->strikeoutSize,
+            mMetrics->superscriptOffset, mMetrics->subscriptOffset);
+ #endif
+ }
+ 
+-void
++bool
+ gfxGDIFont::FillLogFont(LOGFONTW& aLogFont, gfxFloat aSize)
+ {
+     GDIFontEntry *fe = static_cast<GDIFontEntry*>(GetFontEntry());
+ 
+     PRUint16 weight;
+     if (fe->IsUserFont()) {
+         if (fe->IsLocalUserFont()) {
+             // for local user fonts, don't change the original weight
+@@ -496,16 +501,31 @@ gfxGDIFont::FillLogFont(LOGFONTW& aLogFo
+             weight = mNeedsBold ? 700 : 200;
+         }
+     } else {
+         weight = mNeedsBold ? 700 : fe->Weight();
+     }
+ 
+     fe->FillLogFont(&aLogFont, weight, aSize, 
+                     (mAntialiasOption == kAntialiasSubpixel) ? true : false);
++
++    // If we're going to do synthetic oblique styling, and if there's no real
++    // italic face in the family, then use GDI's synthetic oblique rather than
++    // a cairo transform on the font, so that we don't disrupt glyph spacing.
++    // NOTE that we need to check for italic faces in the "platform family",
++    // which in the case of src:local fonts is *NOT* the same as the CSS font
++    // family to which the entry belongs.
++    if ((mStyle.style & (NS_FONT_STYLE_ITALIC | NS_FONT_STYLE_OBLIQUE)) &&
++        !fe->IsItalic() &&
++        !(fe->PlatformFamily() && fe->PlatformFamily()->HasItalicFace())) {
++        aLogFont.lfItalic = 1;
++        return true;
++    }
++
++    return false;
+ }
+ 
+ PRInt32
+ gfxGDIFont::GetGlyphWidth(gfxContext *aCtx, PRUint16 aGID)
+ {
+     if (!mGlyphWidths.IsInitialized()) {
+         mGlyphWidths.Init(200);
+     }
+diff --git a/gfx/thebes/gfxGDIFont.h b/gfx/thebes/gfxGDIFont.h
+--- a/gfx/thebes/gfxGDIFont.h
++++ b/gfx/thebes/gfxGDIFont.h
+@@ -66,17 +66,19 @@ protected:
+     /* override to check for uniscribe failure and fall back to GDI */
+     virtual bool ShapeWord(gfxContext *aContext,
+                            gfxShapedWord *aShapedWord,
+                            const PRUnichar *aString,
+                            bool aPreferPlatformShaping = false);
+ 
+     void Initialize(); // creates metrics and Cairo fonts
+ 
+-    void FillLogFont(LOGFONTW& aLogFont, gfxFloat aSize);
++    // Returns whether the LOGFONT includes synthetic-italic styling
++    // (and so we should avoid adding cairo-based slanting)
++    bool FillLogFont(LOGFONTW& aLogFont, gfxFloat aSize);
+ 
+     // mPlatformShaper is used for the GDI shaper, mUniscribeShaper
+     // for the Uniscribe version if needed
+     nsAutoPtr<gfxFontShaper>   mUniscribeShaper;
+ 
+     HFONT                 mFont;
+     cairo_font_face_t    *mFontFace;
+ 
+diff --git a/gfx/thebes/gfxGDIFontList.cpp b/gfx/thebes/gfxGDIFontList.cpp
+--- a/gfx/thebes/gfxGDIFontList.cpp
++++ b/gfx/thebes/gfxGDIFontList.cpp
+@@ -156,22 +156,24 @@ FontTypeToOutPrecision(PRUint8 fontType)
+  *
+  * GDIFontEntry
+  *
+  */
+ 
+ GDIFontEntry::GDIFontEntry(const nsAString& aFaceName,
+                            gfxWindowsFontType aFontType,
+                            bool aItalic, PRUint16 aWeight, PRInt16 aStretch,
+-                           gfxUserFontData *aUserFontData)
++                           gfxUserFontData *aUserFontData,
++                           gfxFontFamily *aPlatformFamily)
+     : gfxFontEntry(aFaceName),
+       mWindowsFamily(0), mWindowsPitch(0),
+       mFontType(aFontType),
+       mForceGDI(false),
+-      mCharset(), mUnicodeRanges()
++      mCharset(), mUnicodeRanges(),
++      mPlatformFamily(aPlatformFamily)
+ {
+     mUserFontData = aUserFontData;
+     mItalic = aItalic;
+     mWeight = aWeight;
+     mStretch = aStretch;
+     if (IsType1())
+         mForceGDI = true;
+     mIsUserFont = aUserFontData != nsnull;
+@@ -428,22 +430,24 @@ GDIFontEntry::InitLogFont(const nsAStrin
+     memcpy(&mLogFont.lfFaceName, nsPromiseFlatString(aName).get(), len * 2);
+     mLogFont.lfFaceName[len] = '\0';
+ }
+ 
+ GDIFontEntry* 
+ GDIFontEntry::CreateFontEntry(const nsAString& aName,
+                               gfxWindowsFontType aFontType, bool aItalic,
+                               PRUint16 aWeight, PRInt16 aStretch,
+-                              gfxUserFontData* aUserFontData)
++                              gfxUserFontData* aUserFontData,
++                              gfxFontFamily* aPlatformFamily)
+ {
+     // jtdfix - need to set charset, unicode ranges, pitch/family
+ 
+     GDIFontEntry *fe = new GDIFontEntry(aName, aFontType, aItalic,
+-                                        aWeight, aStretch, aUserFontData);
++                                        aWeight, aStretch, aUserFontData,
++                                        aPlatformFamily);
+ 
+     return fe;
+ }
+ 
+ void
+ GDIFontEntry::SizeOfIncludingThis(nsMallocSizeOfFun aMallocSizeOf,
+                                   FontListSizes*    aSizes) const
+ {
+@@ -493,17 +497,17 @@ GDIFontFamily::FamilyAddStylesProc(const
+             fe->mCharset.set(metrics.tmCharSet);
+             return 1; 
+         }
+     }
+ 
+     fe = GDIFontEntry::CreateFontEntry(nsDependentString(lpelfe->elfFullName),
+                                        feType, (logFont.lfItalic == 0xFF),
+                                        (PRUint16) (logFont.lfWeight), 0,
+-                                       nsnull);
++                                       nsnull, nsnull);
+     if (!fe)
+         return 1;
+ 
+     ff->AddFontEntry(fe);
+ 
+     // mark the charset bit
+     fe->mCharset.set(metrics.tmCharSet);
+ 
+@@ -755,17 +759,17 @@ gfxGDIFontList::LookupLocalFont(const gf
+     
+     // use the face name from the lookup font entry, which will be the localized
+     // face name which GDI mapping tables use (e.g. with the system locale set to
+     // Dutch, a fullname of 'Arial Bold' will find a font entry with the face name
+     // 'Arial Vet' which can be used as a key in GDI font lookups).
+     gfxFontEntry *fe = GDIFontEntry::CreateFontEntry(lookup->Name(), 
+         gfxWindowsFontType(isCFF ? GFX_FONT_TYPE_PS_OPENTYPE : GFX_FONT_TYPE_TRUETYPE) /*type*/, 
+         PRUint32(aProxyEntry->mItalic ? NS_FONT_STYLE_ITALIC : NS_FONT_STYLE_NORMAL), 
+-        w, aProxyEntry->mStretch, nsnull);
++        w, aProxyEntry->mStretch, nsnull, lookup->Family());
+         
+     if (!fe)
+         return nsnull;
+ 
+     fe->mIsUserFont = true;
+     fe->mIsLocalUserFont = true;
+     return fe;
+ }
+@@ -972,17 +976,17 @@ gfxGDIFontList::MakePlatformFont(const g
+ 
+     // make a new font entry using the unique name
+     WinUserFontData *winUserFontData = new WinUserFontData(fontRef, isEmbedded);
+     PRUint16 w = (aProxyEntry->mWeight == 0 ? 400 : aProxyEntry->mWeight);
+ 
+     GDIFontEntry *fe = GDIFontEntry::CreateFontEntry(uniqueName, 
+         gfxWindowsFontType(isCFF ? GFX_FONT_TYPE_PS_OPENTYPE : GFX_FONT_TYPE_TRUETYPE) /*type*/, 
+         PRUint32(aProxyEntry->mItalic ? NS_FONT_STYLE_ITALIC : NS_FONT_STYLE_NORMAL), 
+-        w, aProxyEntry->mStretch, winUserFontData);
++        w, aProxyEntry->mStretch, winUserFontData, nsnull);
+ 
+     if (!fe)
+         return fe;
+ 
+     fe->mIsUserFont = true;
+ 
+     // Uniscribe doesn't place CFF fonts loaded privately 
+     // via AddFontMemResourceEx on XP/Vista
+diff --git a/gfx/thebes/gfxGDIFontList.h b/gfx/thebes/gfxGDIFontList.h
+--- a/gfx/thebes/gfxGDIFontList.h
++++ b/gfx/thebes/gfxGDIFontList.h
+@@ -242,46 +242,55 @@ public:
+     virtual void SizeOfIncludingThis(nsMallocSizeOfFun aMallocSizeOf,
+                                      FontListSizes*    aSizes) const;
+ 
+     // create a font entry for a font with a given name
+     static GDIFontEntry* CreateFontEntry(const nsAString& aName,
+                                          gfxWindowsFontType aFontType,
+                                          bool aItalic,
+                                          PRUint16 aWeight, PRInt16 aStretch,
+-                                         gfxUserFontData* aUserFontData);
++                                         gfxUserFontData* aUserFontData,
++                                         gfxFontFamily* aPlatformFamily);
+ 
+     // create a font entry for a font referenced by its fullname
+     static GDIFontEntry* LoadLocalFont(const gfxProxyFontEntry &aProxyEntry,
+                                        const nsAString& aFullname);
+ 
++    gfxFontFamily* PlatformFamily() const {
++        return IsLocalUserFont() ? mPlatformFamily : mFamily;
++    }
++
+     PRUint8 mWindowsFamily;
+     PRUint8 mWindowsPitch;
+ 
+     gfxWindowsFontType mFontType;
+     bool mForceGDI    : 1;
+ 
+     gfxSparseBitSet mCharset;
+     gfxSparseBitSet mUnicodeRanges;
+ 
+ protected:
+     friend class gfxWindowsFont;
+ 
+     GDIFontEntry(const nsAString& aFaceName, gfxWindowsFontType aFontType,
+                  bool aItalic, PRUint16 aWeight, PRInt16 aStretch,
+-                 gfxUserFontData *aUserFontData);
++                 gfxUserFontData *aUserFontData, gfxFontFamily *aPlatformFamily);
+ 
+     void InitLogFont(const nsAString& aName, gfxWindowsFontType aFontType);
+ 
+     virtual gfxFont *CreateFontInstance(const gfxFontStyle *aFontStyle, bool aNeedsBold);
+ 
+     virtual nsresult GetFontTable(PRUint32 aTableTag,
+                                   FallibleTArray<PRUint8>& aBuffer);
+ 
+     LOGFONTW mLogFont;
++
++    // for src:local user-fonts, we also keep a pointer to the platform family
++    // where the font was found, so that we can check for presence of other faces
++    gfxFontFamily *mPlatformFamily;
+ };
+ 
+ // a single font family, referencing one or more faces
+ class GDIFontFamily : public gfxFontFamily
+ {
+ public:
+     GDIFontFamily(nsAString &aName) :
+         gfxFontFamily(aName) {}
