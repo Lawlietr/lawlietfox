@@ -1,0 +1,63 @@
+diff -r 89ec8943347a js/src/methodjit/Compiler.cpp
+--- a/js/src/methodjit/Compiler.cpp	Thu May 31 12:21:08 2012 -0700
++++ b/js/src/methodjit/Compiler.cpp	Wed Jun 06 02:39:55 2012 +0900
+@@ -934,6 +934,7 @@
+     return jit;
+ }
+ 
++#pragma optimize("g", off)
+ CompileStatus
+ mjit::CanMethodJIT(JSContext *cx, JSScript *script, jsbytecode *pc,
+                    bool construct, CompileRequest request)
+@@ -1006,6 +1007,7 @@
+ 
+     return status;
+ }
++#pragma optimize("g", on)
+ 
+ CompileStatus
+ mjit::Compiler::generatePrologue()
+@@ -3841,6 +3843,7 @@
+     JaegerSpew(JSpew_Insns, " ---- FRAME SYNCING DONE ---- \n");
+ }
+ 
++#pragma optimize("g", off)
+ JSC::MacroAssembler::Call
+ mjit::Compiler::emitStubCall(void *ptr, DataLabelPtr *pinline)
+ {
+@@ -3853,6 +3856,7 @@
+     JaegerSpew(JSpew_Insns, " ---- END STUB CALL ---- \n");
+     return cl;
+ }
++#pragma optimize("g", on)
+ 
+ void
+ mjit::Compiler::interruptCheckHelper()
+@@ -4541,6 +4545,7 @@
+     callSites.append(site);
+ }
+ 
++#pragma optimize("g", off)
+ void
+ mjit::Compiler::inlineStubCall(void *stub, RejoinState rejoin, Uses uses)
+ {
+@@ -4556,6 +4561,7 @@
+     }
+     addCallSite(site);
+ }
++#pragma optimize("g", on)
+ 
+ bool
+ mjit::Compiler::compareTwoValues(JSContext *cx, JSOp op, const Value &lhs, const Value &rhs)
+diff -r 89ec8943347a nsprpub/config/autoconf.mk.in
+--- a/nsprpub/config/autoconf.mk.in	Thu May 31 12:21:08 2012 -0700
++++ b/nsprpub/config/autoconf.mk.in	Wed Jun 06 02:39:55 2012 +0900
+@@ -81,7 +81,7 @@
+ OS_LIBS         = @OS_LIBS@
+ OS_LDFLAGS	= @LDFLAGS@
+ OS_DLLFLAGS	= @OS_DLLFLAGS@
+-DLLFLAGS	= @DLLFLAGS@
++DLLFLAGS	= @DLLFLAGS@ /MACHINE:X86 /OPT:REF,ICF -LARGEADDRESSAWARE
+ EXEFLAGS  = @EXEFLAGS@
+ OPTIMIZER	= @OPTIMIZER@
+ 
