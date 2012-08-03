@@ -1,0 +1,200 @@
+diff -r 0a8cd9e352a8 dom/base/nsGlobalWindow.cpp
+--- a/dom/base/nsGlobalWindow.cpp	Thu Jun 14 08:14:53 2012 +0200
++++ b/dom/base/nsGlobalWindow.cpp	Tue Jul 03 20:50:23 2012 +0900
+@@ -1354,6 +1354,18 @@
+ 
+   NotifyWindowIDDestroyed("inner-window-destroyed");
+ 
++  JSObject* obj = FastGetGlobalJSObject();
++  if (obj) {
++    if (!cx) {
++      nsContentUtils::ThreadJSContextStack()->GetSafeJSContext(&cx);
++    }
++
++    JSAutoRequest ar(cx);
++
++    js::NukeChromeCrossCompartmentWrappersForGlobal(cx, obj,
++                                                    js::DontNukeForGlobalObject);
++  }
++
+   if (mDummyJavaPluginOwner) {
+     // Tear down the dummy java plugin.
+ 
+@@ -2451,6 +2463,17 @@
+     nsGlobalWindow *currentInner = GetCurrentInnerWindowInternal();
+ 
+     if (currentInner) {
++      JSObject* obj = currentInner->FastGetGlobalJSObject();
++      if (obj) {
++        JSContext* cx;
++        nsContentUtils::ThreadJSContextStack()->GetSafeJSContext(&cx);
++
++        JSAutoRequest ar(cx);
++
++        js::NukeChromeCrossCompartmentWrappersForGlobal(cx, obj,
++                                                        js::NukeForGlobalObject);
++      }
++
+       NS_ASSERTION(mDoc, "Must have doc!");
+       
+       // Remember the document's principal.
+diff -r 0a8cd9e352a8 js/src/js.msg
+--- a/js/src/js.msg	Thu Jun 14 08:14:53 2012 +0200
++++ b/js/src/js.msg	Tue Jul 03 20:50:23 2012 +0900
+@@ -59,9 +59,9 @@
+  * engine when the corresponding error occurs.
+  *
+  * <FORMAT_STRING> is a string literal, optionally containing sequences
+- * {X} where X  is an integer representing the argument number that will
+- * be replaced with a string value when the error is reported.
+- *
++ {X} where X  is an integer representing the argument number that will
++ be replaced with a string value when the error is reported.
++
+  * e.g.
+  *
+  * MSG_DEF(JSMSG_NOT_A_SUBSPECIES, 73, JSEXN_NONE, 2,
+diff -r 0a8cd9e352a8 js/src/jsfriendapi.h
+--- a/js/src/jsfriendapi.h	Thu Jun 14 08:14:53 2012 +0200
++++ b/js/src/jsfriendapi.h	Tue Jul 03 20:50:23 2012 +0900
+@@ -790,6 +790,16 @@
+ extern JS_FRIEND_API(const jschar*)
+ GetErrorTypeNameFromNumber(JSContext* cx, const unsigned errorNumber);
+ 
++/* Implemented in jswrapper.cpp. */
++typedef enum NukedGlobalHandling {
++    NukeForGlobalObject,
++    DontNukeForGlobalObject
++} NukedGlobalHandling;
++
++extern JS_FRIEND_API(JSBool)
++NukeChromeCrossCompartmentWrappersForGlobal(JSContext *cx, JSObject *obj,
++                                            NukedGlobalHandling nukeGlobal);
++
+ } /* namespace js */
+ 
+ #endif
+diff -r 0a8cd9e352a8 js/src/jsproxy.cpp
+--- a/js/src/jsproxy.cpp	Thu Jun 14 08:14:53 2012 +0200
++++ b/js/src/jsproxy.cpp	Tue Jul 03 20:50:23 2012 +0900
+@@ -1251,6 +1251,8 @@
+ static void
+ proxy_TraceObject(JSTracer *trc, JSObject *obj)
+ {
++    // NB: If you add new slots here, make sure to change
++    // js::NukeChromeCrossCompartmentWrappers to cope.
+     GetProxyHandler(obj)->trace(trc, obj);
+     MarkCrossCompartmentSlot(trc, &obj->getReservedSlotRef(JSSLOT_PROXY_PRIVATE), "private");
+     MarkCrossCompartmentSlot(trc, &obj->getReservedSlotRef(JSSLOT_PROXY_EXTRA + 0), "extra0");
+@@ -1260,6 +1262,8 @@
+ static void
+ proxy_TraceFunction(JSTracer *trc, JSObject *obj)
+ {
++    // NB: If you add new slots here, make sure to change
++    // js::NukeChromeCrossCompartmentWrappers to cope.
+     MarkCrossCompartmentSlot(trc, &GetCall(obj), "call");
+     MarkCrossCompartmentSlot(trc, &GetFunctionProxyConstruct(obj), "construct");
+     proxy_TraceObject(trc, obj);
+diff -r 0a8cd9e352a8 js/src/jsproxy.h
+--- a/js/src/jsproxy.h	Thu Jun 14 08:14:53 2012 +0200
++++ b/js/src/jsproxy.h	Tue Jul 03 20:50:23 2012 +0900
+@@ -200,15 +200,6 @@
+ }
+ 
+ inline void
+-SetProxyExtra(JSObject *obj, size_t n, const Value &extra)
+-{
+-    JS_ASSERT(IsProxy(obj));
+-    JS_ASSERT(n <= 1);
+-    SetReservedSlot(obj, JSSLOT_PROXY_EXTRA + n, extra);
+-}
+-
+-
+-inline void
+ SetProxyHandler(JSObject *obj, ProxyHandler *handler)
+ {
+     JS_ASSERT(IsProxy(obj));
+@@ -222,6 +213,14 @@
+     SetReservedSlot(obj, JSSLOT_PROXY_PRIVATE, value);
+ }
+ 
++inline void
++SetProxyExtra(JSObject *obj, size_t n, const Value &extra)
++{
++    JS_ASSERT(IsProxy(obj));
++    JS_ASSERT(n <= 1);
++    SetReservedSlot(obj, JSSLOT_PROXY_EXTRA + n, extra);
++}
++
+ JS_FRIEND_API(JSObject *)
+ NewProxyObject(JSContext *cx, ProxyHandler *handler, const Value &priv,
+                JSObject *proto, JSObject *parent,
+diff -r 0a8cd9e352a8 js/src/jswrapper.cpp
+--- a/js/src/jswrapper.cpp	Thu Jun 14 08:14:53 2012 +0200
++++ b/js/src/jswrapper.cpp	Tue Jul 03 20:50:23 2012 +0900
+@@ -1139,3 +1139,65 @@
+     wrapper->setReservedSlot(JSSLOT_PROXY_EXTRA + 0, NullValue());
+     wrapper->setReservedSlot(JSSLOT_PROXY_EXTRA + 1, NullValue());
+ }
++
++/*
++ * NukeChromeCrossCompartmentWrappersForGlobal reaches into chrome and cuts
++ * all of the cross-compartment wrappers that point to objects parented to
++ * obj's global.  The snag here is that we need to avoid cutting wrappers that
++ * point to the window object on page navigation (inner window destruction)
++ * and only do that on tab close (outer window destruction).  Thus the
++ * option of how to handle the global object.
++ */
++JS_FRIEND_API(JSBool)
++js::NukeChromeCrossCompartmentWrappersForGlobal(JSContext *cx, JSObject *obj,
++                                                js::NukedGlobalHandling nukeGlobal)
++{
++    CHECK_REQUEST(cx);
++
++    JSRuntime *rt = cx->runtime;
++    JSObject *global = &obj->global();
++
++    // Iterate through scopes looking for system cross compartment wrappers
++    // that point to an object that shares a global with obj.
++
++    for (CompartmentsIter c(rt); !c.done(); c.next()) {
++        // Skip non-system compartments because this breaks the web.
++        if (!js::IsSystemCompartment(c))
++            continue;
++
++        // Iterate the wrappers looking for anything interesting.
++        WrapperMap &pmap = c->crossCompartmentWrappers;
++        for (WrapperMap::Enum e(pmap); !e.empty(); e.popFront()) {
++            const Value &k = e.front().key;
++            if (k.isString())
++                continue;
++
++            const Value &v = e.front().value.get();
++            JSObject *wobj = &v.toObject();
++            JSObject *wrapped = UnwrapObject(wobj);
++            if (JSObjectOp op = wrapped->getClass()->ext.innerObject)
++                wrapped = op(cx, wrapped);
++
++            if (nukeGlobal == DontNukeForGlobalObject && wrapped == global)
++                continue;
++
++            if (&wrapped->global() == global) {
++                // We found a wrapper to nuke.
++                e.removeFront();
++
++                SetProxyPrivate(wobj, JSVAL_NULL);
++                SetProxyHandler(wobj, &DeadObjectProxy::singleton);
++
++                if (IsFunctionProxy(wobj)) {
++                    wobj->setReservedSlot(JSSLOT_PROXY_CALL, JSVAL_NULL);
++                    wobj->setReservedSlot(JSSLOT_PROXY_CONSTRUCT, JSVAL_NULL);
++                }
++
++                wobj->setReservedSlot(JSSLOT_PROXY_EXTRA + 0, JSVAL_NULL);
++                wobj->setReservedSlot(JSSLOT_PROXY_EXTRA + 1, JSVAL_NULL);
++            }
++        }
++    }
++
++    return JS_TRUE;
++}
