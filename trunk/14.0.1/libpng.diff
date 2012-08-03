@@ -1,0 +1,2768 @@
+diff -r 58fc5e165c31 media/libpng/CHANGES
+--- a/media/libpng/CHANGES	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/CHANGES	Thu Jul 12 20:46:09 2012 +0900
+@@ -3803,13 +3803,94 @@
+   Removed tests for no-longer-used *_EMPTY_PLTE_SUPPORTED from pngstruct.h
+ 
+ Version 1.5.9rc01 [February 17, 2012]
+-  Fixed CVE-2011-3026 buffer overrun bug.  Deal more correctly with the test
+-    on iCCP chunk length. Also removed spurious casts that may hide problems
+-    on 16-bit systems.
++  Fixed CVE-2011-3026 buffer overrun bug.  This bug was introduced when
++    iCCP chunk support was added at libpng-1.0.6. Deal more correctly with the
++    test on iCCP chunk length. Also removed spurious casts that may hide
++    problems on 16-bit systems.
+ 
+ Version 1.5.9 [February 18, 2012]
+   No changes.
+ 
++Version 1.5.10beta01 [February 24, 2012]
++  Removed two useless #ifdef directives from pngread.c and one from pngrutil.c
++  Always put the CMAKE_LIBRARY in "lib" (removed special WIN32 case).
++  Removed empty vstudio/pngstest directory (Clifford Yapp).
++  Eliminated redundant png_push_read_tEXt|zTXt|iTXt|unknown code from
++    pngpread.c and use the sequential png_handle_tEXt, etc., in pngrutil.c;
++    now that png_ptr->buffer is inaccessible to applications, the special
++    handling is no longer useful.
++  Fixed bug with png_handle_hIST with odd chunk length (Frank Busse).
++  Added PNG_SAFE_LIMITS feature to pnglibconf.dfa and code in pngconf.h
++    to reset the user limits to safe ones if PNG_SAFE_LIMITS is defined.
++    To enable, use "CPPFLAGS=-DPNG_SAFE_LIMITS_SUPPORTED" on the configure
++    command or put "#define PNG_SAFE_LIMITS_SUPPORTED" in pnglibconf.h.
++  Revised the SAFE_LIMITS feature to be the same as the feature in libpng16.
++  Added information about the new limits in the manual.
++
++Version 1.5.10beta02 [February 27, 2012]
++  Updated Makefile.in
++
++Version 1.5.10beta03 [March 6, 2012]
++  Removed unused "current_text" members of png_struct and the png_free()
++    of png_ptr->current_text from pngread.c
++  Added palette-index checking. Issue a png_warning() if an invalid index is
++    found.
++
++Version 1.5.10beta04 [March 10, 2012]
++  Fixed PNG_LIBPNG_BUILD_BASE_TYPE definition.
++  Fixed CMF optimization of non-IDAT compressed chunks, which was added at
++    libpng-1.5.4.  It sometimes produced too small of a window.
++
++Version 1.5.10beta05 [March 10, 2012]
++  Reject all iCCP chunks after the first, even if the first one is invalid.
++  Issue a png_benign_error() instead of png_warning() about bad palette index.
++  Fixed an off-by-one error in the palette index checking function.
++  Revised example.c to put text strings in a temporary character array
++    instead of directly assigning string constants to png_textp members.
++    This avoids compiler warnings when -Wwrite-strings is enabled.
++
++Version 1.5.10 [March 29, 2012]
++  Prevent PNG_EXPAND+PNG_SHIFT doing the shift twice.
++  Revised png_set_text_2() to avoid potential memory corruption (fixes
++    CVE-2011-3048).
++
++Version 1.5.11beta01 [April 28, 2012]
++  Revised scripts/makefile.darwin: use system zlib; remove quotes around
++    architecture list; add missing ppc architecture; add architecture options
++    to shared library link; don't try to create a shared lib based on missing
++    RELEASE variable.
++  Enable png_set_check_for_invalid_index() for both read and write.
++  Removed #ifdef PNG_HANDLE_AS_UNKNOWN_SUPPORTED/#endif in pngpriv.h around
++    declaration of png_handle_unknown().
++  Added -lssp_nonshared in a comment in scripts/makefile.freebsd
++    and changed deprecated NOOBJ and NOPROFILE to NO_OBJ and NO_PROFILE.
++
++Version 1.5.11rc01 [May 23, 2012]
++  No changes.
++
++Version 1.5.11rc02 [May 29, 2012]
++  Fixed some typos in comments.
++  Revised CMakeLists.txt to not attempt to make a symlink under mingw.
++  Added two images to contrib/pngsuite (1-bit and 2-bit transparent grayscale),
++    and renamed three whose names were inconsistent with those in
++    pngsuite/README.txt.
++
++Version 1.5.11rc03 [June 4, 2012]
++  Do not depend upon a GCC feature macro being available for use in generating
++    the linker mapfile symbol prefix.
++  Made fixes for new optimization warnings from gcc 4.7.0. The compiler
++    performed an optimization which is safe but then warned about it.
++    Changing the type of 'palette_number' in pngvalid.c removes the warning.
++
++Version 1.5.11rc04 [June 6, 2012]
++  Improved performance of new do_check_palette_indexes() function.
++
++Version 1.5.11rc05 [June 7, 2012]
++  Don't check palette indexes if num_palette is 0 (as it can be in MNG files).
++
++Version 1.5.11 [June 14, 2012]
++  Include zlib.h in contrib/gregbook and contrib/visupng examples.
++
+ Send comments/corrections/commendations to png-mng-implement at lists.sf.net
+ (subscription required; visit
+ https://lists.sourceforge.net/lists/listinfo/png-mng-implement
+diff -r 58fc5e165c31 media/libpng/LICENSE
+--- a/media/libpng/LICENSE	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/LICENSE	Thu Jul 12 20:46:09 2012 +0900
+@@ -10,8 +10,8 @@
+ 
+ This code is released under the libpng license.
+ 
+-libpng versions 1.2.6, August 15, 2004, through 1.5.9, February 18, 2012, are
+-Copyright (c) 2004, 2006-2011 Glenn Randers-Pehrson, and are
++libpng versions 1.2.6, August 15, 2004, through 1.5.11, June 14, 2012, are
++Copyright (c) 2004, 2006-2012 Glenn Randers-Pehrson, and are
+ distributed according to the same disclaimer and license as libpng-1.2.5
+ with the following individual added to the list of Contributing Authors
+ 
+@@ -108,4 +108,4 @@
+ 
+ Glenn Randers-Pehrson
+ glennrp at users.sourceforge.net
+-February 18, 2012
++June 14, 2012
+diff -r 58fc5e165c31 media/libpng/MOZCHANGES
+--- a/media/libpng/MOZCHANGES	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/MOZCHANGES	Thu Jul 12 20:46:09 2012 +0900
+@@ -1,6 +1,10 @@
+ 
+ Changes made to pristine png source by mozilla.org developers.
+ 
++2012/07/04  -- Synced with libpng-1.5.11 (bug #771394).
++
++2012/04/13  -- Synced with libpng-1.5.10 (bug #745178).
++
+ 2012/02/19  -- Synced with libpng-1.5.9 (bug #648690).
+ 
+ 2011/07/20  -- Synced with libpng-1.4.8 (bug #669863).
+diff -r 58fc5e165c31 media/libpng/Makefile.in
+--- a/media/libpng/Makefile.in	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/Makefile.in	Thu Jul 12 20:46:09 2012 +0900
+@@ -1,39 +1,7 @@
+ #
+-# ***** BEGIN LICENSE BLOCK *****
+-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
+-#
+-# The contents of this file are subject to the Mozilla Public License Version
+-# 1.1 (the "License"); you may not use this file except in compliance with
+-# the License. You may obtain a copy of the License at
+-# http://www.mozilla.org/MPL/
+-#
+-# Software distributed under the License is distributed on an "AS IS" basis,
+-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+-# for the specific language governing rights and limitations under the
+-# License.
+-#
+-# The Original Code is mozilla.org code.
+-#
+-# The Initial Developer of the Original Code is
+-# Netscape Communications Corporation.
+-# Portions created by the Initial Developer are Copyright (C) 1998
+-# the Initial Developer. All Rights Reserved.
+-#
+-# Contributor(s):
+-#
+-# Alternatively, the contents of this file may be used under the terms of
+-# either the GNU General Public License Version 2 or later (the "GPL"), or
+-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+-# in which case the provisions of the GPL or the LGPL are applicable instead
+-# of those above. If you wish to allow use of your version of this file only
+-# under the terms of either the GPL or the LGPL, and not to allow others to
+-# use your version of this file under the terms of the MPL, indicate your
+-# decision by deleting the provisions above and replace them with the notice
+-# and other provisions required by the GPL or the LGPL. If you do not delete
+-# the provisions above, a recipient may use your version of this file under
+-# the terms of any one of the MPL, the GPL or the LGPL.
+-#
+-# ***** END LICENSE BLOCK *****
++# This Source Code Form is subject to the terms of the Mozilla Public
++# License, v. 2.0. If a copy of the MPL was not distributed with this
++# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ 
+ DEPTH		= ../..
+ topsrcdir	= @top_srcdir@
+diff -r 58fc5e165c31 media/libpng/README
+--- a/media/libpng/README	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/README	Thu Jul 12 20:46:09 2012 +0900
+@@ -1,4 +1,4 @@
+-README for libpng version 1.5.9 - February 18, 2012 (shared library 15.0)
++README for libpng version 1.5.11 - June 14, 2012 (shared library 15.0)
+ See the note about version numbers near the top of png.h
+ 
+ See INSTALL for instructions on how to install libpng.
+diff -r 58fc5e165c31 media/libpng/apng.patch
+--- a/media/libpng/apng.patch	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/apng.patch	Thu Jul 12 20:46:09 2012 +0900
+@@ -1,14 +1,14 @@
+ diff -up8 png.h png.h
+---- png.h	2012-02-18 15:31:14 -0500
+-+++ png.h	2012-02-19 16:08:36 -0500
+-@@ -417,24 +417,18 @@
++--- png.h	2012-06-14 07:28:00 -0400
+++++ png.h	2012-07-04 16:27:29 -0400
++@@ -423,24 +423,18 @@
+  /* Careful here.  At one time, Guy wanted to use 082, but that would be octal.
+   * We must not include leading zeros.
+   * Versions 0.7 through 1.0.0 were in the range 0 to 100 here (only
+   * version 1.0.0 was mis-numbered 100 instead of 10000).  From
+   * version 1.0.1 it's    xxyyzz, where x=major, y=minor, z=release
+   */
+- #define PNG_LIBPNG_VER 10509 /* 1.5.9 */
++ #define PNG_LIBPNG_VER 10511 /* 1.5.11 */
+  
+ -/* Library configuration: these options cannot be changed after
+ - * the library has been built.
+@@ -28,7 +28,7 @@
+     *   Standard header files (not needed for the version info or while
+     *   building symbol table -- see scripts/pnglibconf.dfa)
+     */
+-@@ -534,16 +528,27 @@ extern "C" {
++@@ -540,16 +534,27 @@ extern "C" {
+   * Otherwise the calls are mapped to png_error.
+   */
+  
+@@ -51,12 +51,12 @@
+  /* This triggers a compiler error in png.c, if png.c and png.h
+   * do not agree upon the version number.
+   */
+- typedef char* png_libpng_version_1_5_9;
++ typedef char* png_libpng_version_1_5_11;
+  
+  /* Three color definitions.  The order of the red, green, and blue, (and the
+   * exact size) is not important, although the size of the fields need to
+   * be png_byte or png_uint_16 (as defined below).
+-@@ -817,16 +822,20 @@ typedef png_info FAR * FAR * png_infopp;
++@@ -823,16 +828,20 @@ typedef png_info FAR * FAR * png_infopp;
+  #define PNG_INFO_oFFs 0x0100
+  #define PNG_INFO_tIME 0x0200
+  #define PNG_INFO_pCAL 0x0400
+@@ -77,7 +77,7 @@
+  typedef struct png_row_info_struct
+  {
+     png_uint_32 width;    /* width of row */
+-@@ -862,16 +871,20 @@ typedef PNG_CALLBACK(void, *png_flush_pt
++@@ -868,16 +877,20 @@ typedef PNG_CALLBACK(void, *png_flush_pt
+  typedef PNG_CALLBACK(void, *png_read_status_ptr, (png_structp, png_uint_32,
+      int));
+  typedef PNG_CALLBACK(void, *png_write_status_ptr, (png_structp, png_uint_32,
+@@ -98,80 +98,80 @@
+   * then reset to 0 for the next pass.
+   *
+   * Use PNG_ROW_FROM_PASS_ROW(row, pass) and PNG_COL_FROM_PASS_COL(col, pass) to
+-@@ -2632,26 +2645,99 @@ PNG_EXPORT(207, void, png_save_uint_16, 
+-        ((unsigned int)(*((buf) + 1)))))
++@@ -2644,26 +2657,99 @@ PNG_EXPORT(207, void, png_save_uint_16, 
++ #endif
+  
+- #  define png_get_int_32(buf) \
+-      ((png_int_32)((*(buf) & 0x80) \
+-       ? -((png_int_32)((png_get_uint_32(buf) ^ 0xffffffffL) + 1)) \
+-       : (png_int_32)png_get_uint_32(buf)))
++ #if defined(PNG_READ_CHECK_FOR_INVALID_INDEX_SUPPORTED) || \
++     defined(PNG_WRITE_CHECK_FOR_INVALID_INDEX_SUPPORTED)
++ PNG_EXPORT(234, void, png_set_check_for_invalid_index, (png_structp png_ptr,
++     int allowed));
+  #endif
+  
+ +#ifdef PNG_APNG_SUPPORTED
+-+PNG_EXPORT(234, png_uint_32, png_get_acTL, (png_structp png_ptr,
+++PNG_EXPORT(235, png_uint_32, png_get_acTL, (png_structp png_ptr,
+ +   png_infop info_ptr, png_uint_32 *num_frames, png_uint_32 *num_plays));
+ +
+-+PNG_EXPORT(235, png_uint_32, png_set_acTL, (png_structp png_ptr,
+++PNG_EXPORT(236, png_uint_32, png_set_acTL, (png_structp png_ptr,
+ +   png_infop info_ptr, png_uint_32 num_frames, png_uint_32 num_plays));
+ +
+-+PNG_EXPORT(236, png_uint_32, png_get_num_frames, (png_structp png_ptr,
+++PNG_EXPORT(237, png_uint_32, png_get_num_frames, (png_structp png_ptr,
+ +   png_infop info_ptr));
+ +
+-+PNG_EXPORT(237, png_uint_32, png_get_num_plays, (png_structp png_ptr,
+++PNG_EXPORT(238, png_uint_32, png_get_num_plays, (png_structp png_ptr,
+ +   png_infop info_ptr));
+ +
+-+PNG_EXPORT(238, png_uint_32, png_get_next_frame_fcTL,
+++PNG_EXPORT(239, png_uint_32, png_get_next_frame_fcTL,
+ +   (png_structp png_ptr, png_infop info_ptr, png_uint_32 *width,
+ +   png_uint_32 *height, png_uint_32 *x_offset, png_uint_32 *y_offset,
+ +   png_uint_16 *delay_num, png_uint_16 *delay_den, png_byte *dispose_op,
+ +   png_byte *blend_op));
+ +
+-+PNG_EXPORT(239, png_uint_32, png_set_next_frame_fcTL,
+++PNG_EXPORT(240, png_uint_32, png_set_next_frame_fcTL,
+ +   (png_structp png_ptr, png_infop info_ptr, png_uint_32 width,
+ +   png_uint_32 height, png_uint_32 x_offset, png_uint_32 y_offset,
+ +   png_uint_16 delay_num, png_uint_16 delay_den, png_byte dispose_op,
+ +   png_byte blend_op));
+ +
+-+PNG_EXPORT(240, png_uint_32, png_get_next_frame_width,
+++PNG_EXPORT(241, png_uint_32, png_get_next_frame_width,
+ +   (png_structp png_ptr, png_infop info_ptr));
+-+PNG_EXPORT(241, png_uint_32, png_get_next_frame_height,
+++PNG_EXPORT(242, png_uint_32, png_get_next_frame_height,
+ +   (png_structp png_ptr, png_infop info_ptr));
+-+PNG_EXPORT(242, png_uint_32, png_get_next_frame_x_offset,
+++PNG_EXPORT(243, png_uint_32, png_get_next_frame_x_offset,
+ +   (png_structp png_ptr, png_infop info_ptr));
+-+PNG_EXPORT(243, png_uint_32, png_get_next_frame_y_offset,
+++PNG_EXPORT(244, png_uint_32, png_get_next_frame_y_offset,
+ +   (png_structp png_ptr, png_infop info_ptr));
+-+PNG_EXPORT(244, png_uint_16, png_get_next_frame_delay_num,
+++PNG_EXPORT(245, png_uint_16, png_get_next_frame_delay_num,
+ +   (png_structp png_ptr, png_infop info_ptr));
+-+PNG_EXPORT(245, png_uint_16, png_get_next_frame_delay_den,
+++PNG_EXPORT(246, png_uint_16, png_get_next_frame_delay_den,
+ +   (png_structp png_ptr, png_infop info_ptr));
+-+PNG_EXPORT(246, png_byte, png_get_next_frame_dispose_op,
+++PNG_EXPORT(247, png_byte, png_get_next_frame_dispose_op,
+ +   (png_structp png_ptr, png_infop info_ptr));
+-+PNG_EXPORT(247, png_byte, png_get_next_frame_blend_op,
+++PNG_EXPORT(248, png_byte, png_get_next_frame_blend_op,
+ +   (png_structp png_ptr, png_infop info_ptr));
+-+PNG_EXPORT(248, png_byte, png_get_first_frame_is_hidden,
+++PNG_EXPORT(249, png_byte, png_get_first_frame_is_hidden,
+ +   (png_structp png_ptr, png_infop info_ptr));
+-+PNG_EXPORT(249, png_uint_32, png_set_first_frame_is_hidden,
+++PNG_EXPORT(250, png_uint_32, png_set_first_frame_is_hidden,
+ +   (png_structp png_ptr, png_infop info_ptr, png_byte is_hidden));
+ +
+ +#ifdef PNG_READ_APNG_SUPPORTED
+-+PNG_EXPORT(250, void, png_read_frame_head, (png_structp png_ptr,
+++PNG_EXPORT(251, void, png_read_frame_head, (png_structp png_ptr,
+ +   png_infop info_ptr));
+ +#ifdef PNG_PROGRESSIVE_READ_SUPPORTED
+-+PNG_EXPORT(251, void, png_set_progressive_frame_fn, (png_structp png_ptr,
+++PNG_EXPORT(252, void, png_set_progressive_frame_fn, (png_structp png_ptr,
+ +   png_progressive_frame_ptr frame_info_fn,
+ +   png_progressive_frame_ptr frame_end_fn));
+ +#endif /* PNG_PROGRESSIVE_READ_SUPPORTED */
+ +#endif /* PNG_READ_APNG_SUPPORTED */
+ +
+ +#ifdef PNG_WRITE_APNG_SUPPORTED
+-+PNG_EXPORT(252, void, png_write_frame_head, (png_structp png_ptr,
+++PNG_EXPORT(253, void, png_write_frame_head, (png_structp png_ptr,
+ +   png_infop info_ptr, png_bytepp row_pointers,
+ +   png_uint_32 width, png_uint_32 height,
+ +   png_uint_32 x_offset, png_uint_32 y_offset,
+ +   png_uint_16 delay_num, png_uint_16 delay_den, png_byte dispose_op,
+ +   png_byte blend_op));
+ +
+-+PNG_EXPORT(253, void, png_write_frame_tail, (png_structp png_ptr,
+++PNG_EXPORT(254, void, png_write_frame_tail, (png_structp png_ptr,
+ +   png_infop info_ptr));
+ +#endif /* PNG_WRITE_APNG_SUPPORTED */
+ +#endif /* PNG_APNG_SUPPORTED */
+@@ -186,9 +186,9 @@
+   */
+  #ifdef PNG_EXPORT_LAST_ORDINAL
+ +#ifdef PNG_APNG_SUPPORTED
+-+  PNG_EXPORT_LAST_ORDINAL(253);
+++  PNG_EXPORT_LAST_ORDINAL(254);
+ +#else
+-   PNG_EXPORT_LAST_ORDINAL(233);
++   PNG_EXPORT_LAST_ORDINAL(234);
+ +#endif /* PNG_APNG_SUPPORTED */
+  #endif
+  
+@@ -199,8 +199,8 @@
+  #endif /* PNG_VERSION_INFO_ONLY */
+  /* Do not put anything past this line */
+ diff -up8 pngget.c pngget.c
+---- pngget.c	2012-02-18 15:31:14 -0500
+-+++ pngget.c	2012-02-19 16:02:28 -0500
++--- pngget.c	2012-06-14 07:28:00 -0400
+++++ pngget.c	2012-07-04 16:27:29 -0400
+ @@ -1116,9 +1116,171 @@ png_get_io_chunk_type (png_const_structp
+  png_const_bytep PNGAPI
+  png_get_io_chunk_name (png_structp png_ptr)
+@@ -261,7 +261,7 @@
+ +    if (png_ptr != NULL && info_ptr != NULL &&
+ +        (info_ptr->valid & PNG_INFO_fcTL) &&
+ +        width != NULL && height != NULL &&
+-+        x_offset != NULL && x_offset != NULL &&
+++        x_offset != NULL && y_offset != NULL &&
+ +        delay_num != NULL && delay_den != NULL &&
+ +        dispose_op != NULL && blend_op != NULL)
+ +    {
+@@ -374,8 +374,8 @@
+ +#endif /* PNG_APNG_SUPPORTED */
+  #endif /* PNG_READ_SUPPORTED || PNG_WRITE_SUPPORTED */
+ diff -up8 pnginfo.h pnginfo.h
+---- pnginfo.h	2012-02-18 15:31:14 -0500
+-+++ pnginfo.h	2012-02-19 16:02:28 -0500
++--- pnginfo.h	2012-06-14 07:28:00 -0400
+++++ pnginfo.h	2012-07-04 16:27:29 -0400
+ @@ -260,10 +260,23 @@ defined(PNG_READ_BACKGROUND_SUPPORTED)
+  
+  #ifdef PNG_INFO_IMAGE_SUPPORTED
+@@ -401,9 +401,9 @@
+  };
+  #endif /* PNGINFO_H */
+ diff -up8 pngpread.c pngpread.c
+---- pngpread.c	2012-02-18 15:31:14 -0500
+-+++ pngpread.c	2012-02-19 16:02:28 -0500
+-@@ -233,16 +233,119 @@ png_push_read_chunk(png_structp png_ptr,
++--- pngpread.c	2012-06-14 07:28:00 -0400
+++++ pngpread.c	2012-07-04 16:29:59 -0400
++@@ -210,16 +210,119 @@ png_push_read_chunk(png_structp png_ptr,
+        png_crc_read(png_ptr, chunk_tag, 4);
+        png_ptr->chunk_name = PNG_CHUNK_FROM_STRING(chunk_tag);
+        png_check_chunk_name(png_ptr, png_ptr->chunk_name);
+@@ -523,7 +523,7 @@
+         *
+         * TODO: there must be a better way of doing this.
+         */
+-@@ -336,16 +439,20 @@ png_push_read_chunk(png_structp png_ptr,
++@@ -313,16 +416,20 @@ png_push_read_chunk(png_structp png_ptr,
+           if (!(png_ptr->mode & PNG_HAVE_CHUNK_AFTER_IDAT))
+              if (png_ptr->push_length == 0)
+                 return;
+@@ -544,16 +544,15 @@
+            (uInt) PNG_ROWBYTES(png_ptr->pixel_depth,
+            png_ptr->iwidth) + 1;
+        png_ptr->zstream.next_out = png_ptr->row_buf;
+-@@ -568,16 +675,39 @@ png_push_read_chunk(png_structp png_ptr,
+-          png_push_save_buffer(png_ptr);
++@@ -546,16 +653,38 @@ png_push_read_chunk(png_structp png_ptr,
+           return;
+        }
+  
+-       png_push_handle_iTXt(png_ptr, info_ptr, png_ptr->push_length);
++       png_handle_iTXt(png_ptr, info_ptr, png_ptr->push_length);
+     }
+  
+  #endif
+-+
++ 
+ +#ifdef PNG_READ_APNG_SUPPORTED
+ +   else if (chunk_name == png_acTL)
+ +   {
+@@ -583,8 +582,8 @@
+           png_push_save_buffer(png_ptr);
+           return;
+        }
+-       png_push_handle_unknown(png_ptr, info_ptr, png_ptr->push_length);
+-@@ -767,40 +897,91 @@ void /* PRIVATE */
++       png_handle_unknown(png_ptr, info_ptr, png_ptr->push_length);
++@@ -753,40 +882,91 @@ void /* PRIVATE */
+  png_push_read_IDAT(png_structp png_ptr)
+  {
+     if (!(png_ptr->mode & PNG_HAVE_CHUNK_HEADER))
+@@ -676,7 +675,7 @@
+        png_uint_32 idat_size = png_ptr->idat_size;
+  
+        /* We want the smaller of 'idat_size' and 'current_buffer_size', but they
+-@@ -1827,16 +2008,27 @@ png_set_progressive_read_fn(png_structp 
++@@ -1299,16 +1479,27 @@ png_set_progressive_read_fn(png_structp 
+  
+     png_ptr->info_fn = info_fn;
+     png_ptr->row_fn = row_fn;
+@@ -705,10 +704,9 @@
+     return png_ptr->io_ptr;
+  }
+ diff -up8 pngpriv.h pngpriv.h
+---- pngpriv.h	2012-02-18 15:31:14 -0500
+-+++ pngpriv.h	2012-02-19 16:02:28 -0500
+-@@ -421,16 +421,20 @@ typedef PNG_CONST png_uint_16p FAR * png
+- #define PNG_HAVE_cHRM               0x40
++--- pngpriv.h	2012-06-14 07:28:00 -0400
+++++ pngpriv.h	2012-07-04 16:27:29 -0400
++@@ -462,16 +462,20 @@ typedef PNG_CONST png_uint_16p FAR * png
+  #define PNG_HAVE_sRGB               0x80
+  #define PNG_HAVE_CHUNK_HEADER      0x100
+  #define PNG_WROTE_tIME             0x200
+@@ -716,9 +714,10 @@
+  #define PNG_BACKGROUND_IS_GRAY     0x800
+  #define PNG_HAVE_PNG_SIGNATURE    0x1000
+  #define PNG_HAVE_CHUNK_AFTER_IDAT 0x2000 /* Have another chunk after IDAT */
++ #define PNG_HAVE_iCCP             0x4000
+ +#ifdef PNG_APNG_SUPPORTED
+-+#define PNG_HAVE_acTL             0x4000
+-+#define PNG_HAVE_fcTL             0x8000
+++#define PNG_HAVE_acTL             0x8000
+++#define PNG_HAVE_fcTL            0x10000
+ +#endif
+  
+  /* Flags for the transformations the PNG library does on the image data */
+@@ -728,7 +727,7 @@
+  #define PNG_SHIFT               0x0008
+  #define PNG_SWAP_BYTES          0x0010
+  #define PNG_INVERT_MONO         0x0020
+-@@ -616,16 +620,25 @@ PNG_EXTERN png_fixed_point png_fixed PNG
++@@ -657,16 +661,25 @@ PNG_EXTERN png_fixed_point png_fixed PNG
+  #define png_sPLT PNG_CHUNK(115,  80,  76,  84)
+  #define png_sRGB PNG_CHUNK(115,  82,  71,  66)
+  #define png_sTER PNG_CHUNK(115,  84,  69,  82)
+@@ -754,7 +753,7 @@
+  
+  /* This uses (char), not (png_byte) to avoid warnings on systems where (char) is
+   * signed and the argument is a (char[])  This macro will fail miserably on
+-@@ -1299,16 +1312,55 @@ PNG_EXTERN void png_push_read_iTXt PNGAR
++@@ -1338,16 +1351,55 @@ PNG_EXTERN void png_push_read_iTXt PNGAR
+  
+  #ifdef PNG_MNG_FEATURES_SUPPORTED
+  PNG_EXTERN void png_do_read_intrapixel PNGARG((png_row_infop row_info,
+@@ -811,9 +810,9 @@
+      png_fixed_point int_blue_y));
+  #endif
+ diff -up8 pngread.c pngread.c
+---- pngread.c	2012-02-18 15:31:14 -0500
+-+++ pngread.c	2012-02-19 16:03:41 -0500
+-@@ -239,16 +239,19 @@ png_read_info(png_structp png_ptr, png_i
++--- pngread.c	2012-06-14 07:28:00 -0400
+++++ pngread.c	2012-07-04 16:27:29 -0400
++@@ -235,16 +235,19 @@ png_read_info(png_structp png_ptr, png_i
+        {
+           if (!(png_ptr->mode & PNG_HAVE_IHDR))
+              png_error(png_ptr, "Missing IHDR before IDAT");
+@@ -833,7 +832,7 @@
+  #ifdef PNG_READ_bKGD_SUPPORTED
+        else if (chunk_name == png_bKGD)
+           png_handle_bKGD(png_ptr, info_ptr, length);
+-@@ -329,22 +332,100 @@ png_read_info(png_structp png_ptr, png_i
++@@ -325,22 +328,100 @@ png_read_info(png_structp png_ptr, png_i
+           png_handle_zTXt(png_ptr, info_ptr, length);
+  #endif
+  
+@@ -934,7 +933,7 @@
+  
+     if (png_ptr == NULL)
+        return;
+-@@ -536,24 +617,57 @@ png_read_row(png_structp png_ptr, png_by
++@@ -532,24 +613,57 @@ png_read_row(png_structp png_ptr, png_by
+     png_ptr->zstream.avail_out =
+         (uInt)(PNG_ROWBYTES(png_ptr->pixel_depth,
+         png_ptr->iwidth) + 1);
+@@ -992,7 +991,7 @@
+               (png_size_t)png_ptr->zstream.avail_in);
+           png_ptr->idat_size -= png_ptr->zstream.avail_in;
+        }
+-@@ -562,16 +676,19 @@ png_read_row(png_structp png_ptr, png_by
++@@ -558,16 +672,19 @@ png_read_row(png_structp png_ptr, png_by
+  
+        if (ret == Z_STREAM_END)
+        {
+@@ -1012,7 +1011,7 @@
+               "Decompression error");
+  
+     } while (png_ptr->zstream.avail_out);
+-@@ -924,16 +1041,25 @@ png_read_end(png_structp png_ptr, png_in
++@@ -927,16 +1044,25 @@ png_read_end(png_structp png_ptr, png_in
+           png_handle_zTXt(png_ptr, info_ptr, length);
+  #endif
+  
+@@ -1039,9 +1038,9 @@
+  /* Free all memory used by the read */
+  void PNGAPI
+ diff -up8 pngrutil.c pngrutil.c
+---- pngrutil.c	2012-02-18 15:31:14 -0500
+-+++ pngrutil.c	2012-02-19 16:02:28 -0500
+-@@ -544,16 +544,21 @@ png_handle_IHDR(png_structp png_ptr, png
++--- pngrutil.c	2012-06-14 07:28:00 -0400
+++++ pngrutil.c	2012-07-04 16:27:29 -0400
++@@ -542,16 +542,21 @@ png_handle_IHDR(png_structp png_ptr, png
+     width = png_get_uint_31(png_ptr, buf);
+     height = png_get_uint_31(png_ptr, buf + 4);
+     bit_depth = buf[8];
+@@ -1063,7 +1062,7 @@
+     png_ptr->color_type = (png_byte)color_type;
+  #ifdef PNG_MNG_FEATURES_SUPPORTED
+     png_ptr->filter_type = (png_byte)filter_type;
+-@@ -2608,16 +2613,189 @@ png_handle_iTXt(png_structp png_ptr, png
++@@ -2609,16 +2614,189 @@ png_handle_iTXt(png_structp png_ptr, png
+     png_free(png_ptr, png_ptr->chunkdata);
+     png_ptr->chunkdata = NULL;
+  
+@@ -1253,7 +1252,7 @@
+   */
+  void /* PRIVATE */
+  png_handle_unknown(png_structp png_ptr, png_infop info_ptr, png_uint_32 length)
+-@@ -4150,9 +4328,86 @@ defined(PNG_USER_TRANSFORM_PTR_SUPPORTED
++@@ -4151,9 +4329,86 @@ defined(PNG_USER_TRANSFORM_PTR_SUPPORTED
+     png_debug1(3, "iwidth = %u,", png_ptr->iwidth);
+     png_debug1(3, "num_rows = %u,", png_ptr->num_rows);
+     png_debug1(3, "rowbytes = %lu,", (unsigned long)png_ptr->rowbytes);
+@@ -1341,8 +1340,8 @@
+ +#endif /* PNG_READ_APNG_SUPPORTED */
+  #endif /* PNG_READ_SUPPORTED */
+ diff -up8 pngset.c pngset.c
+---- pngset.c	2012-02-18 15:31:14 -0500
+-+++ pngset.c	2012-02-19 16:02:28 -0500
++--- pngset.c	2012-06-14 07:28:00 -0400
+++++ pngset.c	2012-07-04 16:27:29 -0400
+ @@ -257,16 +257,21 @@ png_set_IHDR(png_structp png_ptr, png_in
+         (PNG_UINT_32_MAX >> 3)      /* 8-byte RRGGBBAA pixels */
+         - 48       /* bigrowbuf hack */
+@@ -1365,7 +1364,7 @@
+      png_int_32 offset_x, png_int_32 offset_y, int unit_type)
+  {
+     png_debug1(1, "in %s storage function", "oFFs");
+-@@ -1008,16 +1013,157 @@ png_set_sPLT(png_structp png_ptr,
++@@ -1017,16 +1022,157 @@ png_set_sPLT(png_structp png_ptr,
+  
+     info_ptr->splt_palettes = np;
+     info_ptr->splt_palettes_num += nentries;
+@@ -1524,8 +1523,8 @@
+     int i;
+  
+ diff -up8 pngstruct.h pngstruct.h
+---- pngstruct.h	2012-02-18 15:31:14 -0500
+-+++ pngstruct.h	2012-02-19 16:02:28 -0500
++--- pngstruct.h	2012-06-14 07:28:00 -0400
+++++ pngstruct.h	2012-07-04 16:27:29 -0400
+ @@ -288,16 +288,37 @@ struct png_struct_def
+     png_uint_32 mng_features_permitted;
+  #endif
+@@ -1565,8 +1564,8 @@
+     png_free_ptr free_fn;          /* function for freeing memory */
+  #endif
+ diff -up8 pngwrite.c pngwrite.c
+---- pngwrite.c	2012-02-18 15:31:14 -0500
+-+++ pngwrite.c	2012-02-19 16:02:28 -0500
++--- pngwrite.c	2012-06-14 07:28:00 -0400
+++++ pngwrite.c	2012-07-04 16:27:29 -0400
+ @@ -53,16 +53,20 @@ png_write_info_before_PLTE(png_structp p
+  #ifdef PNG_WRITE_INTERLACING_SUPPORTED
+         info_ptr->interlace_type);
+@@ -1588,15 +1587,16 @@
+     if (info_ptr->valid & PNG_INFO_sRGB)
+        png_write_sRGB(png_ptr, (int)info_ptr->srgb_intent);
+  #endif
+-@@ -300,16 +304,21 @@ png_write_end(png_structp png_ptr, png_i
+-    png_debug(1, "in png_write_end");
+- 
+-    if (png_ptr == NULL)
+-       return;
+- 
++@@ -305,16 +309,22 @@ png_write_end(png_structp png_ptr, png_i
+     if (!(png_ptr->mode & PNG_HAVE_IDAT))
+        png_error(png_ptr, "No IDATs written into file");
+  
++ #ifdef PNG_WRITE_CHECK_FOR_INVALID_INDEX_SUPPORTED
++    if (png_ptr->num_palette_max > png_ptr->num_palette)
++       png_benign_error(png_ptr, "Wrote palette index exceeding num_palette");
++ #endif
++ 
+++    /* See if user wants us to write information chunks */
+ +#ifdef PNG_WRITE_APNG_SUPPORTED
+ +   if (png_ptr->num_frames_written != png_ptr->num_frames_to_write)
+ +      png_error(png_ptr, "Not enough frames written");
+@@ -1610,7 +1610,7 @@
+  #endif
+  #ifdef PNG_WRITE_tIME_SUPPORTED
+        /* Check to see if user has supplied a time chunk */
+-@@ -1647,9 +1656,47 @@ png_write_png(png_structp png_ptr, png_i
++@@ -1660,9 +1670,47 @@ png_write_png(png_structp png_ptr, png_i
+  
+     /* It is REQUIRED to call this to finish writing the rest of the file */
+     png_write_end(png_ptr, info_ptr);
+@@ -1659,9 +1659,9 @@
+ +#endif /* PNG_WRITE_APNG_SUPPORTED */
+  #endif /* PNG_WRITE_SUPPORTED */
+ diff -up8 pngwutil.c pngwutil.c
+---- pngwutil.c	2012-02-18 15:31:14 -0500
+-+++ pngwutil.c	2012-02-19 16:02:28 -0500
+-@@ -815,16 +815,21 @@ png_write_IHDR(png_structp png_ptr, png_
++--- pngwutil.c	2012-06-14 07:28:00 -0400
+++++ pngwutil.c	2012-07-04 16:27:29 -0400
++@@ -816,16 +816,21 @@ png_write_IHDR(png_structp png_ptr, png_
+     buf[9] = (png_byte)color_type;
+     buf[10] = (png_byte)compression_type;
+     buf[11] = (png_byte)filter_type;
+@@ -1683,7 +1683,7 @@
+     if (!(png_ptr->do_filter))
+     {
+        if (png_ptr->color_type == PNG_COLOR_TYPE_PALETTE ||
+-@@ -1029,17 +1034,38 @@ png_write_IDAT(png_structp png_ptr, png_
++@@ -1030,17 +1035,38 @@ png_write_IDAT(png_structp png_ptr, png_
+        }
+  
+        else
+@@ -1722,7 +1722,7 @@
+      */
+     png_ptr->zstream.next_out = png_ptr->zbuf;
+     png_ptr->zstream.avail_out = (uInt)png_ptr->zbuf_size;
+-@@ -1993,16 +2019,74 @@ png_write_tIME(png_structp png_ptr, png_
++@@ -1992,16 +2018,74 @@ png_write_tIME(png_structp png_ptr, png_
+     buf[4] = mod_time->hour;
+     buf[5] = mod_time->minute;
+     buf[6] = mod_time->second;
+@@ -1797,7 +1797,7 @@
+     /* Arrays to facilitate easy interlacing - use pass (0 - 6) as index */
+  
+     /* Start of interlace block */
+-@@ -3172,9 +3256,44 @@ png_write_filtered_row(png_structp png_p
++@@ -3171,9 +3255,44 @@ png_write_filtered_row(png_structp png_p
+  
+     if (png_ptr->flush_dist > 0 &&
+         png_ptr->flush_rows >= png_ptr->flush_dist)
+diff -r 58fc5e165c31 media/libpng/libpng.txt
+--- a/media/libpng/libpng.txt	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/libpng.txt	Thu Jul 12 20:46:09 2012 +0900
+@@ -1,6 +1,6 @@
+-libpng-manual.txt - A description on how to use and modify libpng
+-
+- libpng version 1.5.9 - February 18, 2012
++Libpng-manual.txt - A description on how to use and modify libpng
++
++ libpng version 1.5.11 - June 14, 2012
+  Updated and distributed by Glenn Randers-Pehrson
+  <glennrp at users.sourceforge.net>
+  Copyright (c) 1998-2011 Glenn Randers-Pehrson
+@@ -11,7 +11,7 @@
+ 
+  Based on:
+ 
+- libpng versions 0.97, January 1998, through 1.5.9 - February 18, 2012
++ libpng versions 0.97, January 1998, through 1.5.11 - June 14, 2012
+  Updated and distributed by Glenn Randers-Pehrson
+  Copyright (c) 1998-2011 Glenn Randers-Pehrson
+ 
+@@ -141,8 +141,8 @@
+ to integers of particular sizes and types for passing color values.
+ 
+ One exception is how non-integral numbers are handled.  For application
+-convenience most APIs that take such numbers have C (double) arguments,
+-however internally PNG, and libpng, use 32 bit signed integers and encode
++convenience most APIs that take such numbers have C (double) arguments;
++however, internally PNG, and libpng, use 32 bit signed integers and encode
+ the value by multiplying by 100,000.  As of libpng 1.5.0 a convenience
+ macro PNG_FP_1 is defined in png.h along with a type (png_fixed_point)
+ which is simply (png_int_32).
+@@ -799,7 +799,7 @@
+ will still have linear components.
+ 
+ Use this format if you have control over your
+-compositing software and do don't do other arithmetic
++compositing software and so don't do other arithmetic
+ (such as scaling) on the data you get from libpng.  Your
+ compositing software can simply copy opaque pixels to
+ the output but still has linear values for the
+@@ -1130,6 +1130,11 @@
+ png_get_<chunk> are set directly if they are simple data types, or a
+ pointer into the info_ptr is returned for any complex types.
+ 
++The colorspace data from gAMA, cHRM, sRGB, iCCP, and sBIT chunks
++is simply returned to give the application information about how the
++image was encoded.  Libpng itself only does transformations using the file
++gamma when combining semitransparent pixels with the background color.
++
+     png_get_PLTE(png_ptr, info_ptr, &palette,
+                      &num_palette);
+ 
+@@ -1141,7 +1146,7 @@
+     png_get_gAMA(png_ptr, info_ptr, &file_gamma);
+     png_get_gAMA_fixed(png_ptr, info_ptr, &int_file_gamma);
+ 
+-    file_gamma     - the gamma at which the file is
++    file_gamma     - the gamma at which the file was
+                      written (PNG_INFO_gAMA)
+ 
+     int_file_gamma - 100,000 times the gamma at which the
+@@ -1733,7 +1738,7 @@
+ need to tell libpng how the color is represented, both the format of the
+ component values in the color (the number of bits) and the gamma encoding of the
+ color.  The function takes two arguments, background_gamma_mode and need_expand
+-to convey this information, however only two combinations are likely to be
++to convey this information; however, only two combinations are likely to be
+ useful:
+ 
+     png_color_16 my_background;
+@@ -2027,7 +2032,7 @@
+ 
+ If you don't want libpng to handle the interlacing details, just call
+ png_read_rows() PNG_INTERLACE_ADAM7_PASSES times to read in all the images.
+-Each of the images is a valid image by itself, however you will almost
++Each of the images is a valid image by itself; however, you will almost
+ certainly need to distribute the pixels from each sub-image to the
+ correct place.  This is where everything gets very tricky.
+ 
+@@ -3685,7 +3690,7 @@
+ compressed chunks such as zTXt, iTXt, and iCCP:
+ 
+     #include zlib.h
+-    #if PNG_LIBPNG_VER <= 10504
++    #if PNG_LIBPNG_VER >= 10504
+     png_set_text_compression_level(png_ptr, level);
+ 
+     png_set_text_compression_mem_level(png_ptr, level);
+@@ -4142,10 +4147,20 @@
+ From libpng-1.4.0 until 1.4.4, the png_get_uint_16 macro (but not the
+ function) incorrectly returned a value of type png_uint_32.
+ 
++Checking for invalid palette index on read or write was added at libpng
++1.5.10.  When an invalid index is found, libpng issues a benign error.
++This is enabled by default but can be disabled in each png_ptr with
++
++   png_set_check_for_invalid_index(png_ptr, allowed);
++
++      allowed  - one of
++                 0: disable
++                 1: enable
++
+ A. Changes that affect users of libpng
+ 
+ There are no substantial API changes between the non-deprecated parts of
+-the 1.4.5 API and the 1.5.0 API, however the ability to directly access
++the 1.4.5 API and the 1.5.0 API; however, the ability to directly access
+ the main libpng control structures, png_struct and png_info, deprecated
+ in earlier versions of libpng, has been completely removed from
+ libpng 1.5.
+@@ -4260,16 +4275,30 @@
+ that it could be used to override them.  Now this function will reduce or
+ increase the limits.
+ 
++Starting in libpng-1.5.10, the user limits can be set en masse with the
++configuration option PNG_SAFE_LIMITS_SUPPORTED.  If this option is enabled,
++a set of "safe" limits is applied in pngpriv.h.  These can be overridden by
++application calls to png_set_user_limits(), png_set_user_chunk_cache_max(),
++and/or png_set_user_malloc_max() that increase or decrease the limits.  Also,
++in libpng-1.5.10 the default width and height limits were increased
++from 1,000,000 to 0x7ffffff (i.e., made unlimited).  Therefore, the
++limits are now
++                               default      safe
++   png_user_width_max        0x7fffffff    1,000,000
++   png_user_height_max       0x7fffffff    1,000,000
++   png_user_chunk_cache_max  0 (unlimited)   128
++   png_user_chunk_malloc_max 0 (unlimited) 8,000,000
++
+ B. Changes to the build and configuration of libpng
+ 
+ Details of internal changes to the library code can be found in the CHANGES
+ file and in the GIT repository logs.  These will be of no concern to the vast
+-majority of library users or builders, however the few who configure libpng
++majority of library users or builders; however, the few who configure libpng
+ to a non-default feature set may need to change how this is done.
+ 
+ There should be no need for library builders to alter build scripts if
+ these use the distributed build support - configure or the makefiles -
+-however users of the makefiles may care to update their build scripts
++however, users of the makefiles may care to update their build scripts
+ to build pnglibconf.h where the corresponding makefile does not do so.
+ 
+ Building libpng with a non-default configuration has changed completely.
+@@ -4375,7 +4404,7 @@
+ PNG_FLOATING_ARITHMETIC_SUPPORTED chooses between the internal floating
+ point implementation or the fixed point one.  Typically the fixed point
+ implementation is larger and slower than the floating point implementation
+-on a system that supports floating point, however it may be faster on a
++on a system that supports floating point; however, it may be faster on a
+ system which lacks floating point hardware and therefore uses a software
+ emulation.
+ 
+@@ -4404,7 +4433,7 @@
+ build of pnglibconf.h and it is never included in an application build.
+ 
+ The rarely used alternative of adding a list of feature macros to the
+-CFLAGS setting in the build also still works, however the macros will be
++CFLAGS setting in the build also still works; however, the macros will be
+ copied to pnglibconf.h and this may produce macro redefinition warnings
+ when the individual C files are compiled.
+ 
+@@ -4545,8 +4574,8 @@
+   /* Maintainer: Put new private prototypes here ^ and in libpngpf.3 */
+ 
+ To avoid polluting the global namespace, the names of all exported
+-functions and variables begin with  "png_", and all publicly visible C
+-preprocessor macros begin with "PNG_".  We request that applications that
++functions and variables begin with "png_", and all publicly visible C
++preprocessor macros begin with "PNG".  We request that applications that
+ use libpng *not* begin any of their own symbols with either of these strings.
+ 
+ We put a space after each comma and after each semicolon
+@@ -4573,25 +4602,25 @@
+ 
+ XIV. Y2K Compliance in libpng
+ 
+-February 18, 2012
++June 14, 2012
+ 
+ Since the PNG Development group is an ad-hoc body, we can't make
+ an official declaration.
+ 
+ This is your unofficial assurance that libpng from version 0.71 and
+-upward through 1.5.9 are Y2K compliant.  It is my belief that earlier
++upward through 1.5.11 are Y2K compliant.  It is my belief that earlier
+ versions were also Y2K compliant.
+ 
+-Libpng only has three year fields.  One is a 2-byte unsigned integer that
+-will hold years up to 65535.  The other two hold the date in text
++Libpng only has two year fields.  One is a 2-byte unsigned integer that
++will hold years up to 65535.  The other holds the date in text
+ format, and will hold years up to 9999.
+ 
+ The integer is
+     "png_uint_16 year" in png_time_struct.
+ 
+-The strings are
+-    "png_charp time_buffer" in png_struct and
+-    "near_time_buffer", which is a local character string in png.c.
++The string is
++    "char time_buffer[29]" in png_struct.  This will no
++longer be used in libpng-1.6.x and will be removed from libpng-1.7.0.
+ 
+ There are seven time-related functions:
+ 
+diff -r 58fc5e165c31 media/libpng/mozpngconf.h
+--- a/media/libpng/mozpngconf.h	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/mozpngconf.h	Thu Jul 12 20:46:09 2012 +0900
+@@ -1,40 +1,6 @@
+-/* ***** BEGIN LICENSE BLOCK *****
+- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+- *
+- * The contents of this file are subject to the Mozilla Public License Version
+- * 1.1 (the "License"); you may not use this file except in compliance with
+- * the License. You may obtain a copy of the License at
+- * http://www.mozilla.org/MPL/
+- *
+- * Software distributed under the License is distributed on an "AS IS" basis,
+- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+- * for the specific language governing rights and limitations under the
+- * License.
+- *
+- * The Original Code is mozilla libpng configuration.
+- *
+- * The Initial Developer of the Original Code is
+- * Tim Rowley.
+- * Portions created by the Initial Developer are Copyright (C) 2003
+- * the Initial Developer. All Rights Reserved.
+- *
+- * Contributor(s): Tim Rowley <tor@cs.brown.edu>
+- *                 Glenn Randers-Pehrson <glennrp@gmail.com>
+- *                 Max Stepin <maxstepin@gmail.com>
+- *
+- * Alternatively, the contents of this file may be used under the terms of
+- * either the GNU General Public License Version 2 or later (the "GPL"), or
+- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+- * in which case the provisions of the GPL or the LGPL are applicable instead
+- * of those above. If you wish to allow use of your version of this file only
+- * under the terms of either the GPL or the LGPL, and not to allow others to
+- * use your version of this file under the terms of the MPL, indicate your
+- * decision by deleting the provisions above and replace them with the notice
+- * and other provisions required by the GPL or the LGPL. If you do not delete
+- * the provisions above, a recipient may use your version of this file under
+- * the terms of any one of the MPL, the GPL or the LGPL.
+- *
+- * ***** END LICENSE BLOCK ***** */
++/* This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this
++ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+ 
+ #ifndef MOZPNGCONF_H
+ #define MOZPNGCONF_H
+diff -r 58fc5e165c31 media/libpng/png.c
+--- a/media/libpng/png.c	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/png.c	Thu Jul 12 20:46:09 2012 +0900
+@@ -1,8 +1,8 @@
+ 
+ /* png.c - location for general purpose libpng functions
+  *
+- * Last changed in libpng 1.5.7 [December 15, 2011]
+- * Copyright (c) 1998-2011 Glenn Randers-Pehrson
++ * Last changed in libpng 1.5.11 [June 14, 2012]
++ * Copyright (c) 1998-2012 Glenn Randers-Pehrson
+  * (Version 0.96 Copyright (c) 1996, 1997 Andreas Dilger)
+  * (Version 0.88 Copyright (c) 1995, 1996 Guy Eric Schalnat, Group 42, Inc.)
+  *
+@@ -14,7 +14,7 @@
+ #include "pngpriv.h"
+ 
+ /* Generate a compiler error if there is an old png.h in the search path. */
+-typedef png_libpng_version_1_5_9 Your_png_h_is_not_version_1_5_9;
++typedef png_libpng_version_1_5_11 Your_png_h_is_not_version_1_5_11;
+ 
+ /* Tells libpng that we have already handled the first "num_bytes" bytes
+  * of the PNG file signature.  If the PNG data is embedded into another
+@@ -655,14 +655,14 @@
+ #else
+ #  ifdef __STDC__
+    return PNG_STRING_NEWLINE \
+-     "libpng version 1.5.9 - February 18, 2012" PNG_STRING_NEWLINE \
+-     "Copyright (c) 1998-2011 Glenn Randers-Pehrson" PNG_STRING_NEWLINE \
++     "libpng version 1.5.11 - June 14, 2012" PNG_STRING_NEWLINE \
++     "Copyright (c) 1998-2012 Glenn Randers-Pehrson" PNG_STRING_NEWLINE \
+      "Copyright (c) 1996-1997 Andreas Dilger" PNG_STRING_NEWLINE \
+      "Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc." \
+      PNG_STRING_NEWLINE;
+ #  else
+-      return "libpng version 1.5.9 - February 18, 2012\
+-      Copyright (c) 1998-2011 Glenn Randers-Pehrson\
++      return "libpng version 1.5.11 - June 14, 2012\
++      Copyright (c) 1998-2012 Glenn Randers-Pehrson\
+       Copyright (c) 1996-1997 Andreas Dilger\
+       Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.";
+ #  endif
+@@ -969,8 +969,8 @@
+     * and it is certain that it becomes unstable where the end points are close
+     * together.
+     *
+-    * So this code uses the perhaps slighly less optimal but more understandable
+-    * and totally obvious approach of calculating color-scale.
++    * So this code uses the perhaps slightly less optimal but more
++    * understandable and totally obvious approach of calculating color-scale.
+     *
+     * This algorithm depends on the precision in white-scale and that is
+     * (1/white-y), so we can immediately see that as white-y approaches 0 the
+@@ -1467,7 +1467,7 @@
+ png_pow10(int power)
+ {
+    int recip = 0;
+-   double d = 1;
++   double d = 1.0;
+ 
+    /* Handle negative exponent with a reciprocal at the end because
+     * 10 is exact whereas .1 is inexact in base 2
+@@ -1481,7 +1481,7 @@
+    if (power > 0)
+    {
+       /* Decompose power bitwise. */
+-      double mult = 10;
++      double mult = 10.0;
+       do
+       {
+          if (power & 1) d *= mult;
+@@ -1600,7 +1600,8 @@
+             {
+                double d;
+ 
+-               fp *= 10;
++               fp *= 10.0;
++
+                /* Use modf here, not floor and subtract, so that
+                 * the separation is done in one step.  At the end
+                 * of the loop don't break the number into parts so
+@@ -1613,7 +1614,7 @@
+                {
+                   d = floor(fp + .5);
+ 
+-                  if (d > 9)
++                  if (d > 9.0)
+                   {
+                      /* Rounding up to 10, handle that here. */
+                      if (czero > 0)
+@@ -1621,9 +1622,10 @@
+                         --czero, d = 1;
+                         if (cdigits == 0) --clead;
+                      }
++
+                      else
+                      {
+-                        while (cdigits > 0 && d > 9)
++                        while (cdigits > 0 && d > 9.0)
+                         {
+                            int ch = *--ascii;
+ 
+@@ -1648,7 +1650,7 @@
+                          * exponent but take into account the leading
+                          * decimal point.
+                          */
+-                        if (d > 9)  /* cdigits == 0 */
++                        if (d > 9.0)  /* cdigits == 0 */
+                         {
+                            if (exp_b10 == (-1))
+                            {
+@@ -1669,18 +1671,19 @@
+                               ++exp_b10;
+ 
+                            /* In all cases we output a '1' */
+-                           d = 1;
++                           d = 1.0;
+                         }
+                      }
+                   }
+                   fp = 0; /* Guarantees termination below. */
+                }
+ 
+-               if (d == 0)
++               if (d == 0.0)
+                {
+                   ++czero;
+                   if (cdigits == 0) ++clead;
+                }
++
+                else
+                {
+                   /* Included embedded zeros in the digit count. */
+@@ -1708,6 +1711,7 @@
+                                                                  above */
+                      --exp_b10;
+                   }
++
+                   *ascii++ = (char)(48 + (int)d), ++cdigits;
+                }
+             }
+@@ -2040,7 +2044,7 @@
+ }
+ #endif
+ 
+-#ifdef PNG_READ_GAMMA_SUPPORTED /* more fixed point functions for gammma */
++#ifdef PNG_READ_GAMMA_SUPPORTED /* more fixed point functions for gamma */
+ /* Calculate a reciprocal, return 0 on div-by-zero or overflow. */
+ png_fixed_point
+ png_reciprocal(png_fixed_point a)
+diff -r 58fc5e165c31 media/libpng/png.h
+--- a/media/libpng/png.h	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/png.h	Thu Jul 12 20:46:09 2012 +0900
+@@ -1,7 +1,7 @@
+ 
+ /* png.h - header file for PNG reference library
+  *
+- * libpng version 1.5.9 - February 18, 2012
++ * libpng version 1.5.11 - June 14, 2012
+  * Copyright (c) 1998-2012 Glenn Randers-Pehrson
+  * (Version 0.96 Copyright (c) 1996, 1997 Andreas Dilger)
+  * (Version 0.88 Copyright (c) 1995, 1996 Guy Eric Schalnat, Group 42, Inc.)
+@@ -11,7 +11,7 @@
+  * Authors and maintainers:
+  *   libpng versions 0.71, May 1995, through 0.88, January 1996: Guy Schalnat
+  *   libpng versions 0.89c, June 1996, through 0.96, May 1997: Andreas Dilger
+- *   libpng versions 0.97, January 1998, through 1.5.9 - February 18, 2012: Glenn
++ *   libpng versions 0.97, January 1998, through 1.5.11 - June 14, 2012: Glenn
+  *   See also "Contributing Authors", below.
+  *
+  * Note about libpng version numbers:
+@@ -172,6 +172,12 @@
+  *    1.5.9beta01-02          15    10509  15.so.15.9[.0]
+  *    1.5.9rc01               15    10509  15.so.15.9[.0]
+  *    1.5.9                   15    10509  15.so.15.9[.0]
++ *    1.5.10beta01-05         15    10510  15.so.15.10[.0]
++ *    1.5.10                  15    10510  15.so.15.10[.0]
++ *    1.5.11beta01            15    10511  15.so.15.11[.0]
++ *    1.5.11rc01-05           15    10511  15.so.15.11[.0]
++ *    1.5.11                  15    10511  15.so.15.11[.0]
++ *    1.5.12                  15    10512  15.so.15.12[.0]
+  *
+  *   Henceforth the source version will match the shared-library major
+  *   and minor numbers; the shared-library major version number will be
+@@ -181,7 +187,7 @@
+  *   to the source version x.y.z (leading zeros in y and z).  Beta versions
+  *   were given the previous public release number plus a letter, until
+  *   version 1.0.6j; from then on they were given the upcoming public
+- *   release number plus "betaNN" or "rcN".
++ *   release number plus "betaNN" or "rcNN".
+  *
+  *   Binary incompatibility exists only when applications make direct access
+  *   to the info_ptr or png_ptr members through png.h, and the compiled
+@@ -203,7 +209,7 @@
+  *
+  * This code is released under the libpng license.
+  *
+- * libpng versions 1.2.6, August 15, 2004, through 1.5.9, February 18, 2012, are
++ * libpng versions 1.2.6, August 15, 2004, through 1.5.11, June 14, 2012, are
+  * Copyright (c) 2004, 2006-2012 Glenn Randers-Pehrson, and are
+  * distributed according to the same disclaimer and license as libpng-1.2.5
+  * with the following individual added to the list of Contributing Authors:
+@@ -315,13 +321,13 @@
+  * Y2K compliance in libpng:
+  * =========================
+  *
+- *    February 18, 2012
++ *    June 14, 2012
+  *
+  *    Since the PNG Development group is an ad-hoc body, we can't make
+  *    an official declaration.
+  *
+  *    This is your unofficial assurance that libpng from version 0.71 and
+- *    upward through 1.5.9 are Y2K compliant.  It is my belief that
++ *    upward through 1.5.11 are Y2K compliant.  It is my belief that
+  *    earlier versions were also Y2K compliant.
+  *
+  *    Libpng only has two year fields.  One is a 2-byte unsigned integer
+@@ -332,7 +338,8 @@
+  *        "png_uint_16 year" in png_time_struct.
+  *
+  *    The string is
+- *        "png_char time_buffer" in png_struct
++ *        "char time_buffer[29]" in png_struct.  This will be no
++ *    longer used in libpng-1.6.0 and will be removed from libpng-1.7.0.
+  *
+  *    There are seven time-related functions:
+  *        png.c: png_convert_to_rfc_1123() in png.c
+@@ -379,9 +386,9 @@
+  */
+ 
+ /* Version information for png.h - this should match the version in png.c */
+-#define PNG_LIBPNG_VER_STRING "1.5.9"
++#define PNG_LIBPNG_VER_STRING "1.5.11"
+ #define PNG_HEADER_VERSION_STRING \
+-     " libpng version 1.5.9 - February 18, 2012\n"
++     " libpng version 1.5.11 - June 14, 2012\n"
+ 
+ #define PNG_LIBPNG_VER_SONUM   15
+ #define PNG_LIBPNG_VER_DLLNUM  15
+@@ -389,7 +396,7 @@
+ /* These should match the first 3 components of PNG_LIBPNG_VER_STRING: */
+ #define PNG_LIBPNG_VER_MAJOR   1
+ #define PNG_LIBPNG_VER_MINOR   5
+-#define PNG_LIBPNG_VER_RELEASE 9
++#define PNG_LIBPNG_VER_RELEASE 11
+ 
+ /* This should match the numeric part of the final component of
+  * PNG_LIBPNG_VER_STRING, omitting any leading zero:
+@@ -412,7 +419,7 @@
+ #define PNG_LIBPNG_BUILD_SPECIAL 32 /* Cannot be OR'ed with
+                                        PNG_LIBPNG_BUILD_PRIVATE */
+ 
+-#define PNG_LIBPNG_BUILD_BASE_TYPE PNG_LIBPNG_BUILD_BETA
++#define PNG_LIBPNG_BUILD_BASE_TYPE PNG_LIBPNG_BUILD_STABLE
+ 
+ /* Careful here.  At one time, Guy wanted to use 082, but that would be octal.
+  * We must not include leading zeros.
+@@ -420,7 +427,7 @@
+  * version 1.0.0 was mis-numbered 100 instead of 10000).  From
+  * version 1.0.1 it's    xxyyzz, where x=major, y=minor, z=release
+  */
+-#define PNG_LIBPNG_VER 10509 /* 1.5.9 */
++#define PNG_LIBPNG_VER 10511 /* 1.5.11 */
+ 
+ #ifndef MOZPNGCONF_H
+ #   include "mozpngconf.h"
+@@ -547,7 +554,7 @@
+ /* This triggers a compiler error in png.c, if png.c and png.h
+  * do not agree upon the version number.
+  */
+-typedef char* png_libpng_version_1_5_9;
++typedef char* png_libpng_version_1_5_11;
+ 
+ /* Three color definitions.  The order of the red, green, and blue, (and the
+  * exact size) is not important, although the size of the fields need to
+@@ -2650,71 +2657,77 @@
+       : (png_int_32)png_get_uint_32(buf)))
+ #endif
+ 
++#if defined(PNG_READ_CHECK_FOR_INVALID_INDEX_SUPPORTED) || \
++    defined(PNG_WRITE_CHECK_FOR_INVALID_INDEX_SUPPORTED)
++PNG_EXPORT(234, void, png_set_check_for_invalid_index, (png_structp png_ptr,
++    int allowed));
++#endif
++
+ #ifdef PNG_APNG_SUPPORTED
+-PNG_EXPORT(234, png_uint_32, png_get_acTL, (png_structp png_ptr,
++PNG_EXPORT(235, png_uint_32, png_get_acTL, (png_structp png_ptr,
+    png_infop info_ptr, png_uint_32 *num_frames, png_uint_32 *num_plays));
+ 
+-PNG_EXPORT(235, png_uint_32, png_set_acTL, (png_structp png_ptr,
++PNG_EXPORT(236, png_uint_32, png_set_acTL, (png_structp png_ptr,
+    png_infop info_ptr, png_uint_32 num_frames, png_uint_32 num_plays));
+ 
+-PNG_EXPORT(236, png_uint_32, png_get_num_frames, (png_structp png_ptr,
++PNG_EXPORT(237, png_uint_32, png_get_num_frames, (png_structp png_ptr,
+    png_infop info_ptr));
+ 
+-PNG_EXPORT(237, png_uint_32, png_get_num_plays, (png_structp png_ptr,
++PNG_EXPORT(238, png_uint_32, png_get_num_plays, (png_structp png_ptr,
+    png_infop info_ptr));
+ 
+-PNG_EXPORT(238, png_uint_32, png_get_next_frame_fcTL,
++PNG_EXPORT(239, png_uint_32, png_get_next_frame_fcTL,
+    (png_structp png_ptr, png_infop info_ptr, png_uint_32 *width,
+    png_uint_32 *height, png_uint_32 *x_offset, png_uint_32 *y_offset,
+    png_uint_16 *delay_num, png_uint_16 *delay_den, png_byte *dispose_op,
+    png_byte *blend_op));
+ 
+-PNG_EXPORT(239, png_uint_32, png_set_next_frame_fcTL,
++PNG_EXPORT(240, png_uint_32, png_set_next_frame_fcTL,
+    (png_structp png_ptr, png_infop info_ptr, png_uint_32 width,
+    png_uint_32 height, png_uint_32 x_offset, png_uint_32 y_offset,
+    png_uint_16 delay_num, png_uint_16 delay_den, png_byte dispose_op,
+    png_byte blend_op));
+ 
+-PNG_EXPORT(240, png_uint_32, png_get_next_frame_width,
++PNG_EXPORT(241, png_uint_32, png_get_next_frame_width,
+    (png_structp png_ptr, png_infop info_ptr));
+-PNG_EXPORT(241, png_uint_32, png_get_next_frame_height,
++PNG_EXPORT(242, png_uint_32, png_get_next_frame_height,
+    (png_structp png_ptr, png_infop info_ptr));
+-PNG_EXPORT(242, png_uint_32, png_get_next_frame_x_offset,
++PNG_EXPORT(243, png_uint_32, png_get_next_frame_x_offset,
+    (png_structp png_ptr, png_infop info_ptr));
+-PNG_EXPORT(243, png_uint_32, png_get_next_frame_y_offset,
++PNG_EXPORT(244, png_uint_32, png_get_next_frame_y_offset,
+    (png_structp png_ptr, png_infop info_ptr));
+-PNG_EXPORT(244, png_uint_16, png_get_next_frame_delay_num,
++PNG_EXPORT(245, png_uint_16, png_get_next_frame_delay_num,
+    (png_structp png_ptr, png_infop info_ptr));
+-PNG_EXPORT(245, png_uint_16, png_get_next_frame_delay_den,
++PNG_EXPORT(246, png_uint_16, png_get_next_frame_delay_den,
+    (png_structp png_ptr, png_infop info_ptr));
+-PNG_EXPORT(246, png_byte, png_get_next_frame_dispose_op,
++PNG_EXPORT(247, png_byte, png_get_next_frame_dispose_op,
+    (png_structp png_ptr, png_infop info_ptr));
+-PNG_EXPORT(247, png_byte, png_get_next_frame_blend_op,
++PNG_EXPORT(248, png_byte, png_get_next_frame_blend_op,
+    (png_structp png_ptr, png_infop info_ptr));
+-PNG_EXPORT(248, png_byte, png_get_first_frame_is_hidden,
++PNG_EXPORT(249, png_byte, png_get_first_frame_is_hidden,
+    (png_structp png_ptr, png_infop info_ptr));
+-PNG_EXPORT(249, png_uint_32, png_set_first_frame_is_hidden,
++PNG_EXPORT(250, png_uint_32, png_set_first_frame_is_hidden,
+    (png_structp png_ptr, png_infop info_ptr, png_byte is_hidden));
+ 
+ #ifdef PNG_READ_APNG_SUPPORTED
+-PNG_EXPORT(250, void, png_read_frame_head, (png_structp png_ptr,
++PNG_EXPORT(251, void, png_read_frame_head, (png_structp png_ptr,
+    png_infop info_ptr));
+ #ifdef PNG_PROGRESSIVE_READ_SUPPORTED
+-PNG_EXPORT(251, void, png_set_progressive_frame_fn, (png_structp png_ptr,
++PNG_EXPORT(252, void, png_set_progressive_frame_fn, (png_structp png_ptr,
+    png_progressive_frame_ptr frame_info_fn,
+    png_progressive_frame_ptr frame_end_fn));
+ #endif /* PNG_PROGRESSIVE_READ_SUPPORTED */
+ #endif /* PNG_READ_APNG_SUPPORTED */
+ 
+ #ifdef PNG_WRITE_APNG_SUPPORTED
+-PNG_EXPORT(252, void, png_write_frame_head, (png_structp png_ptr,
++PNG_EXPORT(253, void, png_write_frame_head, (png_structp png_ptr,
+    png_infop info_ptr, png_bytepp row_pointers,
+    png_uint_32 width, png_uint_32 height,
+    png_uint_32 x_offset, png_uint_32 y_offset,
+    png_uint_16 delay_num, png_uint_16 delay_den, png_byte dispose_op,
+    png_byte blend_op));
+ 
+-PNG_EXPORT(253, void, png_write_frame_tail, (png_structp png_ptr,
++PNG_EXPORT(254, void, png_write_frame_tail, (png_structp png_ptr,
+    png_infop info_ptr));
+ #endif /* PNG_WRITE_APNG_SUPPORTED */
+ #endif /* PNG_APNG_SUPPORTED */
+@@ -2729,9 +2742,9 @@
+  */
+ #ifdef PNG_EXPORT_LAST_ORDINAL
+ #ifdef PNG_APNG_SUPPORTED
+-  PNG_EXPORT_LAST_ORDINAL(253);
++  PNG_EXPORT_LAST_ORDINAL(254);
+ #else
+-  PNG_EXPORT_LAST_ORDINAL(233);
++  PNG_EXPORT_LAST_ORDINAL(234);
+ #endif /* PNG_APNG_SUPPORTED */
+ #endif
+ 
+diff -r 58fc5e165c31 media/libpng/pngconf.h
+--- a/media/libpng/pngconf.h	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/pngconf.h	Thu Jul 12 20:46:09 2012 +0900
+@@ -1,7 +1,7 @@
+ 
+ /* pngconf.h - machine configurable file for libpng
+  *
+- * libpng version 1.5.9 - February 18, 2012
++ * libpng version 1.5.11 - June 14, 2012
+  *
+  * Copyright (c) 1998-2012 Glenn Randers-Pehrson
+  * (Version 0.96 Copyright (c) 1996, 1997 Andreas Dilger)
+@@ -25,7 +25,7 @@
+ #ifndef PNG_BUILDING_SYMBOL_TABLE
+ /* PNG_NO_LIMITS_H may be used to turn off the use of the standard C
+  * definition file for  machine specific limits, this may impact the
+- * correctness of the definitons below (see uses of INT_MAX).
++ * correctness of the definitions below (see uses of INT_MAX).
+  */
+ #  ifndef PNG_NO_LIMITS_H
+ #    include <limits.h>
+@@ -51,8 +51,8 @@
+ 
+ /* This controls optimization of the reading of 16 and 32 bit values
+  * from PNG files.  It can be set on a per-app-file basis - it
+- * just changes whether a macro is used to the function is called.
+- * The library builder sets the default, if read functions are not
++ * just changes whether a macro is used when the function is called.
++ * The library builder sets the default; if read functions are not
+  * built into the library the macro implementation is forced on.
+  */
+ #ifndef PNG_READ_INT_FUNCTIONS_SUPPORTED
+diff -r 58fc5e165c31 media/libpng/pngerror.c
+--- a/media/libpng/pngerror.c	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/pngerror.c	Thu Jul 12 20:46:09 2012 +0900
+@@ -2,7 +2,7 @@
+ /* pngerror.c - stub functions for i/o and memory allocation
+  *
+  * Last changed in libpng 1.5.8 [February 1, 2011]
+- * Copyright (c) 1998-2012 Glenn Randers-Pehrson
++ * Copyright (c) 1998-2011 Glenn Randers-Pehrson
+  * (Version 0.96 Copyright (c) 1996, 1997 Andreas Dilger)
+  * (Version 0.88 Copyright (c) 1995, 1996 Guy Eric Schalnat, Group 42, Inc.)
+  *
+diff -r 58fc5e165c31 media/libpng/pngget.c
+--- a/media/libpng/pngget.c	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/pngget.c	Thu Jul 12 20:46:09 2012 +0900
+@@ -1172,7 +1172,7 @@
+     if (png_ptr != NULL && info_ptr != NULL &&
+         (info_ptr->valid & PNG_INFO_fcTL) &&
+         width != NULL && height != NULL &&
+-        x_offset != NULL && x_offset != NULL &&
++        x_offset != NULL && y_offset != NULL &&
+         delay_num != NULL && delay_den != NULL &&
+         dispose_op != NULL && blend_op != NULL)
+     {
+diff -r 58fc5e165c31 media/libpng/pngpread.c
+--- a/media/libpng/pngpread.c	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/pngpread.c	Thu Jul 12 20:46:09 2012 +0900
+@@ -1,8 +1,8 @@
+ 
+ /* pngpread.c - read a png file in push mode
+  *
+- * Last changed in libpng 1.5.9 [February 18, 2012]
+- * Copyright (c) 1998-2011 Glenn Randers-Pehrson
++ * Last changed in libpng 1.5.11 [June 14, 2012]
++ * Copyright (c) 1998-2012 Glenn Randers-Pehrson
+  * (Version 0.96 Copyright (c) 1996, 1997 Andreas Dilger)
+  * (Version 0.88 Copyright (c) 1995, 1996 Guy Eric Schalnat, Group 42, Inc.)
+  *
+@@ -128,30 +128,6 @@
+          break;
+       }
+ 
+-#ifdef PNG_READ_tEXt_SUPPORTED
+-      case PNG_READ_tEXt_MODE:
+-      {
+-         png_push_read_tEXt(png_ptr, info_ptr);
+-         break;
+-      }
+-
+-#endif
+-#ifdef PNG_READ_zTXt_SUPPORTED
+-      case PNG_READ_zTXt_MODE:
+-      {
+-         png_push_read_zTXt(png_ptr, info_ptr);
+-         break;
+-      }
+-
+-#endif
+-#ifdef PNG_READ_iTXt_SUPPORTED
+-      case PNG_READ_iTXt_MODE:
+-      {
+-         png_push_read_iTXt(png_ptr, info_ptr);
+-         break;
+-      }
+-
+-#endif
+       case PNG_SKIP_MODE:
+       {
+          png_push_crc_finish(png_ptr);
+@@ -176,7 +152,7 @@
+ png_push_read_sig(png_structp png_ptr, png_infop info_ptr)
+ {
+    png_size_t num_checked = png_ptr->sig_bytes,
+-             num_to_check = 8 - num_checked;
++       num_to_check = 8 - num_checked;
+ 
+    if (png_ptr->buffer_size < num_to_check)
+    {
+@@ -196,6 +172,7 @@
+       else
+          png_error(png_ptr, "PNG file corrupted by ASCII conversion");
+    }
++
+    else
+    {
+       if (png_ptr->sig_bytes >= 8)
+@@ -408,8 +385,8 @@
+             png_error(png_ptr, "Missing PLTE before IDAT");
+       }
+    }
++#endif
+ 
+-#endif
+    else if (chunk_name == png_PLTE)
+    {
+       if (png_ptr->push_length + 4 > png_ptr->buffer_size)
+@@ -650,7 +627,7 @@
+          return;
+       }
+ 
+-      png_push_handle_tEXt(png_ptr, info_ptr, png_ptr->push_length);
++      png_handle_tEXt(png_ptr, info_ptr, png_ptr->push_length);
+    }
+ 
+ #endif
+@@ -663,7 +640,7 @@
+          return;
+       }
+ 
+-      png_push_handle_zTXt(png_ptr, info_ptr, png_ptr->push_length);
++      png_handle_zTXt(png_ptr, info_ptr, png_ptr->push_length);
+    }
+ 
+ #endif
+@@ -676,7 +653,7 @@
+          return;
+       }
+ 
+-      png_push_handle_iTXt(png_ptr, info_ptr, png_ptr->push_length);
++      png_handle_iTXt(png_ptr, info_ptr, png_ptr->push_length);
+    }
+ 
+ #endif
+@@ -710,7 +687,7 @@
+          png_push_save_buffer(png_ptr);
+          return;
+       }
+-      png_push_handle_unknown(png_ptr, info_ptr, png_ptr->push_length);
++      png_handle_unknown(png_ptr, info_ptr, png_ptr->push_length);
+    }
+ 
+    png_ptr->mode &= ~PNG_HAVE_CHUNK_HEADER;
+@@ -750,6 +727,7 @@
+       png_ptr->save_buffer_size -= save_size;
+       png_ptr->save_buffer_ptr += save_size;
+    }
++
+    if (png_ptr->skip_length && png_ptr->current_buffer_size)
+    {
+       png_size_t save_size = png_ptr->current_buffer_size;
+@@ -771,6 +749,7 @@
+       png_ptr->current_buffer_size -= save_size;
+       png_ptr->current_buffer_ptr += save_size;
+    }
++
+    if (!png_ptr->skip_length)
+    {
+       if (png_ptr->buffer_size < 4)
+@@ -793,6 +772,7 @@
+       return;
+ 
+    ptr = buffer;
++
+    if (png_ptr->save_buffer_size)
+    {
+       png_size_t save_size;
+@@ -810,6 +790,7 @@
+       png_ptr->save_buffer_size -= save_size;
+       png_ptr->save_buffer_ptr += save_size;
+    }
++
+    if (length && png_ptr->current_buffer_size)
+    {
+       png_size_t save_size;
+@@ -839,6 +820,7 @@
+          png_bytep dp;
+ 
+          istop = png_ptr->save_buffer_size;
++
+          for (i = 0, sp = png_ptr->save_buffer_ptr, dp = png_ptr->save_buffer;
+              i < istop; i++, sp++, dp++)
+          {
+@@ -846,6 +828,7 @@
+          }
+       }
+    }
++
+    if (png_ptr->save_buffer_size + png_ptr->current_buffer_size >
+        png_ptr->save_buffer_max)
+    {
+@@ -872,6 +855,7 @@
+       png_free(png_ptr, old_buffer);
+       png_ptr->save_buffer_max = new_max;
+    }
++
+    if (png_ptr->current_buffer_size)
+    {
+       png_memcpy(png_ptr->save_buffer + png_ptr->save_buffer_size,
+@@ -879,6 +863,7 @@
+       png_ptr->save_buffer_size += png_ptr->current_buffer_size;
+       png_ptr->current_buffer_size = 0;
+    }
++
+    png_ptr->save_buffer_ptr = png_ptr->save_buffer;
+    png_ptr->buffer_size = 0;
+ }
+@@ -1031,6 +1016,7 @@
+       png_ptr->current_buffer_size -= save_size;
+       png_ptr->current_buffer_ptr += save_size;
+    }
++
+    if (!png_ptr->idat_size)
+    {
+       if (png_ptr->buffer_size < 4)
+@@ -1444,521 +1430,6 @@
+ #endif /* PNG_READ_INTERLACING_SUPPORTED */
+ }
+ 
+-#ifdef PNG_READ_tEXt_SUPPORTED
+-void /* PRIVATE */
+-png_push_handle_tEXt(png_structp png_ptr, png_infop info_ptr, png_uint_32
+-    length)
+-{
+-   if (!(png_ptr->mode & PNG_HAVE_IHDR) || (png_ptr->mode & PNG_HAVE_IEND))
+-      {
+-         PNG_UNUSED(info_ptr) /* To quiet some compiler warnings */
+-         png_error(png_ptr, "Out of place tEXt");
+-         /* NOT REACHED */
+-      }
+-
+-#ifdef PNG_MAX_MALLOC_64K
+-   png_ptr->skip_length = 0;  /* This may not be necessary */
+-
+-   if (length > (png_uint_32)65535L) /* Can't hold entire string in memory */
+-   {
+-      png_warning(png_ptr, "tEXt chunk too large to fit in memory");
+-      png_ptr->skip_length = length - (png_uint_32)65535L;
+-      length = (png_uint_32)65535L;
+-   }
+-#endif
+-
+-   png_ptr->current_text = (png_charp)png_malloc(png_ptr, length + 1);
+-   png_ptr->current_text[length] = '\0';
+-   png_ptr->current_text_ptr = png_ptr->current_text;
+-   png_ptr->current_text_size = (png_size_t)length;
+-   png_ptr->current_text_left = (png_size_t)length;
+-   png_ptr->process_mode = PNG_READ_tEXt_MODE;
+-}
+-
+-void /* PRIVATE */
+-png_push_read_tEXt(png_structp png_ptr, png_infop info_ptr)
+-{
+-   if (png_ptr->buffer_size && png_ptr->current_text_left)
+-   {
+-      png_size_t text_size;
+-
+-      if (png_ptr->buffer_size < png_ptr->current_text_left)
+-         text_size = png_ptr->buffer_size;
+-
+-      else
+-         text_size = png_ptr->current_text_left;
+-
+-      png_crc_read(png_ptr, (png_bytep)png_ptr->current_text_ptr, text_size);
+-      png_ptr->current_text_left -= text_size;
+-      png_ptr->current_text_ptr += text_size;
+-   }
+-   if (!(png_ptr->current_text_left))
+-   {
+-      png_textp text_ptr;
+-      png_charp text;
+-      png_charp key;
+-      int ret;
+-
+-      if (png_ptr->buffer_size < 4)
+-      {
+-         png_push_save_buffer(png_ptr);
+-         return;
+-      }
+-
+-      png_push_crc_finish(png_ptr);
+-
+-#ifdef PNG_MAX_MALLOC_64K
+-      if (png_ptr->skip_length)
+-         return;
+-#endif
+-
+-      key = png_ptr->current_text;
+-
+-      for (text = key; *text; text++)
+-         /* Empty loop */ ;
+-
+-      if (text < key + png_ptr->current_text_size)
+-         text++;
+-
+-      text_ptr = (png_textp)png_malloc(png_ptr, png_sizeof(png_text));
+-      text_ptr->compression = PNG_TEXT_COMPRESSION_NONE;
+-      text_ptr->key = key;
+-      text_ptr->itxt_length = 0;
+-      text_ptr->lang = NULL;
+-      text_ptr->lang_key = NULL;
+-      text_ptr->text = text;
+-
+-      ret = png_set_text_2(png_ptr, info_ptr, text_ptr, 1);
+-
+-      png_free(png_ptr, key);
+-      png_free(png_ptr, text_ptr);
+-      png_ptr->current_text = NULL;
+-
+-      if (ret)
+-         png_warning(png_ptr, "Insufficient memory to store text chunk");
+-   }
+-}
+-#endif
+-
+-#ifdef PNG_READ_zTXt_SUPPORTED
+-void /* PRIVATE */
+-png_push_handle_zTXt(png_structp png_ptr, png_infop info_ptr, png_uint_32
+-   length)
+-{
+-   if (!(png_ptr->mode & PNG_HAVE_IHDR) || (png_ptr->mode & PNG_HAVE_IEND))
+-   {
+-      PNG_UNUSED(info_ptr) /* To quiet some compiler warnings */
+-      png_error(png_ptr, "Out of place zTXt");
+-      /* NOT REACHED */
+-   }
+-
+-#ifdef PNG_MAX_MALLOC_64K
+-   /* We can't handle zTXt chunks > 64K, since we don't have enough space
+-    * to be able to store the uncompressed data.  Actually, the threshold
+-    * is probably around 32K, but it isn't as definite as 64K is.
+-    */
+-   if (length > (png_uint_32)65535L)
+-   {
+-      png_warning(png_ptr, "zTXt chunk too large to fit in memory");
+-      png_push_crc_skip(png_ptr, length);
+-      return;
+-   }
+-#endif
+-
+-   png_ptr->current_text = (png_charp)png_malloc(png_ptr, length + 1);
+-   png_ptr->current_text[length] = '\0';
+-   png_ptr->current_text_ptr = png_ptr->current_text;
+-   png_ptr->current_text_size = (png_size_t)length;
+-   png_ptr->current_text_left = (png_size_t)length;
+-   png_ptr->process_mode = PNG_READ_zTXt_MODE;
+-}
+-
+-void /* PRIVATE */
+-png_push_read_zTXt(png_structp png_ptr, png_infop info_ptr)
+-{
+-   if (png_ptr->buffer_size && png_ptr->current_text_left)
+-   {
+-      png_size_t text_size;
+-
+-      if (png_ptr->buffer_size < (png_uint_32)png_ptr->current_text_left)
+-         text_size = png_ptr->buffer_size;
+-
+-      else
+-         text_size = png_ptr->current_text_left;
+-
+-      png_crc_read(png_ptr, (png_bytep)png_ptr->current_text_ptr, text_size);
+-      png_ptr->current_text_left -= text_size;
+-      png_ptr->current_text_ptr += text_size;
+-   }
+-   if (!(png_ptr->current_text_left))
+-   {
+-      png_textp text_ptr;
+-      png_charp text;
+-      png_charp key;
+-      int ret;
+-      png_size_t text_size, key_size;
+-
+-      if (png_ptr->buffer_size < 4)
+-      {
+-         png_push_save_buffer(png_ptr);
+-         return;
+-      }
+-
+-      png_push_crc_finish(png_ptr);
+-
+-      key = png_ptr->current_text;
+-
+-      for (text = key; *text; text++)
+-         /* Empty loop */ ;
+-
+-      /* zTXt can't have zero text */
+-      if (text >= key + png_ptr->current_text_size)
+-      {
+-         png_ptr->current_text = NULL;
+-         png_free(png_ptr, key);
+-         return;
+-      }
+-
+-      text++;
+-
+-      if (*text != PNG_TEXT_COMPRESSION_zTXt) /* Check compression byte */
+-      {
+-         png_ptr->current_text = NULL;
+-         png_free(png_ptr, key);
+-         return;
+-      }
+-
+-      text++;
+-
+-      png_ptr->zstream.next_in = (png_bytep)text;
+-      png_ptr->zstream.avail_in = (uInt)(png_ptr->current_text_size -
+-          (text - key));
+-      png_ptr->zstream.next_out = png_ptr->zbuf;
+-      png_ptr->zstream.avail_out = (uInt)png_ptr->zbuf_size;
+-
+-      key_size = text - key;
+-      text_size = 0;
+-      text = NULL;
+-      ret = Z_STREAM_END;
+-
+-      while (png_ptr->zstream.avail_in)
+-      {
+-         ret = inflate(&png_ptr->zstream, Z_PARTIAL_FLUSH);
+-         if (ret != Z_OK && ret != Z_STREAM_END)
+-         {
+-            inflateReset(&png_ptr->zstream);
+-            png_ptr->zstream.avail_in = 0;
+-            png_ptr->current_text = NULL;
+-            png_free(png_ptr, key);
+-            png_free(png_ptr, text);
+-            return;
+-         }
+-
+-         if (!(png_ptr->zstream.avail_out) || ret == Z_STREAM_END)
+-         {
+-            if (text == NULL)
+-            {
+-               text = (png_charp)png_malloc(png_ptr,
+-                   (png_ptr->zbuf_size
+-                   - png_ptr->zstream.avail_out + key_size + 1));
+-
+-               png_memcpy(text + key_size, png_ptr->zbuf,
+-                   png_ptr->zbuf_size - png_ptr->zstream.avail_out);
+-
+-               png_memcpy(text, key, key_size);
+-
+-               text_size = key_size + png_ptr->zbuf_size -
+-                   png_ptr->zstream.avail_out;
+-
+-               *(text + text_size) = '\0';
+-            }
+-
+-            else
+-            {
+-               png_charp tmp;
+-
+-               tmp = text;
+-               text = (png_charp)png_malloc(png_ptr, text_size +
+-                   (png_ptr->zbuf_size
+-                   - png_ptr->zstream.avail_out + 1));
+-
+-               png_memcpy(text, tmp, text_size);
+-               png_free(png_ptr, tmp);
+-
+-               png_memcpy(text + text_size, png_ptr->zbuf,
+-                   png_ptr->zbuf_size - png_ptr->zstream.avail_out);
+-
+-               text_size += png_ptr->zbuf_size - png_ptr->zstream.avail_out;
+-               *(text + text_size) = '\0';
+-            }
+-
+-            if (ret != Z_STREAM_END)
+-            {
+-               png_ptr->zstream.next_out = png_ptr->zbuf;
+-               png_ptr->zstream.avail_out = (uInt)png_ptr->zbuf_size;
+-            }
+-         }
+-         else
+-         {
+-            break;
+-         }
+-
+-         if (ret == Z_STREAM_END)
+-            break;
+-      }
+-
+-      inflateReset(&png_ptr->zstream);
+-      png_ptr->zstream.avail_in = 0;
+-
+-      if (ret != Z_STREAM_END)
+-      {
+-         png_ptr->current_text = NULL;
+-         png_free(png_ptr, key);
+-         png_free(png_ptr, text);
+-         return;
+-      }
+-
+-      png_ptr->current_text = NULL;
+-      png_free(png_ptr, key);
+-      key = text;
+-      text += key_size;
+-
+-      text_ptr = (png_textp)png_malloc(png_ptr,
+-          png_sizeof(png_text));
+-      text_ptr->compression = PNG_TEXT_COMPRESSION_zTXt;
+-      text_ptr->key = key;
+-      text_ptr->itxt_length = 0;
+-      text_ptr->lang = NULL;
+-      text_ptr->lang_key = NULL;
+-      text_ptr->text = text;
+-
+-      ret = png_set_text_2(png_ptr, info_ptr, text_ptr, 1);
+-
+-      png_free(png_ptr, key);
+-      png_free(png_ptr, text_ptr);
+-
+-      if (ret)
+-         png_warning(png_ptr, "Insufficient memory to store text chunk");
+-   }
+-}
+-#endif
+-
+-#ifdef PNG_READ_iTXt_SUPPORTED
+-void /* PRIVATE */
+-png_push_handle_iTXt(png_structp png_ptr, png_infop info_ptr, png_uint_32
+-    length)
+-{
+-   if (!(png_ptr->mode & PNG_HAVE_IHDR) || (png_ptr->mode & PNG_HAVE_IEND))
+-   {
+-      PNG_UNUSED(info_ptr) /* To quiet some compiler warnings */
+-      png_error(png_ptr, "Out of place iTXt");
+-      /* NOT REACHED */
+-   }
+-
+-#ifdef PNG_MAX_MALLOC_64K
+-   png_ptr->skip_length = 0;  /* This may not be necessary */
+-
+-   if (length > (png_uint_32)65535L) /* Can't hold entire string in memory */
+-   {
+-      png_warning(png_ptr, "iTXt chunk too large to fit in memory");
+-      png_ptr->skip_length = length - (png_uint_32)65535L;
+-      length = (png_uint_32)65535L;
+-   }
+-#endif
+-
+-   png_ptr->current_text = (png_charp)png_malloc(png_ptr, length + 1);
+-   png_ptr->current_text[length] = '\0';
+-   png_ptr->current_text_ptr = png_ptr->current_text;
+-   png_ptr->current_text_size = (png_size_t)length;
+-   png_ptr->current_text_left = (png_size_t)length;
+-   png_ptr->process_mode = PNG_READ_iTXt_MODE;
+-}
+-
+-void /* PRIVATE */
+-png_push_read_iTXt(png_structp png_ptr, png_infop info_ptr)
+-{
+-
+-   if (png_ptr->buffer_size && png_ptr->current_text_left)
+-   {
+-      png_size_t text_size;
+-
+-      if (png_ptr->buffer_size < png_ptr->current_text_left)
+-         text_size = png_ptr->buffer_size;
+-
+-      else
+-         text_size = png_ptr->current_text_left;
+-
+-      png_crc_read(png_ptr, (png_bytep)png_ptr->current_text_ptr, text_size);
+-      png_ptr->current_text_left -= text_size;
+-      png_ptr->current_text_ptr += text_size;
+-   }
+-
+-   if (!(png_ptr->current_text_left))
+-   {
+-      png_textp text_ptr;
+-      png_charp key;
+-      int comp_flag;
+-      png_charp lang;
+-      png_charp lang_key;
+-      png_charp text;
+-      int ret;
+-
+-      if (png_ptr->buffer_size < 4)
+-      {
+-         png_push_save_buffer(png_ptr);
+-         return;
+-      }
+-
+-      png_push_crc_finish(png_ptr);
+-
+-#ifdef PNG_MAX_MALLOC_64K
+-      if (png_ptr->skip_length)
+-         return;
+-#endif
+-
+-      key = png_ptr->current_text;
+-
+-      for (lang = key; *lang; lang++)
+-         /* Empty loop */ ;
+-
+-      if (lang < key + png_ptr->current_text_size - 3)
+-         lang++;
+-
+-      comp_flag = *lang++;
+-      lang++;     /* Skip comp_type, always zero */
+-
+-      for (lang_key = lang; *lang_key; lang_key++)
+-         /* Empty loop */ ;
+-
+-      lang_key++;        /* Skip NUL separator */
+-
+-      text=lang_key;
+-
+-      if (lang_key < key + png_ptr->current_text_size - 1)
+-      {
+-         for (; *text; text++)
+-            /* Empty loop */ ;
+-      }
+-
+-      if (text < key + png_ptr->current_text_size)
+-         text++;
+-
+-      text_ptr = (png_textp)png_malloc(png_ptr,
+-          png_sizeof(png_text));
+-
+-      text_ptr->compression = comp_flag + 2;
+-      text_ptr->key = key;
+-      text_ptr->lang = lang;
+-      text_ptr->lang_key = lang_key;
+-      text_ptr->text = text;
+-      text_ptr->text_length = 0;
+-      text_ptr->itxt_length = png_strlen(text);
+-
+-      ret = png_set_text_2(png_ptr, info_ptr, text_ptr, 1);
+-
+-      png_ptr->current_text = NULL;
+-
+-      png_free(png_ptr, text_ptr);
+-      if (ret)
+-         png_warning(png_ptr, "Insufficient memory to store iTXt chunk");
+-   }
+-}
+-#endif
+-
+-/* This function is called when we haven't found a handler for this
+- * chunk.  If there isn't a problem with the chunk itself (ie a bad chunk
+- * name or a critical chunk), the chunk is (currently) silently ignored.
+- */
+-void /* PRIVATE */
+-png_push_handle_unknown(png_structp png_ptr, png_infop info_ptr, png_uint_32
+-    length)
+-{
+-   png_uint_32 skip = 0;
+-   png_uint_32 chunk_name = png_ptr->chunk_name;
+-
+-   if (PNG_CHUNK_CRITICAL(chunk_name))
+-   {
+-#ifdef PNG_READ_UNKNOWN_CHUNKS_SUPPORTED
+-      if (png_chunk_unknown_handling(png_ptr, chunk_name) !=
+-          PNG_HANDLE_CHUNK_ALWAYS
+-#ifdef PNG_READ_USER_CHUNKS_SUPPORTED
+-          && png_ptr->read_user_chunk_fn == NULL
+-#endif
+-          )
+-#endif
+-         png_chunk_error(png_ptr, "unknown critical chunk");
+-
+-      PNG_UNUSED(info_ptr) /* To quiet some compiler warnings */
+-   }
+-
+-#ifdef PNG_READ_UNKNOWN_CHUNKS_SUPPORTED
+-   /* TODO: the code below is apparently just using the
+-    * png_struct::unknown_chunk member as a temporarily variable, it should be
+-    * possible to eliminate both it and the temporary buffer.
+-    */
+-   if (png_ptr->flags & PNG_FLAG_KEEP_UNKNOWN_CHUNKS)
+-   {
+-#ifdef PNG_MAX_MALLOC_64K
+-      if (length > 65535)
+-      {
+-         png_warning(png_ptr, "unknown chunk too large to fit in memory");
+-         skip = length - 65535;
+-         length = 65535;
+-      }
+-#endif
+-      /* This is just a record for the user; libpng doesn't use the character
+-       * form of the name.
+-       */
+-      PNG_CSTRING_FROM_CHUNK(png_ptr->unknown_chunk.name, png_ptr->chunk_name);
+-
+-      png_ptr->unknown_chunk.size = length;
+-
+-      if (length == 0)
+-         png_ptr->unknown_chunk.data = NULL;
+-
+-      else
+-      {
+-         png_ptr->unknown_chunk.data = (png_bytep)png_malloc(png_ptr,
+-            png_ptr->unknown_chunk.size);
+-         png_crc_read(png_ptr, (png_bytep)png_ptr->unknown_chunk.data,
+-            png_ptr->unknown_chunk.size);
+-      }
+-
+-#ifdef PNG_READ_USER_CHUNKS_SUPPORTED
+-      if (png_ptr->read_user_chunk_fn != NULL)
+-      {
+-         /* Callback to user unknown chunk handler */
+-         int ret;
+-         ret = (*(png_ptr->read_user_chunk_fn))
+-             (png_ptr, &png_ptr->unknown_chunk);
+-
+-         if (ret < 0)
+-            png_chunk_error(png_ptr, "error in user chunk");
+-
+-         if (ret == 0)
+-         {
+-            if (PNG_CHUNK_CRITICAL(png_ptr->chunk_name))
+-               if (png_chunk_unknown_handling(png_ptr, chunk_name) !=
+-                   PNG_HANDLE_CHUNK_ALWAYS)
+-                  png_chunk_error(png_ptr, "unknown critical chunk");
+-            png_set_unknown_chunks(png_ptr, info_ptr,
+-                &png_ptr->unknown_chunk, 1);
+-         }
+-      }
+-
+-      else
+-#endif
+-         png_set_unknown_chunks(png_ptr, info_ptr, &png_ptr->unknown_chunk, 1);
+-      png_free(png_ptr, png_ptr->unknown_chunk.data);
+-      png_ptr->unknown_chunk.data = NULL;
+-   }
+-
+-   else
+-#endif
+-      skip=length;
+-   png_push_crc_skip(png_ptr, skip);
+-}
+-
+ void /* PRIVATE */
+ png_push_have_info(png_structp png_ptr, png_infop info_ptr)
+ {
+diff -r 58fc5e165c31 media/libpng/pngpriv.h
+--- a/media/libpng/pngpriv.h	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/pngpriv.h	Thu Jul 12 20:46:09 2012 +0900
+@@ -2,11 +2,11 @@
+ /* pngpriv.h - private declarations for use inside libpng
+  *
+  * For conditions of distribution and use, see copyright notice in png.h
+- * Copyright (c) 1998-2011 Glenn Randers-Pehrson
++ * Copyright (c) 1998-2012 Glenn Randers-Pehrson
+  * (Version 0.96 Copyright (c) 1996, 1997 Andreas Dilger)
+  * (Version 0.88 Copyright (c) 1995, 1996 Guy Eric Schalnat, Group 42, Inc.)
+  *
+- * Last changed in libpng 1.5.7 [December 15, 2011]
++ * Last changed in libpng 1.5.10 [March 29, 2012]
+  *
+  * This code is released under the libpng license.
+  * For conditions of distribution and use, see the disclaimer
+@@ -133,6 +133,46 @@
+ #  define PNG_DLL_EXPORT
+ #endif
+ 
++/* SECURITY and SAFETY:
++ *
++ * By default libpng is built without any internal limits on image size,
++ * individual heap (png_malloc) allocations or the total amount of memory used.
++ * If PNG_SAFE_LIMITS_SUPPORTED is defined, however, the limits below are used
++ * (unless individually overridden).  These limits are believed to be fairly
++ * safe, but builders of secure systems should verify the values against the
++ * real system capabilities.
++ */
++
++#ifdef PNG_SAFE_LIMITS_SUPPORTED
++   /* 'safe' limits */
++#  ifndef PNG_USER_WIDTH_MAX
++#     define PNG_USER_WIDTH_MAX 1000000
++#  endif
++#  ifndef PNG_USER_HEIGHT_MAX
++#     define PNG_USER_HEIGHT_MAX 1000000
++#  endif
++#  ifndef PNG_USER_CHUNK_CACHE_MAX
++#     define PNG_USER_CHUNK_CACHE_MAX 128
++#  endif
++#  ifndef PNG_USER_CHUNK_MALLOC_MAX
++#     define PNG_USER_CHUNK_MALLOC_MAX 8000000
++#  endif
++#else
++   /* values for no limits */
++#  ifndef PNG_USER_WIDTH_MAX
++#     define PNG_USER_WIDTH_MAX 0x7fffffff
++#  endif
++#  ifndef PNG_USER_HEIGHT_MAX
++#     define PNG_USER_HEIGHT_MAX 0x7fffffff
++#  endif
++#  ifndef PNG_USER_CHUNK_CACHE_MAX
++#     define PNG_USER_CHUNK_CACHE_MAX 0
++#  endif
++#  ifndef PNG_USER_CHUNK_MALLOC_MAX
++#     define PNG_USER_CHUNK_MALLOC_MAX 0
++#  endif
++#endif
++
+ /* This is used for 16 bit gamma tables - only the top level pointers are const,
+  * this could be changed:
+  */
+@@ -426,9 +466,10 @@
+ #define PNG_BACKGROUND_IS_GRAY     0x800
+ #define PNG_HAVE_PNG_SIGNATURE    0x1000
+ #define PNG_HAVE_CHUNK_AFTER_IDAT 0x2000 /* Have another chunk after IDAT */
++#define PNG_HAVE_iCCP             0x4000
+ #ifdef PNG_APNG_SUPPORTED
+-#define PNG_HAVE_acTL             0x4000
+-#define PNG_HAVE_fcTL             0x8000
++#define PNG_HAVE_acTL             0x8000
++#define PNG_HAVE_fcTL            0x10000
+ #endif
+ 
+ /* Flags for the transformations the PNG library does on the image data */
+@@ -1231,10 +1272,8 @@
+     png_uint_32 length));
+ #endif
+ 
+-#ifdef PNG_HANDLE_AS_UNKNOWN_SUPPORTED
+ PNG_EXTERN void png_handle_unknown PNGARG((png_structp png_ptr,
+     png_infop info_ptr, png_uint_32 length));
+-#endif
+ 
+ PNG_EXTERN void png_check_chunk_name PNGARG((png_structp png_ptr,
+     png_uint_32 chunk_name));
+@@ -1407,6 +1446,13 @@
+     int color_type, int interlace_type, int compression_type,
+     int filter_type));
+ 
++/* Added at libpng version 1.5.10 */
++#if defined(PNG_READ_CHECK_FOR_INVALID_INDEX_SUPPORTED) || \
++    defined(PNG_WRITE_CHECK_FOR_INVALID_INDEX_SUPPORTED)
++PNG_EXTERN void png_do_check_palette_indexes PNGARG((png_structp png_ptr,
++    png_row_infop row_info));
++#endif
++
+ /* Free all memory used by the read (old method - NOT DLL EXPORTED) */
+ PNG_EXTERN void png_read_destroy PNGARG((png_structp png_ptr,
+     png_infop info_ptr, png_infop end_info_ptr));
+diff -r 58fc5e165c31 media/libpng/pngread.c
+--- a/media/libpng/pngread.c	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/pngread.c	Thu Jul 12 20:46:09 2012 +0900
+@@ -1,8 +1,8 @@
+ 
+ /* pngread.c - read a PNG file
+  *
+- * Last changed in libpng 1.5.7 [December 15, 2011]
+- * Copyright (c) 1998-2011 Glenn Randers-Pehrson
++ * Last changed in libpng 1.5.10 [March 8, 2012]
++ * Copyright (c) 1998-2012 Glenn Randers-Pehrson
+  * (Version 0.96 Copyright (c) 1996, 1997 Andreas Dilger)
+  * (Version 0.88 Copyright (c) 1995, 1996 Guy Eric Schalnat, Group 42, Inc.)
+  *
+@@ -67,15 +67,11 @@
+    png_ptr->user_width_max = PNG_USER_WIDTH_MAX;
+    png_ptr->user_height_max = PNG_USER_HEIGHT_MAX;
+ 
+-#  ifdef PNG_USER_CHUNK_CACHE_MAX
+    /* Added at libpng-1.2.43 and 1.4.0 */
+    png_ptr->user_chunk_cache_max = PNG_USER_CHUNK_CACHE_MAX;
+-#  endif
+ 
+-#  ifdef PNG_SET_USER_CHUNK_MALLOC_MAX
+    /* Added at libpng-1.2.43 and 1.4.1 */
+    png_ptr->user_chunk_malloc_max = PNG_USER_CHUNK_MALLOC_MAX;
+-#  endif
+ #endif
+ 
+ #ifdef PNG_SETJMP_SUPPORTED
+@@ -922,6 +918,13 @@
+ 
+    png_crc_finish(png_ptr, 0); /* Finish off CRC from last IDAT chunk */
+ 
++#ifdef PNG_READ_CHECK_FOR_INVALID_INDEX_SUPPORTED
++   /* Report invalid palette index; added at libng-1.5.10 */
++   if (png_ptr->color_type == PNG_COLOR_TYPE_PALETTE &&
++      png_ptr->num_palette_max > png_ptr->num_palette)
++     png_benign_error(png_ptr, "Read palette index exceeding num_palette");
++#endif
++
+    do
+    {
+       png_uint_32 length = png_read_chunk_header(png_ptr);
+@@ -1196,12 +1199,6 @@
+    png_free(png_ptr, png_ptr->save_buffer);
+ #endif
+ 
+-#ifdef PNG_PROGRESSIVE_READ_SUPPORTED
+-#ifdef PNG_TEXT_SUPPORTED
+-   png_free(png_ptr, png_ptr->current_text);
+-#endif /* PNG_TEXT_SUPPORTED */
+-#endif /* PNG_PROGRESSIVE_READ_SUPPORTED */
+-
+    /* Save the important info out of the png_struct, in case it is
+     * being used again.
+     */
+diff -r 58fc5e165c31 media/libpng/pngrtran.c
+--- a/media/libpng/pngrtran.c	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/pngrtran.c	Thu Jul 12 20:46:09 2012 +0900
+@@ -1,8 +1,8 @@
+ 
+ /* pngrtran.c - transforms the data in a row for PNG readers
+  *
+- * Last changed in libpng 1.5.7 [December 15, 2011]
+- * Copyright (c) 1998-2011 Glenn Randers-Pehrson
++ * Last changed in libpng 1.5.11 [June 14, 2012]
++ * Copyright (c) 1998-2012 Glenn Randers-Pehrson
+  * (Version 0.96 Copyright (c) 1996, 1997 Andreas Dilger)
+  * (Version 0.88 Copyright (c) 1995, 1996 Guy Eric Schalnat, Group 42, Inc.)
+  *
+@@ -1770,8 +1770,8 @@
+          int num_palette = png_ptr->num_palette;
+          int i;
+ 
+-         /*NOTE: there are other transformations that should probably be in here
+-          * too.
++         /* NOTE: there are other transformations that should probably be in
++          * here too.
+           */
+          for (i = 0; i < num_palette; i++)
+          {
+@@ -1830,12 +1830,15 @@
+ 
+ #ifdef PNG_READ_SHIFT_SUPPORTED
+    if ((png_ptr->transformations & PNG_SHIFT) &&
++      !(png_ptr->transformations & PNG_EXPAND) &&
+        (png_ptr->color_type == PNG_COLOR_TYPE_PALETTE))
+    {
+       int i;
+       int istop = png_ptr->num_palette;
+       int shift = 8 - png_ptr->sig_bit.red;
+ 
++      png_ptr->transformations &= ~PNG_SHIFT;
++
+       /* significant bits can be in the range 1 to 7 for a meaninful result, if
+        * the number of significant bits is 0 then no shift is done (this is an
+        * error condition which is silently ignored.)
+@@ -2274,7 +2277,7 @@
+ #endif
+ 
+ #ifdef PNG_READ_GRAY_TO_RGB_SUPPORTED
+-   /*NOTE: moved here in 1.5.4 (from much later in this list.) */
++   /* NOTE: moved here in 1.5.4 (from much later in this list.) */
+    if ((png_ptr->transformations & PNG_GRAY_TO_RGB) &&
+        (png_ptr->mode & PNG_BACKGROUND_IS_GRAY))
+       png_do_gray_to_rgb(row_info, png_ptr->row_buf + 1);
+@@ -2296,6 +2299,13 @@
+       png_do_unpack(row_info, png_ptr->row_buf + 1);
+ #endif
+ 
++#ifdef PNG_READ_CHECK_FOR_INVALID_INDEX_SUPPORTED
++   /* Added at libpng-1.5.10 */
++   if (row_info->color_type == PNG_COLOR_TYPE_PALETTE &&
++       png_ptr->num_palette_max >= 0)
++      png_do_check_palette_indexes(png_ptr, row_info);
++#endif
++
+ #ifdef PNG_READ_BGR_SUPPORTED
+    if (png_ptr->transformations & PNG_BGR)
+       png_do_bgr(row_info, png_ptr->row_buf + 1);
+@@ -3293,7 +3303,7 @@
+                if (red != green || red != blue)
+                {
+                   rgb_error |= 1;
+-                  /*NOTE: this is the historical approach which simply
++                  /* NOTE: this is the historical approach which simply
+                    * truncates the results.
+                    */
+                   *(dp++) = (png_byte)((rc*red + gc*green + bc*blue)>>15);
+diff -r 58fc5e165c31 media/libpng/pngrutil.c
+--- a/media/libpng/pngrutil.c	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/pngrutil.c	Thu Jul 12 20:46:09 2012 +0900
+@@ -1,7 +1,7 @@
+ 
+ /* pngrutil.c - utilities to read a PNG file
+  *
+- * Last changed in libpng 1.5.9 [February 18, 2012]
++ * Last changed in libpng 1.5.10 [March 8, 2012]
+  * Copyright (c) 1998-2012 Glenn Randers-Pehrson
+  * (Version 0.96 Copyright (c) 1996, 1997 Andreas Dilger)
+  * (Version 0.88 Copyright (c) 1995, 1996 Guy Eric Schalnat, Group 42, Inc.)
+@@ -434,14 +434,12 @@
+        */
+       if (prefix_size >= (~(png_size_t)0) - 1 ||
+          expanded_size >= (~(png_size_t)0) - 1 - prefix_size
+-#ifdef PNG_SET_CHUNK_MALLOC_LIMIT_SUPPORTED
++#ifdef PNG_USER_LIMITS_SUPPORTED
+          || (png_ptr->user_chunk_malloc_max &&
+           (prefix_size + expanded_size >= png_ptr->user_chunk_malloc_max - 1))
+ #else
+-#  ifdef PNG_USER_CHUNK_MALLOC_MAX
+          || ((PNG_USER_CHUNK_MALLOC_MAX > 0) &&
+           prefix_size + expanded_size >= PNG_USER_CHUNK_MALLOC_MAX - 1)
+-#  endif
+ #endif
+          )
+          png_warning(png_ptr, "Exceeded size limit while expanding chunk");
+@@ -1264,13 +1262,16 @@
+       /* Should be an error, but we can cope with it */
+       png_warning(png_ptr, "Out of place iCCP chunk");
+ 
+-   if (info_ptr != NULL && (info_ptr->valid & PNG_INFO_iCCP))
++   if ((png_ptr->mode & PNG_HAVE_iCCP) || (info_ptr != NULL &&
++      (info_ptr->valid & (PNG_INFO_iCCP|PNG_INFO_sRGB))))
+    {
+       png_warning(png_ptr, "Duplicate iCCP chunk");
+       png_crc_finish(png_ptr, length);
+       return;
+    }
+ 
++   png_ptr->mode |= PNG_HAVE_iCCP;
++
+ #ifdef PNG_MAX_MALLOC_64K
+    if (length > (png_uint_32)65535L)
+    {
+@@ -1800,16 +1801,16 @@
+       return;
+    }
+ 
+-   num = length / 2 ;
+-
+-   if (num != (unsigned int)png_ptr->num_palette || num >
+-       (unsigned int)PNG_MAX_PALETTE_LENGTH)
++   if (length > 2*PNG_MAX_PALETTE_LENGTH ||
++       length != (unsigned int) (2*png_ptr->num_palette))
+    {
+       png_warning(png_ptr, "Incorrect hIST chunk length");
+       png_crc_finish(png_ptr, length);
+       return;
+    }
+ 
++   num = length / 2 ;
++
+    for (i = 0; i < num; i++)
+    {
+       png_byte buf[2];
+diff -r 58fc5e165c31 media/libpng/pngset.c
+--- a/media/libpng/pngset.c	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/pngset.c	Thu Jul 12 20:46:09 2012 +0900
+@@ -1,8 +1,8 @@
+ 
+ /* pngset.c - storage of image information into info struct
+  *
+- * Last changed in libpng 1.5.7 [December 15, 2011]
+- * Copyright (c) 1998-2011 Glenn Randers-Pehrson
++ * Last changed in libpng 1.5.11 [June 14, 2012]
++ * Copyright (c) 1998-2012 Glenn Randers-Pehrson
+  * (Version 0.96 Copyright (c) 1996, 1997 Andreas Dilger)
+  * (Version 0.88 Copyright (c) 1995, 1996 Guy Eric Schalnat, Group 42, Inc.)
+  *
+@@ -149,7 +149,7 @@
+     * possible for 1/gamma to overflow the limit of 21474 and this means the
+     * gamma value must be at least 5/100000 and hence at most 20000.0.  For
+     * safety the limits here are a little narrower.  The values are 0.00016 to
+-    * 6250.0, which are truly ridiculous gammma values (and will produce
++    * 6250.0, which are truly ridiculous gamma values (and will produce
+     * displays that are all black or all white.)
+     */
+    if (file_gamma < 16 || file_gamma > 625000000)
+@@ -697,24 +697,28 @@
+     */
+    if (info_ptr->num_text + num_text > info_ptr->max_text)
+    {
++      int old_max_text = info_ptr->max_text;
++      int old_num_text = info_ptr->num_text;
++
+       if (info_ptr->text != NULL)
+       {
+          png_textp old_text;
+-         int old_max;
+ 
+-         old_max = info_ptr->max_text;
+          info_ptr->max_text = info_ptr->num_text + num_text + 8;
+          old_text = info_ptr->text;
++
+          info_ptr->text = (png_textp)png_malloc_warn(png_ptr,
+             (png_size_t)(info_ptr->max_text * png_sizeof(png_text)));
+ 
+          if (info_ptr->text == NULL)
+          {
+-            png_free(png_ptr, old_text);
++            /* Restore to previous condition */
++            info_ptr->max_text = old_max_text;
++            info_ptr->text = old_text;
+             return(1);
+          }
+ 
+-         png_memcpy(info_ptr->text, old_text, (png_size_t)(old_max *
++         png_memcpy(info_ptr->text, old_text, (png_size_t)(old_max_text *
+              png_sizeof(png_text)));
+          png_free(png_ptr, old_text);
+       }
+@@ -726,7 +730,12 @@
+          info_ptr->text = (png_textp)png_malloc_warn(png_ptr,
+              (png_size_t)(info_ptr->max_text * png_sizeof(png_text)));
+          if (info_ptr->text == NULL)
++         {
++            /* Restore to previous condition */
++            info_ptr->num_text = old_num_text;
++            info_ptr->max_text = old_max_text;
+             return(1);
++         }
+          info_ptr->free_me |= PNG_FREE_TEXT;
+       }
+ 
+@@ -1427,4 +1436,22 @@
+       png_ptr->flags &= ~PNG_FLAG_BENIGN_ERRORS_WARN;
+ }
+ #endif /* PNG_BENIGN_ERRORS_SUPPORTED */
++
++#ifdef PNG_CHECK_FOR_INVALID_INDEX_SUPPORTED
++/* Whether to report invalid palette index; added at libng-1.5.10
++ *   allowed  - one of 0: disable; 1: enable
++ */
++void PNGAPI
++png_set_check_for_invalid_index(png_structp png_ptr, int allowed)
++{
++   png_debug(1, "in png_set_check_for_invalid_index");
++
++   if (allowed)
++      png_ptr->num_palette_max = 0;
++
++   else
++      png_ptr->num_palette_max = -1;
++}
++#endif
++
+ #endif /* PNG_READ_SUPPORTED || PNG_WRITE_SUPPORTED */
+diff -r 58fc5e165c31 media/libpng/pngstruct.h
+--- a/media/libpng/pngstruct.h	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/pngstruct.h	Thu Jul 12 20:46:09 2012 +0900
+@@ -1,7 +1,7 @@
+ 
+ /* pngstruct.h - header file for PNG reference library
+  *
+- * Copyright (c) 1998-2011 Glenn Randers-Pehrson
++ * Copyright (c) 1998-2012 Glenn Randers-Pehrson
+  * (Version 0.96 Copyright (c) 1996, 1997 Andreas Dilger)
+  * (Version 0.88 Copyright (c) 1995, 1996 Guy Eric Schalnat, Group 42, Inc.)
+  *
+@@ -121,6 +121,12 @@
+    png_uint_32 crc;           /* current chunk CRC value */
+    png_colorp palette;        /* palette from the input file */
+    png_uint_16 num_palette;   /* number of color entries in palette */
++
++/* Added at libpng-1.5.10 */
++#ifdef PNG_CHECK_FOR_INVALID_INDEX_SUPPORTED
++   int num_palette_max;       /* maximum palette index found in IDAT */
++#endif
++
+    png_uint_16 num_trans;     /* number of transparency values */
+    png_byte compression;      /* file compression type (always 0) */
+    png_byte filter;           /* file filter type (always 0) */
+@@ -211,13 +217,6 @@
+    int process_mode;                 /* what push library is currently doing */
+    int cur_palette;                  /* current push library palette index */
+ 
+-#  ifdef PNG_TEXT_SUPPORTED
+-     png_size_t current_text_size;   /* current size of text input data */
+-     png_size_t current_text_left;   /* how much text left to read in input */
+-     png_charp current_text;         /* current text chunk buffer */
+-     png_charp current_text_ptr;     /* current location in current_text */
+-#  endif /* PNG_PROGRESSIVE_READ_SUPPORTED && PNG_TEXT_SUPPORTED */
+-
+ #endif /* PNG_PROGRESSIVE_READ_SUPPORTED */
+ 
+ #if defined(__TURBOC__) && !defined(_Windows) && !defined(__FLAT__)
+@@ -249,6 +248,7 @@
+ #endif
+ 
+ #ifdef PNG_TIME_RFC1123_SUPPORTED
++   /* This is going to be unused in libpng16 and removed from libpng17 */
+    char time_buffer[29]; /* String to hold RFC 1123 time text */
+ #endif
+ 
+diff -r 58fc5e165c31 media/libpng/pngtrans.c
+--- a/media/libpng/pngtrans.c	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/pngtrans.c	Thu Jul 12 20:46:09 2012 +0900
+@@ -1,8 +1,8 @@
+ 
+ /* pngtrans.c - transforms the data in a row (used by both readers and writers)
+  *
+- * Last changed in libpng 1.5.4 [July 7, 2011]
+- * Copyright (c) 1998-2011 Glenn Randers-Pehrson
++ * Last changed in libpng 1.5.11 [June 14, 2012]
++ * Copyright (c) 1998-2012 Glenn Randers-Pehrson
+  * (Version 0.96 Copyright (c) 1996, 1997 Andreas Dilger)
+  * (Version 0.88 Copyright (c) 1995, 1996 Guy Eric Schalnat, Group 42, Inc.)
+  *
+@@ -619,6 +619,109 @@
+ }
+ #endif /* PNG_READ_BGR_SUPPORTED or PNG_WRITE_BGR_SUPPORTED */
+ 
++#if defined(PNG_READ_CHECK_FOR_INVALID_INDEX_SUPPORTED) || \
++    defined(PNG_WRITE_CHECK_FOR_INVALID_INDEX_SUPPORTED)
++/* Added at libpng-1.5.10 */
++void /* PRIVATE */
++png_do_check_palette_indexes(png_structp png_ptr, png_row_infop row_info)
++{
++   if (png_ptr->num_palette < (1 << row_info->bit_depth) &&
++      png_ptr->num_palette > 0) /* num_palette can be 0 in MNG files */
++   {
++      /* Calculations moved outside switch in an attempt to stop different
++       * compiler warnings.  'padding' is in *bits* within the last byte, it is
++       * an 'int' because pixel_depth becomes an 'int' in the expression below,
++       * and this calculation is used because it avoids warnings that other
++       * forms produced on either GCC or MSVC.
++       */
++      int padding = (-row_info->pixel_depth * row_info->width) & 7;
++      png_bytep rp = png_ptr->row_buf + row_info->rowbytes;
++
++      switch (row_info->bit_depth)
++      {
++         case 1:
++         {
++            /* in this case, all bytes must be 0 so we don't need
++             * to unpack the pixels except for the rightmost one.
++             */
++            for (; rp > png_ptr->row_buf; rp--)
++            {
++              if (*rp >> padding != 0)
++                 png_ptr->num_palette_max = 1;
++              padding = 0;
++            }
++
++            break;
++         }
++
++         case 2:
++         {
++            for (; rp > png_ptr->row_buf; rp--)
++            {
++              int i = ((*rp >> padding) & 0x03);
++
++              if (i > png_ptr->num_palette_max)
++                 png_ptr->num_palette_max = i;
++
++              i = (((*rp >> padding) >> 2) & 0x03);
++
++              if (i > png_ptr->num_palette_max)
++                 png_ptr->num_palette_max = i;
++
++              i = (((*rp >> padding) >> 4) & 0x03);
++
++              if (i > png_ptr->num_palette_max)
++                 png_ptr->num_palette_max = i;
++
++              i = (((*rp >> padding) >> 6) & 0x03);
++
++              if (i > png_ptr->num_palette_max)
++                 png_ptr->num_palette_max = i;
++
++              padding = 0;
++            }
++
++            break;
++         }
++
++         case 4:
++         {
++            for (; rp > png_ptr->row_buf; rp--)
++            {
++              int i = ((*rp >> padding) & 0x0f);
++
++              if (i > png_ptr->num_palette_max)
++                 png_ptr->num_palette_max = i;
++
++              i = (((*rp >> padding) >> 4) & 0x0f);
++
++              if (i > png_ptr->num_palette_max)
++                 png_ptr->num_palette_max = i;
++
++              padding = 0;
++            }
++
++            break;
++         }
++
++         case 8:
++         {
++            for (; rp > png_ptr->row_buf; rp--)
++            {
++               if (*rp > png_ptr->num_palette_max)
++                  png_ptr->num_palette_max = (int) *rp;
++            }
++
++            break;
++         }
++
++         default:
++            break;
++      }
++   }
++}
++#endif /* PNG_CHECK_FOR_INVALID_INDEX_SUPPORTED */
++
+ #if defined(PNG_READ_USER_TRANSFORM_SUPPORTED) || \
+     defined(PNG_WRITE_USER_TRANSFORM_SUPPORTED)
+ #ifdef PNG_USER_TRANSFORM_PTR_SUPPORTED
+diff -r 58fc5e165c31 media/libpng/pngwrite.c
+--- a/media/libpng/pngwrite.c	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/pngwrite.c	Thu Jul 12 20:46:09 2012 +0900
+@@ -1,8 +1,8 @@
+ 
+ /* pngwrite.c - general routines to write a PNG file
+  *
+- * Last changed in libpng 1.5.7 [December 15, 2011]
+- * Copyright (c) 1998-2011 Glenn Randers-Pehrson
++ * Last changed in libpng 1.5.11 [June 14, 2012]
++ * Copyright (c) 1998-2012 Glenn Randers-Pehrson
+  * (Version 0.96 Copyright (c) 1996, 1997 Andreas Dilger)
+  * (Version 0.88 Copyright (c) 1995, 1996 Guy Eric Schalnat, Group 42, Inc.)
+  *
+@@ -309,6 +309,12 @@
+    if (!(png_ptr->mode & PNG_HAVE_IDAT))
+       png_error(png_ptr, "No IDATs written into file");
+ 
++#ifdef PNG_WRITE_CHECK_FOR_INVALID_INDEX_SUPPORTED
++   if (png_ptr->num_palette_max > png_ptr->num_palette)
++      png_benign_error(png_ptr, "Wrote palette index exceeding num_palette");
++#endif
++
++    /* See if user wants us to write information chunks */
+ #ifdef PNG_WRITE_APNG_SUPPORTED
+    if (png_ptr->num_frames_written != png_ptr->num_frames_to_write)
+       png_error(png_ptr, "Not enough frames written");
+@@ -807,6 +813,14 @@
+    }
+ #endif
+ 
++/* Added at libpng-1.5.10 */
++#ifdef PNG_WRITE_CHECK_FOR_INVALID_INDEX_SUPPORTED
++   /* Check for out-of-range palette index */
++   if (row_info.color_type == PNG_COLOR_TYPE_PALETTE &&
++       png_ptr->num_palette_max >= 0)
++      png_do_check_palette_indexes(png_ptr, &row_info);
++#endif
++
+    /* Find a filter if necessary, filter the row and write it out. */
+    png_write_find_filter(png_ptr, &row_info);
+ 
+diff -r 58fc5e165c31 media/libpng/pngwutil.c
+--- a/media/libpng/pngwutil.c	Tue Jul 10 13:03:47 2012 -0400
++++ b/media/libpng/pngwutil.c	Thu Jul 12 20:46:09 2012 +0900
+@@ -1,8 +1,8 @@
+ 
+ /* pngwutil.c - utilities to write a PNG file
+  *
+- * Last changed in libpng 1.5.6 [November 3, 2011]
+- * Copyright (c) 1998-2011 Glenn Randers-Pehrson
++ * Last changed in libpng 1.5.10 [March 8, 2012]
++ * Copyright (c) 1998-2012 Glenn Randers-Pehrson
+  * (Version 0.96 Copyright (c) 1996, 1997 Andreas Dilger)
+  * (Version 0.88 Copyright (c) 1995, 1996 Guy Eric Schalnat, Group 42, Inc.)
+  *
+@@ -569,14 +569,15 @@
+ 
+ /* Ship the compressed text out via chunk writes */
+ static void /* PRIVATE */
+-png_write_compressed_data_out(png_structp png_ptr, compression_state *comp)
++png_write_compressed_data_out(png_structp png_ptr, compression_state *comp,
++   png_size_t data_len)
+ {
+    int i;
+ 
+    /* Handle the no-compression case */
+    if (comp->input)
+    {
+-      png_write_chunk_data(png_ptr, comp->input, comp->input_len);
++      png_write_chunk_data(png_ptr, comp->input, data_len);
+ 
+       return;
+    }
+@@ -585,7 +586,7 @@
+    /* The zbuf_size test is because the code below doesn't work if zbuf_size is
+     * '1'; simply skip it to avoid memory overwrite.
+     */
+-   if (comp->input_len >= 2 && comp->input_len < 16384 && png_ptr->zbuf_size > 1)
++   if (data_len >= 2 && comp->input_len < 16384 && png_ptr->zbuf_size > 1)
+    {
+       unsigned int z_cmf;  /* zlib compression method and flags */
+ 
+@@ -1190,8 +1191,7 @@
+ 
+    if (profile_len)
+    {
+-      comp.input_len = profile_len;
+-      png_write_compressed_data_out(png_ptr, &comp);
++      png_write_compressed_data_out(png_ptr, &comp, profile_len);
+    }
+ 
+    png_write_chunk_end(png_ptr);
+@@ -1761,8 +1761,7 @@
+    png_write_chunk_data(png_ptr, &buf, (png_size_t)1);
+ 
+    /* Write the compressed data */
+-   comp.input_len = text_len;
+-   png_write_compressed_data_out(png_ptr, &comp);
++   png_write_compressed_data_out(png_ptr, &comp, text_len);
+ 
+    /* Close the chunk */
+    png_write_chunk_end(png_ptr);
+@@ -1853,7 +1852,7 @@
+    png_write_chunk_data(png_ptr, (lang_key ? (png_const_bytep)lang_key : cbuf),
+        (png_size_t)(lang_key_len + 1));
+ 
+-   png_write_compressed_data_out(png_ptr, &comp);
++   png_write_compressed_data_out(png_ptr, &comp, text_len);
+ 
+    png_write_chunk_end(png_ptr);
+ 
