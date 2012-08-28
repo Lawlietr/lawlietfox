@@ -1,0 +1,248 @@
+diff -r eb421f1dd8ef content/svg/content/src/nsSVGFilters.cpp
+--- a/content/svg/content/src/nsSVGFilters.cpp	Thu Jul 12 14:19:16 2012 -0700
++++ b/content/svg/content/src/nsSVGFilters.cpp	Tue Jul 17 19:30:16 2012 +0900
+@@ -481,87 +481,194 @@
+ {
+   return PR_UINT32_MAX/(255*aDivisor);
+ }
+-  
++
++#include <pmmintrin.h>
++#include <emmintrin.h>
++#include <assert.h>
+ static void
+ BoxBlur(const PRUint8 *aInput, PRUint8 *aOutput,
+         PRInt32 aStrideMinor, PRInt32 aStartMinor, PRInt32 aEndMinor,
+-        PRInt32 aLeftLobe, PRInt32 aRightLobe, bool aAlphaOnly)
+-{
+-  PRInt32 boxSize = aLeftLobe + aRightLobe + 1;
+-  PRInt32 scaledDivisor = ComputeScaledDivisor(boxSize);
+-  PRInt32 sums[4] = {0, 0, 0, 0};
+-
+-  for (PRInt32 i=0; i < boxSize; i++) {
++        PRUint32 aLeftLobe, PRUint32 aRightLobe, PRBool aAlphaOnly)
++{
++  PRUint32 boxSize = aLeftLobe + aRightLobe + 1;
++  PRUint32 scaledDivisor = ComputeScaledDivisor(boxSize);
++  PRUint32 sums[4] = {0, 0, 0, 0};
++  __m128i sum;
++  sum = _mm_xor_si128(sum, sum);
++  const PRUint32 *input32 = (const PRUint32 *)aInput;
++  PRUint32 *output32 = (PRUint32 *)aOutput;
++
++  for (PRUint32 i=0; i < boxSize; i++) {
+     PRInt32 pos = aStartMinor - aLeftLobe + i;
+-    pos = NS_MAX(pos, aStartMinor);
+-    pos = NS_MIN(pos, aEndMinor - 1);
+-#define SUM(j)     sums[j] += aInput[aStrideMinor*pos + j];
+-    SUM(0); SUM(1); SUM(2); SUM(3);
+-#undef SUM
++    pos = PR_MAX(pos, aStartMinor);
++    pos = PR_MIN(pos, aEndMinor - 1);
++    __m128i input = _mm_cvtsi32_si128(input32[(aStrideMinor/4)*pos]);
++
++    // unpack 0x0000_0000_0000_0000_0000_0000_ffff_ffff -> 0x0000_0000_0000_0000_00ff_00ff_00ff_00ff
++    input = _mm_unpacklo_epi8(input, _mm_setzero_si128());
++    // unpack 0x0000_0000_0000_0000_00ff_00ff_00ff_00ff -> 0x0000_00ff_0000_00ff_0000_00ff_0000_00ff
++    input = _mm_unpacklo_epi16(input, _mm_setzero_si128());
++    sum = _mm_add_epi32(sum, input); 
+   }
+ 
+   aOutput += aStrideMinor*aStartMinor;
+-  if (aStartMinor + PRInt32(boxSize) <= aEndMinor) {
++  output32 += (aStrideMinor/4)*aStartMinor;
++  __m128i scaledDivisor128 = _mm_set1_epi32(scaledDivisor);
++  if (aStartMinor + boxSize <= aEndMinor) {
+     const PRUint8 *lastInput = aInput + aStartMinor*aStrideMinor;
+     const PRUint8 *nextInput = aInput + (aStartMinor + aRightLobe + 1)*aStrideMinor;
++    const PRUint32 *lastInput32 = input32 + aStartMinor*(aStrideMinor/4);
++    const PRUint32 *nextInput32 = input32 + (aStartMinor + aRightLobe + 1)*(aStrideMinor/4);
+ #define OUTPUT(j)     aOutput[j] = (sums[j]*scaledDivisor) >> 24;
+ #define SUM(j)        sums[j] += nextInput[j] - lastInput[j];
+-    // process pixels in B, G, R, A order because that's 0, 1, 2, 3 for x86
+-#define OUTPUT_PIXEL() \
+-        if (!aAlphaOnly) { OUTPUT(GFX_ARGB32_OFFSET_B); \
+-                           OUTPUT(GFX_ARGB32_OFFSET_G); \
+-                           OUTPUT(GFX_ARGB32_OFFSET_R); } \
+-        OUTPUT(GFX_ARGB32_OFFSET_A);
+-#define SUM_PIXEL() \
+-        if (!aAlphaOnly) { SUM(GFX_ARGB32_OFFSET_B); \
+-                           SUM(GFX_ARGB32_OFFSET_G); \
+-                           SUM(GFX_ARGB32_OFFSET_R); } \
+-        SUM(GFX_ARGB32_OFFSET_A);
+-    for (PRInt32 minor = aStartMinor;
+-         minor < aStartMinor + aLeftLobe;
+-         minor++) {
+-      OUTPUT_PIXEL();
+-      SUM_PIXEL();
++    for (PRInt32 minor = aStartMinor; minor < aStartMinor + aLeftLobe; minor++) {
++      // split into 2 for multiplication
++      __m128i shuff_sum = _mm_shuffle_epi32(sum, _MM_SHUFFLE(3, 1, 2, 0));
++      __m128i tlow = _mm_mul_epu32(shuff_sum, scaledDivisor128);
++      // identity shuffle __MM_SHUFFLE(3,2,1, 0)
++      __m128i thigh = _mm_shuffle_epi32(shuff_sum, _MM_SHUFFLE(2, 3, 0, 1));
++      thigh = _mm_mul_epu32(thigh, scaledDivisor128);
++
++      // two 64 bit quantities
++      // 0x00000000_ff000000_00000000_ff000000
++      tlow = _mm_srli_epi32(tlow, 24);
++      thigh = _mm_srli_epi32(thigh, 24);
++      // 0x00000000_000000aa_00000000_000000aa -> 000000bb_000000bb_000000aa_000000aa
++      __m128i t3 = _mm_packs_epi32(tlow, thigh);
++
++      // 0x00000000_000000aa_00000000_000000aa -> 00bb_00bb_00aa_00aa
++      t3 = _mm_packs_epi32(t3, t3);
++
++      // 0xblah_00bb_00bb_00aa_00aa -> 00000000_00000000_00000000_bbbbaaaa
++      t3 = _mm_packus_epi16(t3, t3);
++
++      PRUint32 new_output = _mm_cvtsi128_si32(t3);
++      *output32 = new_output;
++
++      __m128i last128 = _mm_unpacklo_epi16(_mm_unpacklo_epi8(_mm_cvtsi32_si128(*lastInput32), _mm_setzero_si128()), _mm_setzero_si128());
++      __m128i next128 = _mm_unpacklo_epi16(_mm_unpacklo_epi8(_mm_cvtsi32_si128(*nextInput32), _mm_setzero_si128()), _mm_setzero_si128());
++      sum = _mm_sub_epi32(sum, last128);
++      sum = _mm_add_epi32(sum, next128);
++
+       nextInput += aStrideMinor;
+       aOutput += aStrideMinor;
+-    }
+-    for (PRInt32 minor = aStartMinor + aLeftLobe;
+-         minor < aEndMinor - aRightLobe - 1;
+-         minor++) {
+-      OUTPUT_PIXEL();
+-      SUM_PIXEL();
++      nextInput32 += aStrideMinor/4;
++      output32 += aStrideMinor/4;
++      }
++    for (PRInt32 minor = aStartMinor + aLeftLobe; minor < aEndMinor - aRightLobe - 1; minor++) {
++      // split into 2 for multiplication
++      __m128i shuff_sum = _mm_shuffle_epi32(sum, _MM_SHUFFLE(3, 1, 2, 0));
++      __m128i tlow = _mm_mul_epu32(shuff_sum, scaledDivisor128);
++      // identity shuffle __MM_SHUFFLE(3,2,1, 0)
++      __m128i thigh = _mm_shuffle_epi32(shuff_sum, _MM_SHUFFLE(2, 3, 0, 1));
++      thigh = _mm_mul_epu32(thigh, scaledDivisor128);
++
++      // two 64 bit quantities
++      // 0x00000000_ff000000_00000000_ff000000
++      tlow = _mm_srli_epi32(tlow, 24);
++      thigh = _mm_srli_epi32(thigh, 24);
++      // 0x00000000_000000aa_00000000_000000aa -> 000000bb_000000bb_000000aa_000000aa
++      __m128i t3 = _mm_packs_epi32(tlow, thigh);
++
++      // 0x00000000_000000aa_00000000_000000aa -> 00bb_00bb_00aa_00aa
++      t3 = _mm_packs_epi32(t3, t3);
++
++      // 0xblah_00bb_00bb_00aa_00aa -> 00000000_00000000_00000000_bbbbaaaa
++      t3 = _mm_packus_epi16(t3, t3);
++
++      PRUint32 new_output = _mm_cvtsi128_si32(t3);
++      *output32 = new_output;
++
++      __m128i last128 = _mm_unpacklo_epi16(_mm_unpacklo_epi8(_mm_cvtsi32_si128(*lastInput32), _mm_setzero_si128()), _mm_setzero_si128());
++      __m128i next128 = _mm_unpacklo_epi16(_mm_unpacklo_epi8(_mm_cvtsi32_si128(*nextInput32), _mm_setzero_si128()), _mm_setzero_si128());
++      sum = _mm_sub_epi32(sum, last128);
++      sum = _mm_add_epi32(sum, next128);
++
++
+       lastInput += aStrideMinor;
+       nextInput += aStrideMinor;
+       aOutput += aStrideMinor;
++      lastInput32 += aStrideMinor/4;
++      nextInput32 += aStrideMinor/4;
++      output32 += aStrideMinor/4;
+     }
+     // nextInput is now aInput + aEndMinor*aStrideMinor. Set it back to
+     // aInput + (aEndMinor - 1)*aStrideMinor so we read the last pixel in every
+     // iteration of the next loop.
+     nextInput -= aStrideMinor;
++    nextInput32 -= aStrideMinor/4;
+     for (PRInt32 minor = aEndMinor - aRightLobe - 1; minor < aEndMinor; minor++) {
+-      OUTPUT_PIXEL();
+-      SUM_PIXEL();
++      // split into 2 for multiplication
++      __m128i shuff_sum = _mm_shuffle_epi32(sum, _MM_SHUFFLE(3, 1, 2, 0));
++      __m128i tlow = _mm_mul_epu32(shuff_sum, scaledDivisor128);
++      // identity shuffle __MM_SHUFFLE(3,2,1, 0)
++      __m128i thigh = _mm_shuffle_epi32(shuff_sum, _MM_SHUFFLE(2, 3, 0, 1));
++      thigh = _mm_mul_epu32(thigh, scaledDivisor128);
++
++      // two 64 bit quantities
++      // 0x00000000_ff000000_00000000_ff000000
++      tlow = _mm_srli_epi32(tlow, 24);
++      thigh = _mm_srli_epi32(thigh, 24);
++      // 0x00000000_000000aa_00000000_000000aa -> 000000bb_000000bb_000000aa_000000aa
++      __m128i t3 = _mm_packs_epi32(tlow, thigh);
++
++      // 0x00000000_000000aa_00000000_000000aa -> 00bb_00bb_00aa_00aa
++      t3 = _mm_packs_epi32(t3, t3);
++
++      // 0xblah_00bb_00bb_00aa_00aa -> 00000000_00000000_00000000_bbbbaaaa
++      t3 = _mm_packus_epi16(t3, t3);
++
++      PRUint32 new_output = _mm_cvtsi128_si32(t3);
++      *output32 = new_output;
++
++      __m128i last128 = _mm_unpacklo_epi16(_mm_unpacklo_epi8(_mm_cvtsi32_si128(*lastInput32), _mm_setzero_si128()), _mm_setzero_si128());
++      __m128i next128 = _mm_unpacklo_epi16(_mm_unpacklo_epi8(_mm_cvtsi32_si128(*nextInput32), _mm_setzero_si128()), _mm_setzero_si128());
++      sum = _mm_sub_epi32(sum, last128);
++      sum = _mm_add_epi32(sum, next128);
++
+       lastInput += aStrideMinor;
+       aOutput += aStrideMinor;
+-#undef SUM_PIXEL
++      lastInput32 += aStrideMinor/4;
++      output32 += aStrideMinor/4;
+ #undef SUM
+     }
+   } else {
+     for (PRInt32 minor = aStartMinor; minor < aEndMinor; minor++) {
+       PRInt32 tmp = minor - aLeftLobe;
+-      PRInt32 last = NS_MAX(tmp, aStartMinor);
+-      PRInt32 next = NS_MIN(tmp + PRInt32(boxSize), aEndMinor - 1);
+-
+-      OUTPUT_PIXEL();
+-#define SUM(j)     sums[j] += aInput[aStrideMinor*next + j] - \
+-                              aInput[aStrideMinor*last + j];
+-      if (!aAlphaOnly) { SUM(GFX_ARGB32_OFFSET_B);
+-                         SUM(GFX_ARGB32_OFFSET_G);
+-                         SUM(GFX_ARGB32_OFFSET_R); }
+-      SUM(GFX_ARGB32_OFFSET_A);
++      PRInt32 last = PR_MAX(tmp, aStartMinor);
++      PRInt32 next = PR_MIN(tmp + boxSize, aEndMinor - 1);
++
++      // split into 2 for multiplication
++      __m128i shuff_sum = _mm_shuffle_epi32(sum, _MM_SHUFFLE(3, 1, 2, 0));
++      __m128i tlow = _mm_mul_epu32(shuff_sum, scaledDivisor128);
++      // identity shuffle __MM_SHUFFLE(3,2,1, 0)
++      __m128i thigh = _mm_shuffle_epi32(shuff_sum, _MM_SHUFFLE(2, 3, 0, 1));
++      thigh = _mm_mul_epu32(thigh, scaledDivisor128);
++
++      // two 64 bit quantities
++      // 0x00000000_ff000000_00000000_ff000000
++      tlow = _mm_srli_epi32(tlow, 24);
++      thigh = _mm_srli_epi32(thigh, 24);
++      // 0x00000000_000000aa_00000000_000000aa -> 000000bb_000000bb_000000aa_000000aa
++      __m128i t3 = _mm_packs_epi32(tlow, thigh);
++
++      // 0x00000000_000000aa_00000000_000000aa -> 00bb_00bb_00aa_00aa
++      t3 = _mm_packs_epi32(t3, t3);
++
++      // 0xblah_00bb_00bb_00aa_00aa -> 00000000_00000000_00000000_bbbbaaaa
++      t3 = _mm_packus_epi16(t3, t3);
++
++      PRUint32 new_output = _mm_cvtsi128_si32(t3);
++      *output32 = new_output;
++      __m128i last128 = _mm_unpacklo_epi16(_mm_unpacklo_epi8(_mm_cvtsi32_si128(input32[(aStrideMinor/4)*next]), _mm_setzero_si128()), _mm_setzero_si128());
++      __m128i next128 = _mm_unpacklo_epi16(_mm_unpacklo_epi8(_mm_cvtsi32_si128(input32[(aStrideMinor/4)*last]), _mm_setzero_si128()), _mm_setzero_si128());
++      sum = _mm_sub_epi32(sum, last128);
++      sum = _mm_add_epi32(sum, next128);
++
++
+       aOutput += aStrideMinor;
++      output32 += aStrideMinor/4;
+ #undef SUM
+-#undef OUTPUT_PIXEL
+ #undef OUTPUT
+     }
+   }
