@@ -1,0 +1,14 @@
+diff -r eb421f1dd8ef configure.in
+--- a/configure.in	Thu Jul 12 14:19:16 2012 -0700
++++ b/configure.in	Tue Jul 17 20:33:00 2012 +0900
+@@ -8041,8 +8041,8 @@
+ dnl ========================================================
+ MOZ_ARG_HEADER(Static build options)
+ 
+-# split JS out by default to avoid VS2005 PGO crash (bug 591836).
+-if test "$OS_ARCH" = "WINNT" -a "$CPU_ARCH" != "x86_64" ; then
++# split JS out on VS2005 to avoid PGO crash (bug 591836).
++if test "$OS_ARCH" = "WINNT" -a "$CPU_ARCH" != "x86_64" -a "$_MSC_VER" = "1400" ; then
+   ENABLE_SHARED_JS=1
+ fi
+ 
