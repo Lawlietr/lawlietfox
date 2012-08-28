@@ -1,0 +1,313 @@
+diff -r eb421f1dd8ef js/src/assembler/assembler/MacroAssemblerARM.h
+--- a/js/src/assembler/assembler/MacroAssemblerARM.h	Thu Jul 12 14:19:16 2012 -0700
++++ b/js/src/assembler/assembler/MacroAssemblerARM.h	Tue Jul 17 20:05:30 2012 +0900
+@@ -1116,6 +1116,11 @@
+         return s_isVFPPresent;
+     }
+ 
++    bool supportsFloatingPointRound() const
++    {
++        return false;
++    }
++
+     void moveDouble(FPRegisterID src, FPRegisterID dest)
+     {
+         m_assembler.fcpyd_r(dest, src);
+@@ -1284,6 +1289,21 @@
+         m_assembler.fabsd_r(dest, src);
+     }
+ 
++    void roundDouble(FPRegisterID src, FPRegisterID dst)
++    {
++        ASSERT_NOT_REACHED();
++    }
++
++    void floorDouble(FPRegisterID src, FPRegisterID dst)
++    {
++        ASSERT_NOT_REACHED();
++    }
++
++    void ceilDouble(FPRegisterID src, FPRegisterID dst)
++    {
++        ASSERT_NOT_REACHED();
++    }
++
+     void sqrtDouble(FPRegisterID src, FPRegisterID dest)
+     {
+         m_assembler.fsqrtd_r(dest, src);
+diff -r eb421f1dd8ef js/src/assembler/assembler/MacroAssemblerARMv7.h
+--- a/js/src/assembler/assembler/MacroAssemblerARMv7.h	Thu Jul 12 14:19:16 2012 -0700
++++ b/js/src/assembler/assembler/MacroAssemblerARMv7.h	Tue Jul 17 20:05:30 2012 +0900
+@@ -526,6 +526,8 @@
+         return false;
+     }
+ 
++    bool supportsFloatingPointRound() const { return false; }
++
+     void loadDouble(ImplicitAddress address, FPRegisterID dest)
+     {
+         RegisterID base = address.base;
+@@ -589,6 +591,21 @@
+         mulDouble(fpTempRegister, dest);
+     }
+ 
++    void roundDouble(FPRegisterID src, FPRegisterID dst)
++    {
++        ASSERT_NOT_REACHED();
++    }
++
++    void floorDouble(FPRegisterID src, FPRegisterID dst)
++    {
++        ASSERT_NOT_REACHED();
++    }
++
++    void ceilDouble(FPRegisterID src, FPRegisterID dst)
++    {
++        ASSERT_NOT_REACHED();
++    }
++
+     void sqrtDouble(FPRegisterID, FPRegisterID)
+     {
+         ASSERT_NOT_REACHED();
+diff -r eb421f1dd8ef js/src/assembler/assembler/MacroAssemblerMIPS.h
+--- a/js/src/assembler/assembler/MacroAssemblerMIPS.h	Thu Jul 12 14:19:16 2012 -0700
++++ b/js/src/assembler/assembler/MacroAssemblerMIPS.h	Tue Jul 17 20:05:30 2012 +0900
+@@ -731,6 +731,21 @@
+         m_assembler.absd(dest, src);
+     }
+ 
++    void roundDouble(FPRegisterID src, FPRegisterID dst)
++    {
++        ASSERT_NOT_REACHED();
++    }
++
++    void floorDouble(FPRegisterID src, FPRegisterID dst)
++    {
++        ASSERT_NOT_REACHED();
++    }
++
++    void ceilDouble(FPRegisterID src, FPRegisterID dst)
++    {
++        ASSERT_NOT_REACHED();
++    }
++
+     void sqrtDouble(FPRegisterID src, FPRegisterID dst)
+     {
+         m_assembler.sqrtd(dst, src);
+@@ -1416,6 +1431,11 @@
+ #endif
+     }
+ 
++    bool supportsFloatingPointRound() const
++    {
++        return false;
++    }
++
+     // Stack manipulation operations:
+     //
+     // The ABI is assumed to provide a stack abstraction to memory,
+diff -r eb421f1dd8ef js/src/assembler/assembler/MacroAssemblerSparc.h
+--- a/js/src/assembler/assembler/MacroAssemblerSparc.h	Thu Jul 12 14:19:16 2012 -0700
++++ b/js/src/assembler/assembler/MacroAssemblerSparc.h	Tue Jul 17 20:05:30 2012 +0900
+@@ -1122,6 +1122,11 @@
+             return true;
+         }
+ 
++        bool supportsFloatingPointRound() const
++        {
++            return false;
++        }
++
+         void moveDouble(FPRegisterID src, FPRegisterID dest)
+         {
+             m_assembler.fmovd_r(src, dest);
+@@ -1300,6 +1305,21 @@
+             m_assembler.fabsd_r(src, dest);
+         }
+ 
++        void roundDouble(FPRegisterID src, FPRegisterID dst)
++        {
++            ASSERT_NOT_REACHED();
++        }
++
++        void floorDouble(FPRegisterID src, FPRegisterID dst)
++        {
++            ASSERT_NOT_REACHED();
++        }
++
++        void ceilDouble(FPRegisterID src, FPRegisterID dst)
++        {
++            ASSERT_NOT_REACHED();
++        }
++
+         void sqrtDouble(FPRegisterID src, FPRegisterID dest)
+         {
+             m_assembler.fsqrtd_r(src, dest);
+diff -r eb421f1dd8ef js/src/assembler/assembler/MacroAssemblerX86Common.h
+--- a/js/src/assembler/assembler/MacroAssemblerX86Common.h	Thu Jul 12 14:19:16 2012 -0700
++++ b/js/src/assembler/assembler/MacroAssemblerX86Common.h	Tue Jul 17 20:05:30 2012 +0900
+@@ -366,6 +366,24 @@
+         m_assembler.sqrtsd_rr(src, dst);
+     }
+ 
++    void roundDouble(FPRegisterID src, FPRegisterID dst)
++    {
++        ASSERT(isSSE41Present());
++        m_assembler.roundsd_rr(src, dst, 0);
++    }
++
++    void floorDouble(FPRegisterID src, FPRegisterID dst)
++    {
++        ASSERT(isSSE41Present());
++        m_assembler.roundsd_rr(src, dst, 1);
++    }
++
++    void ceilDouble(FPRegisterID src, FPRegisterID dst)
++    {
++        ASSERT(isSSE41Present());
++        m_assembler.roundsd_rr(src, dst, 2);
++    }
++
+     // Memory access operations:
+     //
+     // Loads are of the form load(address, destination) and stores of the form
+@@ -1279,6 +1297,8 @@
+         return s_sseCheckState;
+     }
+ 
++    bool supportsFloatingPointRound() const { return isSSE41Present(); }
++
+ protected:
+     X86Assembler::Condition x86Condition(Condition cond)
+     {
+diff -r eb421f1dd8ef js/src/assembler/assembler/X86Assembler.h
+--- a/js/src/assembler/assembler/X86Assembler.h	Thu Jul 12 14:19:16 2012 -0700
++++ b/js/src/assembler/assembler/X86Assembler.h	Tue Jul 17 20:05:30 2012 +0900
+@@ -273,6 +273,7 @@
+     } TwoByteOpcodeID;
+ 
+     typedef enum {
++        OP3_ROUNDSD_VsdWsd  = 0x0B,
+         OP3_PINSRD_VsdWsd   = 0x22
+     } ThreeByteOpcodeID;
+ 
+@@ -2288,6 +2289,16 @@
+         m_formatter.immediate8(0x01); // the $1
+     }
+ 
++    void roundsd_rr(XMMRegisterID src, XMMRegisterID dst, int imm8)
++    {
++        js::JaegerSpew(js::JSpew_Insns,
++                       IPFX "roundsd     %d, %s, %s\n", MAYBE_PAD,
++                       imm8, nameFPReg(src), nameFPReg(dst));
++        m_formatter.prefix(PRE_SSE_66);
++        m_formatter.threeByteOp(OP3_ROUNDSD_VsdWsd, (RegisterID)dst, (RegisterID)src);
++        m_formatter.immediate8(imm8);
++    }
++
+     // Misc instructions:
+ 
+     void int3()
+diff -r eb421f1dd8ef js/src/methodjit/Compiler.h
+--- a/js/src/methodjit/Compiler.h	Thu Jul 12 14:19:16 2012 -0700
++++ b/js/src/methodjit/Compiler.h	Tue Jul 17 20:05:30 2012 +0900
+@@ -781,8 +781,9 @@
+     CompileStatus compileArrayWithLength(uint32_t argc);
+     CompileStatus compileArrayWithArgs(uint32_t argc);
+ 
+-    enum RoundingMode { Floor, Round };
++    enum RoundingMode { Floor, Round, Ceil };
+     CompileStatus compileRound(FrameEntry *arg, RoundingMode mode);
++    CompileStatus compileRoundDouble(FrameEntry *arg, RoundingMode mode);
+ 
+     enum GetCharMode { GetChar, GetCharCode };
+     CompileStatus compileGetChar(FrameEntry *thisValue, FrameEntry *arg, GetCharMode mode);
+diff -r eb421f1dd8ef js/src/methodjit/FastBuiltins.cpp
+--- a/js/src/methodjit/FastBuiltins.cpp	Thu Jul 12 14:19:16 2012 -0700
++++ b/js/src/methodjit/FastBuiltins.cpp	Tue Jul 17 20:05:30 2012 +0900
+@@ -76,6 +76,11 @@
+ CompileStatus
+ mjit::Compiler::compileRound(FrameEntry *arg, RoundingMode mode)
+ {
++    if (mode == Ceil) {
++        // this doesn't support ceil
++        return Compile_InlineAbort;
++    }
++
+     FPRegisterID fpScratchReg = frame.allocFPReg();
+ 
+     FPRegisterID fpReg;
+@@ -121,6 +126,45 @@
+ }
+ 
+ CompileStatus
++mjit::Compiler::compileRoundDouble(FrameEntry *arg, RoundingMode mode)
++{
++    FPRegisterID fpScratchReg = frame.allocFPReg();
++
++    FPRegisterID fpReg;
++    bool allocate;
++
++    DebugOnly<MaybeJump> notNumber = loadDouble(arg, &fpReg, &allocate);
++    JS_ASSERT(!((MaybeJump)notNumber).isSet());
++
++    masm.zeroDouble(fpScratchReg);
++
++    /* Slow path for NaN or zero. */
++    Jump zeroOrNan = masm.branchDouble(Assembler::DoubleEqualOrUnordered, fpReg, fpScratchReg);
++    stubcc.linkExit(zeroOrNan, Uses(3));
++
++    if (mode == Round) {
++        masm.roundDouble(fpReg, fpScratchReg);
++    } else if (mode == Floor) {
++        masm.floorDouble(fpReg, fpScratchReg);
++    } else if (mode == Ceil) {
++        masm.ceilDouble(fpReg, fpScratchReg);
++    }
++
++    if (allocate)
++        frame.freeReg(fpReg);
++
++    stubcc.leave();
++    stubcc.masm.move(Imm32(1), Registers::ArgReg1);
++    OOL_STUBCALL(stubs::SlowCall, REJOIN_FALLTHROUGH);
++
++    frame.popn(3);
++    frame.pushDouble(fpScratchReg);
++
++    stubcc.rejoin(Changes(1));
++    return Compile_Okay;
++}
++
++CompileStatus
+ mjit::Compiler::compileMathSqrt(FrameEntry *arg)
+ {
+     FPRegisterID fpResultReg = frame.allocFPReg();
+@@ -959,13 +1003,21 @@
+             if (argType == JSVAL_TYPE_DOUBLE && type == JSVAL_TYPE_DOUBLE)
+                 return compileMathAbsDouble(arg);
+         }
+-        if (native == js_math_floor && argType == JSVAL_TYPE_DOUBLE &&
+-            type == JSVAL_TYPE_INT32) {
+-            return compileRound(arg, Floor);
++        if (native == js_math_floor && argType == JSVAL_TYPE_DOUBLE) {
++            if (type == JSVAL_TYPE_INT32)
++                return compileRound(arg, Floor);
++            if (type == JSVAL_TYPE_DOUBLE && masm.supportsFloatingPointRound())
++                return compileRoundDouble(arg, Floor);
++         }
++        if (native == js_math_round && argType == JSVAL_TYPE_DOUBLE) {
++            if (type == JSVAL_TYPE_INT32)
++                return compileRound(arg, Round);
++            if (type == JSVAL_TYPE_DOUBLE && masm.supportsFloatingPointRound())
++                return compileRoundDouble(arg, Round);
+         }
+-        if (native == js_math_round && argType == JSVAL_TYPE_DOUBLE &&
+-            type == JSVAL_TYPE_INT32) {
+-            return compileRound(arg, Round);
++        if (native == js_math_ceil && argType == JSVAL_TYPE_DOUBLE &&
++            type == JSVAL_TYPE_DOUBLE && masm.supportsFloatingPointRound()) {
++            return compileRoundDouble(arg, Ceil);
+         }
+         if (native == js_math_sqrt && type == JSVAL_TYPE_DOUBLE &&
+              masm.supportsFloatingPointSqrt() &&
