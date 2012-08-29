@@ -4,8 +4,6 @@
 ac_add_options --with-branding=browser/branding/unofficial
 #mk_add_options MOZ_MAKE_FLAGS="-j4"
 mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/ff-pgo
-#export MOZ_OPTIMIZE_LDFLAGS="-opt:ref,icf -LARGEADDRESSAWARE"
-#mk_add_options MOZ_OPTIMIZE_LDFLAGS="-opt:ref,icf -LARGEADDRESSAWARE"
 mk_add_options MOZ_OPTIMIZE_LDFLAGS="/MACHINE:X86 /OPT:REF,ICF /LARGEADDRESSAWARE"
 
 ac_add_options --disable-debug
@@ -35,10 +33,6 @@ mk_add_options PROFILE_GEN_SCRIPT='$(PYTHON) $(MOZ_OBJDIR)/_profile/pgo/profiles
 #mk_add_options PROFILE_GEN_SCRIPT='python E:/SystemTools/win32_Firefox/stopmsg.py'
 #mk_add_options PROFILE_GEN_SCRIPT='cscript E:/SystemTools/win32_Firefox/PgoMsg.vbs'
 
-# for manual pgo build
-ac_add_options --enable-crypto
-ac_add_options --enable-image-decoders=icon,png,gif,jpeg,bmp
-
 # windows version
 ac_add_options --with-windows-version=601
 
@@ -51,3 +45,4 @@ ac_add_options --with-windows-version=601
 # crt dir
 WIN32_REDIST_DIR=$VCINSTALLDIR/redist/x86/Microsoft.VC100.CRT
 #WIN32_REDIST_DIR=$VCINSTALLDIR/redist/x64/Microsoft.VC100.CRT
+
