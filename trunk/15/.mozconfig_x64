@@ -47,3 +47,4 @@ mk_add_options MOZ_OPTIMIZE_LDFLAGS="-MACHINE:X64 -opt:ref,icf"
 # crt dir
 #WIN32_REDIST_DIR=$VCINSTALLDIR/redist/x86/Microsoft.VC100.CRT
 WIN32_REDIST_DIR=$VCINSTALLDIR/redist/x64/Microsoft.VC100.CRT
+
