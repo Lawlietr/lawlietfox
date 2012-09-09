@@ -1,0 +1,171 @@
+diff -r eb421f1dd8ef intl/lwbrk/public/nsILineBreaker.h
+--- a/intl/lwbrk/public/nsILineBreaker.h	Thu Jul 12 14:19:16 2012 -0700
++++ b/intl/lwbrk/public/nsILineBreaker.h	Tue Jul 17 20:34:15 2012 +0900
+@@ -58,9 +58,8 @@
+          (0x2000 <= u && u <= 0x2006) || // EN QUAD, EM QUAD, EN SPACE,
+                                          // EM SPACE, THREE-PER-EM SPACE,
+                                          // FOUR-PER-SPACE, SIX-PER-EM SPACE,
+-         (0x2008 <= u && u <= 0x200B) || // PUNCTUATION SPACE, THIN SPACE,
++         (0x2008 <= u && u <= 0x200B);   // PUNCTUATION SPACE, THIN SPACE,
+                                          // HAIR SPACE, ZERO WIDTH SPACE
+-         u == 0x3000;                    // IDEOGRAPHIC SPACE
+ }
+ 
+ static inline bool
+diff -r eb421f1dd8ef layout/reftests/font-face/local-styled-1-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/font-face/local-styled-1-ref.html	Tue Jul 17 20:34:15 2012 +0900
+@@ -0,0 +1,27 @@
++<!DOCTYPE html>
++<html>
++<head>
++<style type="text/css">
++@font-face {
++  font-family: test;
++  src: local(Nimbus Sans L), local(NimbusSansL-Regu),
++       local(Helvetica), local(Bitstream Vera Sans),
++       local(Arial), local(Liberation Sans), local(SwissA);
++}
++div {
++  font-family: test;
++}
++</style>
++</head>
++<body>
++<div>
++These three lines should all use the same font face.
++</div>
++<div>
++This line should NOT be bold.
++</div>
++<div>
++This line should NOT be italic.
++</div>
++</body>
++</html>
+diff -r eb421f1dd8ef layout/reftests/font-face/local-styled-1.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/font-face/local-styled-1.html	Tue Jul 17 20:34:15 2012 +0900
+@@ -0,0 +1,41 @@
++<!DOCTYPE html>
++<html>
++<head>
++<style type="text/css">
++@font-face {
++  font-family: test;
++  src: local(Nimbus Sans L), local(NimbusSansL-Regu),
++       local(Helvetica), local(Bitstream Vera Sans),
++       local(Arial), local(Liberation Sans), local(SwissA);
++}
++@font-face {
++  font-family: test;
++  font-style: italic;
++  src: local(Nimbus Sans L), local(NimbusSansL-Regu),
++       local(Helvetica), local(Bitstream Vera Sans),
++       local(Arial), local(Liberation Sans), local(SwissA);
++}
++@font-face {
++  font-family: test;
++  font-weight: bold;
++  src: local(Nimbus Sans L), local(NimbusSansL-Regu),
++       local(Helvetica), local(Bitstream Vera Sans),
++       local(Arial), local(Liberation Sans), local(SwissA);
++}
++div {
++  font-family: test;
++}
++</style>
++</head>
++<body>
++<div>
++These three lines should all use the same font face.
++</div>
++<div>
++<b>This line should NOT be bold.</b>
++</div>
++<div>
++<i>This line should NOT be italic.</i>
++</div>
++</body>
++</html>
+diff -r eb421f1dd8ef layout/reftests/line-breaking/between-whitespaces-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/line-breaking/between-whitespaces-ref.html	Tue Jul 17 20:34:15 2012 +0900
+@@ -0,0 +1,32 @@
++<!DOCTYPE html>
++<html>
++<head>
++<title>Line breaks between white spaces</title>
++<style>
++div {
++  width: 0px;
++  border: 1px solid blue;
++  white-space: nowrap;
++}
++</style>
++</head>
++<body>
++<table>
++<tr><th>U+0009</th><td><div>&#x0009;&#x0009;</div></td></tr>
++<tr><th>U+000D</th><td><div>&#x000D;&#x000D;</div></td></tr>
++<tr><th>U+0020</th><td><div>&#x0020;&#x0020;</div></td></tr>
++<tr><th>U+2000</th><td><div>&#x2000;&#x2000;</div></td></tr>
++<tr><th>U+2001</th><td><div>&#x2000;&#x2001;</div></td></tr>
++<tr><th>U+2002</th><td><div>&#x2000;&#x2002;</div></td></tr>
++<tr><th>U+2003</th><td><div>&#x2000;&#x2003;</div></td></tr>
++<tr><th>U+2004</th><td><div>&#x2000;&#x2004;</div></td></tr>
++<tr><th>U+2005</th><td><div>&#x2000;&#x2005;</div></td></tr>
++<tr><th>U+2006</th><td><div>&#x2000;&#x2006;</div></td></tr>
++<tr><th>U+2008</th><td><div>&#x2000;&#x2008;</div></td></tr>
++<tr><th>U+2009</th><td><div>&#x2000;&#x2009;</div></td></tr>
++<tr><th>U+200A</th><td><div>&#x2000;&#x200A;</div></td></tr>
++<tr><th>U+200B</th><td><div>&#x2000;&#x200B;</div></td></tr>
++<tr><th>U+3000</th><td><div>&#x3000;<br>&#x3000;</div></td></tr>
++</table>
++</body>
++</html>
+\ No newline at end of file
+diff -r eb421f1dd8ef layout/reftests/line-breaking/between-whitespaces.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/line-breaking/between-whitespaces.html	Tue Jul 17 20:34:15 2012 +0900
+@@ -0,0 +1,31 @@
++<!DOCTYPE html>
++<html>
++<head>
++<title>Line breaks between white spaces</title>
++<style>
++div {
++  width: 0px;
++  border: 1px solid blue;
++}
++</style>
++</head>
++<body>
++<table>
++<tr><th>U+0009</th><td><div>&#x0009;&#x0009;</div></td></tr>
++<tr><th>U+000D</th><td><div>&#x000D;&#x000D;</div></td></tr>
++<tr><th>U+0020</th><td><div>&#x0020;&#x0020;</div></td></tr>
++<tr><th>U+2000</th><td><div>&#x2000;&#x2000;</div></td></tr>
++<tr><th>U+2001</th><td><div>&#x2000;&#x2001;</div></td></tr>
++<tr><th>U+2002</th><td><div>&#x2000;&#x2002;</div></td></tr>
++<tr><th>U+2003</th><td><div>&#x2000;&#x2003;</div></td></tr>
++<tr><th>U+2004</th><td><div>&#x2000;&#x2004;</div></td></tr>
++<tr><th>U+2005</th><td><div>&#x2000;&#x2005;</div></td></tr>
++<tr><th>U+2006</th><td><div>&#x2000;&#x2006;</div></td></tr>
++<tr><th>U+2008</th><td><div>&#x2000;&#x2008;</div></td></tr>
++<tr><th>U+2009</th><td><div>&#x2000;&#x2009;</div></td></tr>
++<tr><th>U+200A</th><td><div>&#x2000;&#x200A;</div></td></tr>
++<tr><th>U+200B</th><td><div>&#x2000;&#x200B;</div></td></tr>
++<tr><th>U+3000</th><td><div>&#x3000;&#x3000;</div></td></tr>
++</table>
++</body>
++</html>
+\ No newline at end of file
+diff -r eb421f1dd8ef layout/reftests/line-breaking/reftest.list
+--- a/layout/reftests/line-breaking/reftest.list	Thu Jul 12 14:19:16 2012 -0700
++++ b/layout/reftests/line-breaking/reftest.list	Tue Jul 17 20:34:15 2012 +0900
+@@ -1,3 +1,4 @@
++== between-whitespaces.html between-whitespaces-ref.html
+ == chemical-1.html chemical-1-ref.html
+ == currency-1.html currency-1-ref.html
+ == currency-2.html currency-2-ref.html
