@@ -1,0 +1,12 @@
+diff -r eb421f1dd8ef accessible/src/html/nsHTMLTableAccessible.cpp
+--- a/accessible/src/html/nsHTMLTableAccessible.cpp	Thu Jul 12 14:19:16 2012 -0700
++++ b/accessible/src/html/nsHTMLTableAccessible.cpp	Tue Jul 17 22:11:43 2012 +0900
+@@ -1459,7 +1459,7 @@
+   // Check for styled background color across rows (alternating background
+   // color is a common feature for data tables).
+   PRUint32 childCount = ChildCount();
+-  nscolor rowColor, prevRowColor;
++  nscolor rowColor = 0, prevRowColor;
+   for (PRUint32 childIdx = 0; childIdx < childCount; childIdx++) {
+     Accessible* child = GetChildAt(childIdx);
+     if (child->Role() == roles::ROW) {
