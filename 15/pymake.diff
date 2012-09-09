@@ -1,0 +1,1493 @@
+diff -r 50f5c2689179 build/pymake/pymake/command.py
+--- a/build/pymake/pymake/command.py	Thu Aug 09 09:10:21 2012 +0200
++++ b/build/pymake/pymake/command.py	Sun Aug 12 03:08:32 2012 +0900
+@@ -1,6 +1,3 @@
+-# This Source Code Form is subject to the terms of the Mozilla Public
+-# License, v. 2.0. If a copy of the MPL was not distributed with this
+-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ """
+ Makefile execution.
+ 
+diff -r 50f5c2689179 build/pymake/pymake/data.py
+--- a/build/pymake/pymake/data.py	Thu Aug 09 09:10:21 2012 +0200
++++ b/build/pymake/pymake/data.py	Sun Aug 12 03:08:32 2012 +0900
+@@ -62,10 +62,84 @@
+         return t()
+     return f()
+ 
+-class StringExpansion(object):
++
++class BaseExpansion(object):
++    """Base class for expansions.
++
++    A make expansion is the parsed representation of a string, which may
++    contain references to other elements.
++    """
++
++    @property
++    def is_static_string(self):
++        """Returns whether the expansion is composed of static string content.
++
++        This is always True for StringExpansion. It will be True for Expansion
++        only if all elements of that Expansion are static strings.
++        """
++        raise Exception('Must be implemented in child class.')
++
++    def functions(self, descend=False):
++        """Obtain all functions inside this expansion.
++
++        This is a generator for pymake.functions.Function instances.
++
++        By default, this only returns functions existing as the primary
++        elements of this expansion. If `descend` is True, it will descend into
++        child expansions and extract all functions in the tree.
++        """
++        # An empty generator. Yeah, it's weird.
++        for x in []:
++            yield x
++
++    def variable_references(self, descend=False):
++        """Obtain all variable references in this expansion.
++
++        This is a generator for pymake.functionsVariableRef instances.
++
++        To retrieve the names of variables, simply query the `vname` field on
++        the returned instances. Most of the time these will be StringExpansion
++        instances.
++        """
++        for f in self.functions(descend=descend):
++            if not isinstance(f, functions.VariableRef):
++                continue
++
++            yield f
++
++    @property
++    def is_filesystem_dependent(self):
++        """Whether this expansion may query the filesystem for evaluation.
++
++        This effectively asks "is any function in this expansion dependent on
++        the filesystem.
++        """
++        for f in self.functions(descend=True):
++            if f.is_filesystem_dependent:
++                return True
++
++        return False
++
++    @property
++    def is_shell_dependent(self):
++        """Whether this expansion may invoke a shell for evaluation."""
++
++        for f in self.functions(descend=True):
++            if isinstance(f, functions.ShellFunction):
++                return True
++
++        return False
++
++
++class StringExpansion(BaseExpansion):
++    """An Expansion representing a static string.
++
++    This essentially wraps a single str instance.
++    """
++
+     __slots__ = ('loc', 's',)
+     simple = True
+-    
++
+     def __init__(self, s, loc):
+         assert isinstance(s, str)
+         self.s = s
+@@ -94,6 +168,10 @@
+         e.appendstr(self.s)
+         return e
+ 
++    @property
++    def is_static_string(self):
++        return True
++
+     def __len__(self):
+         return 1
+ 
+@@ -104,9 +182,31 @@
+     def __repr__(self):
+         return "Exp<%s>(%r)" % (self.loc, self.s)
+ 
+-class Expansion(list):
+-    """
+-    A representation of expanded data, such as that for a recursively-expanded variable, a command, etc.
++    def __eq__(self, other):
++        """We only compare the string contents."""
++        return self.s == other
++
++    def __ne__(self, other):
++        return not self.__eq__(other)
++
++    def to_source(self, escape_variables=False, escape_comments=False):
++        s = self.s
++
++        if escape_comments:
++            s = s.replace('#', '\\#')
++
++        if escape_variables:
++            return s.replace('$', '$$')
++
++        return s
++
++
++class Expansion(BaseExpansion, list):
++    """A representation of expanded data.
++
++    This is effectively an ordered list of StringExpansion and
++    pymake.function.Function instances. Every item in the collection appears in
++    the same context in a make file.
+     """
+ 
+     __slots__ = ('loc',)
+@@ -232,9 +332,91 @@
+     def resolvesplit(self, makefile, variables, setting=[]):
+         return self.resolvestr(makefile, variables, setting).split()
+ 
++    @property
++    def is_static_string(self):
++        """An Expansion is static if all its components are strings, not
++        functions."""
++        for e, is_func in self:
++            if is_func:
++                return False
++
++        return True
++
++    def functions(self, descend=False):
++        for e, is_func in self:
++            if is_func:
++                yield e
++
++            if descend:
++                for exp in e.expansions(descend=True):
++                    for f in exp.functions(descend=True):
++                        yield f
++
+     def __repr__(self):
+         return "<Expansion with elements: %r>" % ([e for e, isfunc in self],)
+ 
++    def to_source(self, escape_variables=False, escape_comments=False):
++        parts = []
++        for e, is_func in self:
++            if is_func:
++                parts.append(e.to_source())
++                continue
++
++            if escape_variables:
++                parts.append(e.replace('$', '$$'))
++                continue
++
++            parts.append(e)
++
++        return ''.join(parts)
++
++    def __eq__(self, other):
++        if not isinstance(other, (Expansion, StringExpansion)):
++            return False
++
++        # Expansions are equivalent if adjacent string literals normalize to
++        # the same value. So, we must normalize before any comparisons are
++        # made.
++        a = self.clone().finish()
++
++        if isinstance(other, StringExpansion):
++            if isinstance(a, StringExpansion):
++                return a == other
++
++            # A normalized Expansion != StringExpansion.
++            return False
++
++        b = other.clone().finish()
++
++        # b could be a StringExpansion now.
++        if isinstance(b, StringExpansion):
++            if isinstance(a, StringExpansion):
++                return a == b
++
++            # Our normalized Expansion != normalized StringExpansion.
++            return False
++
++        if len(a) != len(b):
++            return False
++
++        for i in xrange(len(self)):
++            e1, is_func1 = a[i]
++            e2, is_func2 = b[i]
++
++            if is_func1 != is_func2:
++                return False
++
++            if type(e1) != type(e2):
++                return False
++
++            if e1 != e2:
++                return False
++
++        return True
++
++    def __ne__(self, other):
++        return not self.__eq__(other)
++
+ class Variables(object):
+     """
+     A mapping from variable names to variables. Variables have flavor, source, and value. The value is an 
+@@ -1204,7 +1386,7 @@
+         _CommandWrapper.__init__(self, cline, ignoreErrors, loc, context,
+                                  **kwargs)
+         # get the module and method to call
+-        parts, badchar = process.clinetoargv(cline)
++        parts, badchar = process.clinetoargv(cline, blacklist_gray=False)
+         if parts is None:
+             raise DataError("native command '%s': shell metacharacter '%s' in command line" % (cline, badchar), self.loc)
+         if len(parts) < 2:
+@@ -1542,6 +1724,10 @@
+         if len(np.rules):
+             self.context = process.getcontext(1)
+ 
++        flavor, source, value = self.variables.get('.DEFAULT_GOAL')
++        if value is not None:
++            self.defaulttarget = value.resolvestr(self, self.variables, ['.DEFAULT_GOAL']).strip()
++
+         self.error = False
+ 
+     def include(self, path, required=True, weak=False, loc=None):
+diff -r 50f5c2689179 build/pymake/pymake/functions.py
+--- a/build/pymake/pymake/functions.py	Thu Aug 09 09:10:21 2012 +0200
++++ b/build/pymake/pymake/functions.py	Sun Aug 12 03:08:32 2012 +0900
+@@ -9,6 +9,21 @@
+ 
+ log = logging.getLogger('pymake.data')
+ 
++def emit_expansions(descend, *expansions):
++    """Helper function to emit all expansions within an input set."""
++    for expansion in expansions:
++        yield expansion
++
++        if not descend or not isinstance(expansion, list):
++            continue
++
++        for e, is_func in expansion:
++            if is_func:
++                for exp in e.expansions(True):
++                    yield exp
++            else:
++                yield e
++
+ class Function(object):
+     """
+     An object that represents a function call. This class is always subclassed
+@@ -44,6 +59,60 @@
+         assert isinstance(arg, (data.Expansion, data.StringExpansion))
+         self._arguments.append(arg)
+ 
++    def to_source(self):
++        """Convert the function back to make file "source" code."""
++        if not hasattr(self, 'name'):
++            raise Exception("%s must implement to_source()." % self.__class__)
++
++        # The default implementation simply prints the function name and all
++        # the arguments joined by a comma.
++        # According to the GNU make manual Section 8.1, whitespace around
++        # arguments is *not* part of the argument's value. So, we trim excess
++        # white space so we have consistent behavior.
++        args = []
++        curly = False
++        for i, arg in enumerate(self._arguments):
++            arg = arg.to_source()
++
++            if i == 0:
++                arg = arg.lstrip()
++
++            # Are balanced parens even OK?
++            if arg.count('(') != arg.count(')'):
++                curly = True
++
++            args.append(arg)
++
++        if curly:
++            return '${%s %s}' % (self.name, ','.join(args))
++
++        return '$(%s %s)' % (self.name, ','.join(args))
++
++    def expansions(self, descend=False):
++        """Obtain all expansions contained within this function.
++
++        By default, only expansions directly part of this function are
++        returned. If descend is True, we will descend into child expansions and
++        return all of the composite parts.
++
++        This is a generator for pymake.data.BaseExpansion instances.
++        """
++        # Our default implementation simply returns arguments. More advanced
++        # functions like variable references may need their own implementation.
++        return emit_expansions(descend, *self._arguments)
++
++    @property
++    def is_filesystem_dependent(self):
++        """Exposes whether this function depends on the filesystem for results.
++
++        If True, the function touches the filesystem as part of evaluation.
++
++        This only tests whether the function itself uses the filesystem. If
++        this function has arguments that are functions that touch the
++        filesystem, this will return False.
++        """
++        return False
++
+     def __len__(self):
+         return len(self._arguments)
+ 
+@@ -53,14 +122,53 @@
+             ','.join([repr(a) for a in self._arguments]),
+             )
+ 
++    def __eq__(self, other):
++        if not hasattr(self, 'name'):
++            raise Exception("%s must implement __eq__." % self.__class__)
++
++        if type(self) != type(other):
++            return False
++
++        if self.name != other.name:
++            return False
++
++        if len(self._arguments) != len(other._arguments):
++            return False
++
++        for i in xrange(len(self._arguments)):
++            # According to the GNU make manual Section 8.1, whitespace around
++            # arguments is *not* part of the argument's value. So, we do a
++            # whitespace-agnostic comparison.
++            if i == 0:
++                a = self._arguments[i]
++                a.lstrip()
++
++                b = other._arguments[i]
++                b.lstrip()
++
++                if a != b:
++                    return False
++
++                continue
++
++            if self._arguments[i] != other._arguments[i]:
++                return False
++
++        return True
++
++    def __ne__(self, other):
++        return not self.__eq__(other)
++
+ class VariableRef(Function):
++    AUTOMATIC_VARIABLES = set(['@', '%', '<', '?', '^', '+', '|', '*'])
++
+     __slots__ = ('vname', 'loc')
+ 
+     def __init__(self, loc, vname):
+         self.loc = loc
+         assert isinstance(vname, (data.Expansion, data.StringExpansion))
+         self.vname = vname
+-        
++
+     def setup(self):
+         assert False, "Shouldn't get here"
+ 
+@@ -76,9 +184,27 @@
+ 
+         value.resolve(makefile, variables, fd, setting + [vname])
+ 
++    def to_source(self):
++        if isinstance(self.vname, data.StringExpansion):
++            if self.vname.s in self.AUTOMATIC_VARIABLES:
++                return '$%s' % self.vname.s
++
++            return '$(%s)' % self.vname.s
++
++        return '$(%s)' % self.vname.to_source()
++
++    def expansions(self, descend=False):
++        return emit_expansions(descend, self.vname)
++
+     def __repr__(self):
+         return "VariableRef<%s>(%r)" % (self.loc, self.vname)
+ 
++    def __eq__(self, other):
++        if not isinstance(other, VariableRef):
++            return False
++
++        return self.vname == other.vname
++
+ class SubstitutionRef(Function):
+     """$(VARNAME:.c=.o) and $(VARNAME:%.c=%.o)"""
+ 
+@@ -114,9 +240,26 @@
+         fd.write(' '.join([f.subst(substto, word, False)
+                            for word in value.resolvesplit(makefile, variables, setting + [vname])]))
+ 
++    def to_source(self):
++        return '$(%s:%s=%s)' % (
++            self.vname.to_source(),
++            self.substfrom.to_source(),
++            self.substto.to_source())
++
++    def expansions(self, descend=False):
++        return emit_expansions(descend, self.vname, self.substfrom,
++                self.substto)
++
+     def __repr__(self):
+         return "SubstitutionRef<%s>(%r:%r=%r)" % (
+-            self.loc, self.vname, self.substfrom, selfsubstto,)
++            self.loc, self.vname, self.substfrom, self.substto,)
++
++    def __eq__(self, other):
++        if not isinstance(other, SubstitutionRef):
++            return False
++
++        return self.vname == other.vname and self.substfrom == other.substfrom \
++                and self.substto == other.substto
+ 
+ class SubstFunction(Function):
+     name = 'subst'
+@@ -352,7 +495,7 @@
+         util.joiniter(fd, self.basenames(self._arguments[0].resolvesplit(makefile, variables, setting)))
+ 
+ class AddSuffixFunction(Function):
+-    name = 'addprefix'
++    name = 'addsuffix'
+     minargs = 2
+     maxargs = 2
+ 
+@@ -364,7 +507,7 @@
+         fd.write(' '.join([w + suffix for w in self._arguments[1].resolvesplit(makefile, variables, setting)]))
+ 
+ class AddPrefixFunction(Function):
+-    name = 'addsuffix'
++    name = 'addprefix'
+     minargs = 2
+     maxargs = 2
+ 
+@@ -407,7 +550,9 @@
+                            for p in patterns
+                            for x in glob(makefile.workdir, p)]))
+ 
+-    __slots__ = Function.__slots__
++    @property
++    def is_filesystem_dependent(self):
++        return True
+ 
+ class RealpathFunction(Function):
+     name = 'realpath'
+@@ -418,6 +563,9 @@
+         fd.write(' '.join([os.path.realpath(os.path.join(makefile.workdir, path)).replace('\\', '/')
+                            for path in self._arguments[0].resolvesplit(makefile, variables, setting)]))
+ 
++    def is_filesystem_dependent(self):
++        return True
++
+ class AbspathFunction(Function):
+     name = 'abspath'
+     minargs = 1
+diff -r 50f5c2689179 build/pymake/pymake/parser.py
+--- a/build/pymake/pymake/parser.py	Thu Aug 09 09:10:21 2012 +0200
++++ b/build/pymake/pymake/parser.py	Sun Aug 12 03:08:32 2012 +0900
+@@ -498,9 +498,9 @@
+                 e.rstrip()
+ 
+                 if token is None:
+-                    condstack[-1].append(parserdata.ExportDirective(e, single=False))
++                    condstack[-1].append(parserdata.ExportDirective(e, concurrent_set=False))
+                 else:
+-                    condstack[-1].append(parserdata.ExportDirective(e, single=True))
++                    condstack[-1].append(parserdata.ExportDirective(e, concurrent_set=True))
+ 
+                     value = flattenmakesyntax(d, offset).lstrip()
+                     condstack[-1].append(parserdata.SetVariable(e, value=value, valueloc=d.getloc(offset), token=token, targetexp=None))
+diff -r 50f5c2689179 build/pymake/pymake/parserdata.py
+--- a/build/pymake/pymake/parserdata.py	Thu Aug 09 09:10:21 2012 +0200
++++ b/build/pymake/pymake/parserdata.py	Sun Aug 12 03:08:32 2012 +0900
+@@ -29,7 +29,7 @@
+ 
+         if start == end:
+             return self
+-        
++
+         skiplines = s.count('\n', start, end)
+         line = self.line + skiplines
+         if skiplines:
+@@ -88,6 +88,7 @@
+             vname = vname.strip()
+             vnameexp = data.Expansion.fromstring(vname, "Command-line argument")
+ 
++            stmts.append(ExportDirective(vnameexp, concurrent_set=True))
+             stmts.append(SetVariable(vnameexp, token=t,
+                                      value=val, valueloc=Location('<command-line>', i, len(vname) + len(t)),
+                                      targetexp=None, source=data.Variables.SOURCE_COMMANDLINE))
+@@ -98,12 +99,30 @@
+ 
+ class Statement(object):
+     """
+-    A statement is an abstract object representing a single "chunk" of makefile syntax. Subclasses
+-    must implement the following method:
++    Represents parsed make file syntax.
+ 
+-    def execute(self, makefile, context)
++    This is an abstract base class. Child classes are expected to implement
++    basic methods defined below.
+     """
+ 
++    def execute(self, makefile, context):
++        """Executes this Statement within a make file execution context."""
++        raise Exception("%s must implement execute()." % self.__class__)
++
++    def to_source(self):
++        """Obtain the make file "source" representation of the Statement.
++
++        This converts an individual Statement back to a string that can again
++        be parsed into this Statement.
++        """
++        raise Exception("%s must implement to_source()." % self.__class__)
++
++    def __eq__(self, other):
++        raise Exception("%s must implement __eq__." % self.__class__)
++
++    def __ne__(self, other):
++        return self.__eq__(other)
++
+ class DummyRule(object):
+     __slots__ = ()
+ 
+@@ -111,12 +130,27 @@
+         pass
+ 
+ class Rule(Statement):
++    """
++    Rules represent how to make specific targets.
++
++    See https://www.gnu.org/software/make/manual/make.html#Rules.
++
++    An individual rule is composed of a target, dependencies, and a recipe.
++    This class only contains references to the first 2. The recipe will be
++    contained in Command classes which follow this one in a stream of Statement
++    instances.
++
++    Instances also contain a boolean property `doublecolon` which says whether
++    this is a doublecolon rule. Doublecolon rules are rules that are always
++    executed, if they are evaluated. Normally, rules are only executed if their
++    target is out of date.
++    """
+     __slots__ = ('targetexp', 'depexp', 'doublecolon')
+ 
+     def __init__(self, targetexp, depexp, doublecolon):
+         assert isinstance(targetexp, (data.Expansion, data.StringExpansion))
+         assert isinstance(depexp, (data.Expansion, data.StringExpansion))
+-        
++
+         self.targetexp = targetexp
+         self.depexp = depexp
+         self.doublecolon = doublecolon
+@@ -153,7 +187,39 @@
+     def dump(self, fd, indent):
+         print >>fd, "%sRule %s: %s" % (indent, self.targetexp, self.depexp)
+ 
++    def to_source(self):
++        sep = ':'
++
++        if self.doublecolon:
++            sep = '::'
++
++        deps = self.depexp.to_source()
++        if len(deps) > 0 and not deps[0].isspace():
++            sep += ' '
++
++        return '\n%s%s%s' % (
++            self.targetexp.to_source(escape_variables=True),
++            sep,
++            deps)
++
++    def __eq__(self, other):
++        if not isinstance(other, Rule):
++            return False
++
++        return self.targetexp == other.targetexp \
++                and self.depexp == other.depexp \
++                and self.doublecolon == other.doublecolon
++
+ class StaticPatternRule(Statement):
++    """
++    Static pattern rules are rules which specify multiple targets based on a
++    string pattern.
++
++    See https://www.gnu.org/software/make/manual/make.html#Static-Pattern
++
++    They are like `Rule` instances except an added property, `patternexp` is
++    present. It contains the Expansion which represents the rule pattern.
++    """
+     __slots__ = ('targetexp', 'patternexp', 'depexp', 'doublecolon')
+ 
+     def __init__(self, targetexp, patternexp, depexp, doublecolon):
+@@ -199,7 +265,44 @@
+     def dump(self, fd, indent):
+         print >>fd, "%sStaticPatternRule %s: %s: %s" % (indent, self.targetexp, self.patternexp, self.depexp)
+ 
++    def to_source(self):
++        sep = ':'
++
++        if self.doublecolon:
++            sep = '::'
++
++        pattern = self.patternexp.to_source()
++        deps = self.depexp.to_source()
++
++        if len(pattern) > 0 and pattern[0] not in (' ', '\t'):
++            sep += ' '
++
++        return '\n%s%s%s:%s' % (
++            self.targetexp.to_source(escape_variables=True),
++            sep,
++            pattern,
++            deps)
++
++    def __eq__(self, other):
++        if not isinstance(other, StaticPatternRule):
++            return False
++
++        return self.targetexp == other.targetexp \
++                and self.patternexp == other.patternexp \
++                and self.depexp == other.depexp \
++                and self.doublecolon == other.doublecolon
++
+ class Command(Statement):
++    """
++    Commands are things that get executed by a rule.
++
++    A rule's recipe is composed of 0 or more Commands.
++
++    A command is simply an expansion. Commands typically represent strings to
++    be executed in a shell (e.g. via system()). Although, since make files
++    allow arbitrary shells to be used for command execution, this isn't a
++    guarantee.
++    """
+     __slots__ = ('exp',)
+ 
+     def __init__(self, exp):
+@@ -216,7 +319,44 @@
+     def dump(self, fd, indent):
+         print >>fd, "%sCommand %s" % (indent, self.exp,)
+ 
++    def to_source(self):
++        # Commands have some interesting quirks when it comes to source
++        # formatting. First, they can be multi-line. Second, a tab needs to be
++        # inserted at the beginning of every line. Finally, there might be
++        # variable references inside the command. This means we need to escape
++        # variable references inside command strings. Luckily, this is handled
++        # by the Expansion.
++        s = self.exp.to_source(escape_variables=True)
++
++        return '\n'.join(['\t%s' % line for line in s.split('\n')])
++
++    def __eq__(self, other):
++        if not isinstance(other, Command):
++            return False
++
++        return self.exp == other.exp
++
+ class SetVariable(Statement):
++    """
++    Represents a variable assignment.
++
++    Variable assignment comes in two different flavors.
++
++    Simple assignment has the form:
++
++      <Expansion> <Assignment Token> <string>
++
++    e.g. FOO := bar
++
++    These correspond to the fields `vnameexp`, `token`, and `value`. In
++    addition, `valueloc` will be a Location and `source` will be a
++    pymake.data.Variables.SOURCE_* constant.
++
++    There are also target-specific variables. These are variables that only
++    apply in the context of a specific target. They are like the aforementioned
++    assignment except the `targetexp` field is set to an Expansion representing
++    the target they apply to.
++    """
+     __slots__ = ('vnameexp', 'token', 'value', 'valueloc', 'targetexp', 'source')
+ 
+     def __init__(self, vnameexp, token, value, valueloc, targetexp, source=None):
+@@ -278,14 +418,93 @@
+     def dump(self, fd, indent):
+         print >>fd, "%sSetVariable<%s> %s %s\n%s %r" % (indent, self.valueloc, self.vnameexp, self.token, indent, self.value)
+ 
++    def __eq__(self, other):
++        if not isinstance(other, SetVariable):
++            return False
++
++        return self.vnameexp == other.vnameexp \
++                and self.token == other.token \
++                and self.value == other.value \
++                and self.targetexp == other.targetexp \
++                and self.source == other.source
++
++    def to_source(self):
++        chars = []
++        for i in xrange(0, len(self.value)):
++            c = self.value[i]
++
++            # Literal # is escaped in variable assignment otherwise it would be
++            # a comment.
++            if c == '#':
++                # If a backslash precedes this, we need to escape it as well.
++                if i > 0 and self.value[i-1] == '\\':
++                    chars.append('\\')
++
++                chars.append('\\#')
++                continue
++
++            chars.append(c)
++
++        value = ''.join(chars)
++
++        prefix = ''
++        if self.source == data.Variables.SOURCE_OVERRIDE:
++            prefix = 'override '
++
++        # SetVariable come in two flavors: simple and target-specific.
++
++        # We handle the target-specific syntax first.
++        if self.targetexp is not None:
++            return '%s: %s %s %s' % (
++                self.targetexp.to_source(),
++                self.vnameexp.to_source(),
++                self.token,
++                value)
++
++        # The variable could be multi-line or have leading whitespace. For
++        # regular variable assignment, whitespace after the token but before
++        # the value is ignored. If we see leading whitespace in the value here,
++        # the variable must have come from a define.
++        if value.count('\n') > 0 or (len(value) and value[0].isspace()):
++            # The parser holds the token in vnameexp for whatever reason.
++            return '%sdefine %s\n%s\nendef' % (
++                prefix,
++                self.vnameexp.to_source(),
++                value)
++
++        return '%s%s %s %s' % (
++                prefix,
++                self.vnameexp.to_source(),
++                self.token,
++                value)
++
+ class Condition(object):
+     """
+-    An abstract "condition", either ifeq or ifdef, perhaps negated. Subclasses must implement:
++    An abstract "condition", either ifeq or ifdef, perhaps negated.
++
++    See https://www.gnu.org/software/make/manual/make.html#Conditional-Syntax
++
++    Subclasses must implement:
+ 
+     def evaluate(self, makefile)
+     """
+ 
++    def __eq__(self, other):
++        raise Exception("%s must implement __eq__." % __class__)
++
++    def __ne__(self, other):
++        return not self.__eq__(other)
++
+ class EqCondition(Condition):
++    """
++    Represents an ifeq or ifneq conditional directive.
++
++    This directive consists of two Expansions which are compared for equality.
++
++    The `expected` field is a bool indicating what the condition must evaluate
++    to in order for its body to be executed. If True, this is an "ifeq"
++    conditional directive. If False, an "ifneq."
++    """
+     __slots__ = ('exp1', 'exp2', 'expected')
+ 
+     def __init__(self, exp1, exp2):
+@@ -304,7 +523,24 @@
+     def __str__(self):
+         return "ifeq (expected=%s) %s %s" % (self.expected, self.exp1, self.exp2)
+ 
++    def __eq__(self, other):
++        if not isinstance(other, EqCondition):
++            return False
++
++        return self.exp1 == other.exp1 \
++                and self.exp2 == other.exp2 \
++                and self.expected == other.expected
++
+ class IfdefCondition(Condition):
++    """
++    Represents an ifdef or ifndef conditional directive.
++
++    This directive consists of a single expansion which represents the name of
++    a variable (without the leading '$') which will be checked for definition.
++
++    The `expected` field is a bool and has the same behavior as EqCondition.
++    If it is True, this represents a "ifdef" conditional. If False, "ifndef."
++    """
+     __slots__ = ('exp', 'expected')
+ 
+     def __init__(self, exp):
+@@ -324,7 +560,16 @@
+     def __str__(self):
+         return "ifdef (expected=%s) %s" % (self.expected, self.exp)
+ 
++    def __eq__(self, other):
++        if not isinstance(other, IfdefCondition):
++            return False
++
++        return self.exp == other.exp and self.expected == other.expected
++
+ class ElseCondition(Condition):
++    """
++    Represents the transition between branches in a ConditionBlock.
++    """
+     __slots__ = ()
+ 
+     def evaluate(self, makefile):
+@@ -333,9 +578,23 @@
+     def __str__(self):
+         return "else"
+ 
++    def __eq__(self, other):
++        return isinstance(other, ElseCondition)
++
+ class ConditionBlock(Statement):
+     """
+-    A list of conditions: each condition has an associated list of statements.
++    A set of related Conditions.
++
++    This is essentially a list of 2-tuples of (Condition, list(Statement)).
++
++    The parser creates a ConditionBlock for all statements related to the same
++    conditional group. If iterating over the parser's output, where you think
++    you would see an ifeq, you will see a ConditionBlock containing an IfEq. In
++    other words, the parser collapses separate statements into this container
++    class.
++
++    ConditionBlock instances may exist within other ConditionBlock if the
++    conditional logic is multiple levels deep.
+     """
+     __slots__ = ('loc', '_groups')
+ 
+@@ -379,6 +638,106 @@
+             print >>fd, "%s ~Condition" % (indent,)
+         print >>fd, "%s~ConditionBlock" % (indent,)
+ 
++    def to_source(self):
++        lines = []
++        index = 0
++        for condition, statements in self:
++            lines.append(ConditionBlock.condition_source(condition, index))
++            index += 1
++
++            for statement in statements:
++                lines.append(statement.to_source())
++
++        lines.append('endif')
++
++        return '\n'.join(lines)
++
++    def __eq__(self, other):
++        if not isinstance(other, ConditionBlock):
++            return False
++
++        if len(self) != len(other):
++            return False
++
++        for i in xrange(0, len(self)):
++            our_condition, our_statements = self[i]
++            other_condition, other_statements = other[i]
++
++            if our_condition != other_condition:
++                return False
++
++            if our_statements != other_statements:
++                return False
++
++        return True
++
++    @staticmethod
++    def condition_source(statement, index):
++        """Convert a condition to its source representation.
++
++        The index argument defines the index of this condition inside a
++        ConditionBlock. If it is greater than 0, an "else" will be prepended
++        to the result, if necessary.
++        """
++        prefix = ''
++        if isinstance(statement, (EqCondition, IfdefCondition)) and index > 0:
++            prefix = 'else '
++
++        if isinstance(statement, IfdefCondition):
++            s = statement.exp.s
++
++            if statement.expected:
++                return '%sifdef %s' % (prefix, s)
++
++            return '%sifndef %s' % (prefix, s)
++
++        if isinstance(statement, EqCondition):
++            args = [
++                statement.exp1.to_source(escape_comments=True),
++                statement.exp2.to_source(escape_comments=True)]
++
++            use_quotes = False
++            single_quote_present = False
++            double_quote_present = False
++            for i, arg in enumerate(args):
++                if len(arg) > 0 and (arg[0].isspace() or arg[-1].isspace()):
++                    use_quotes = True
++
++                    if "'" in arg:
++                        single_quote_present = True
++
++                    if '"' in arg:
++                        double_quote_present = True
++
++            # Quote everything if needed.
++            if single_quote_present and double_quote_present:
++                raise Exception('Cannot format condition with multiple quotes.')
++
++            if use_quotes:
++                for i, arg in enumerate(args):
++                    # Double to single quotes.
++                    if single_quote_present:
++                        args[i] = '"' + arg + '"'
++                    else:
++                        args[i] = "'" + arg + "'"
++
++            body = None
++            if use_quotes:
++                body = ' '.join(args)
++            else:
++                body = '(%s)' % ','.join(args)
++
++            if statement.expected:
++                return '%sifeq %s' % (prefix, body)
++
++            return '%sifneq %s' % (prefix, body)
++
++        if isinstance(statement, ElseCondition):
++            return 'else'
++
++        raise Exception('Unhandled Condition statement: %s' %
++                statement.__class__)
++
+     def __iter__(self):
+         return iter(self._groups)
+ 
+@@ -389,6 +748,15 @@
+         return self._groups[i]
+ 
+ class Include(Statement):
++    """
++    Represents the include directive.
++
++    See https://www.gnu.org/software/make/manual/make.html#Include
++
++    The file to be included is represented by the Expansion defined in the
++    field `exp`. `required` is a bool indicating whether execution should fail
++    if the specified file could not be processed.
++    """
+     __slots__ = ('exp', 'required', 'deps')
+ 
+     def __init__(self, exp, required, weak):
+@@ -405,7 +773,26 @@
+     def dump(self, fd, indent):
+         print >>fd, "%sInclude %s" % (indent, self.exp)
+ 
++    def to_source(self):
++        prefix = ''
++
++        if not self.required:
++            prefix = '-'
++
++        return '%sinclude %s' % (prefix, self.exp.to_source())
++
++    def __eq__(self, other):
++        if not isinstance(other, Include):
++            return False
++
++        return self.exp == other.exp and self.required == other.required
++
+ class VPathDirective(Statement):
++    """
++    Represents the vpath directive.
++
++    See https://www.gnu.org/software/make/manual/make.html#Selective-Search
++    """
+     __slots__ = ('exp',)
+ 
+     def __init__(self, exp):
+@@ -433,16 +820,39 @@
+     def dump(self, fd, indent):
+         print >>fd, "%sVPath %s" % (indent, self.exp)
+ 
++    def to_source(self):
++        return 'vpath %s' % self.exp.to_source()
++
++    def __eq__(self, other):
++        if not isinstance(other, VPathDirective):
++            return False
++
++        return self.exp == other.exp
++
+ class ExportDirective(Statement):
+-    __slots__ = ('exp', 'single')
++    """
++    Represents the "export" directive.
+ 
+-    def __init__(self, exp, single):
++    This is used to control exporting variables to sub makes.
++
++    See https://www.gnu.org/software/make/manual/make.html#Variables_002fRecursion
++
++    The `concurrent_set` field defines whether this statement occurred with or
++    without a variable assignment. If False, no variable assignment was
++    present. If True, the SetVariable immediately following this statement
++    originally came from this export directive (the parser splits it into
++    multiple statements).
++    """
++
++    __slots__ = ('exp', 'concurrent_set')
++
++    def __init__(self, exp, concurrent_set):
+         assert isinstance(exp, (data.Expansion, data.StringExpansion))
+         self.exp = exp
+-        self.single = single
++        self.concurrent_set = concurrent_set
+ 
+     def execute(self, makefile, context):
+-        if self.single:
++        if self.concurrent_set:
+             vlist = [self.exp.resolvestr(makefile, makefile.variables)]
+         else:
+             vlist = list(self.exp.resolvesplit(makefile, makefile.variables))
+@@ -455,7 +865,23 @@
+     def dump(self, fd, indent):
+         print >>fd, "%sExport (single=%s) %s" % (indent, self.single, self.exp)
+ 
++    def to_source(self):
++        return ('export %s' % self.exp.to_source()).rstrip()
++
++    def __eq__(self, other):
++        if not isinstance(other, ExportDirective):
++            return False
++
++        # single is irrelevant because it just says whether the next Statement
++        # contains a variable definition.
++        return self.exp == other.exp
++
+ class UnexportDirective(Statement):
++    """
++    Represents the "unexport" directive.
++
++    This is the opposite of ExportDirective.
++    """
+     __slots__ = ('exp',)
+ 
+     def __init__(self, exp):
+@@ -469,7 +895,24 @@
+     def dump(self, fd, indent):
+         print >>fd, "%sUnexport %s" % (indent, self.exp)
+ 
++    def to_source(self):
++        return 'unexport %s' % self.exp.to_source()
++
++    def __eq__(self, other):
++        if not isinstance(other, UnexportDirective):
++            return False
++
++        return self.exp == other.exp
++
+ class EmptyDirective(Statement):
++    """
++    Represents a standalone statement, usually an Expansion.
++
++    You will encounter EmptyDirective instances if there is a function
++    or similar at the top-level of a make file (e.g. outside of a rule or
++    variable assignment). You can also find them as the bodies of
++    ConditionBlock branches.
++    """
+     __slots__ = ('exp',)
+ 
+     def __init__(self, exp):
+@@ -484,6 +927,15 @@
+     def dump(self, fd, indent):
+         print >>fd, "%sEmptyDirective: %s" % (indent, self.exp)
+ 
++    def to_source(self):
++        return self.exp.to_source()
++
++    def __eq__(self, other):
++        if not isinstance(other, EmptyDirective):
++            return False
++
++        return self.exp == other.exp
++
+ class _EvalContext(object):
+     __slots__ = ('currule', 'weak')
+ 
+@@ -491,6 +943,14 @@
+         self.weak = weak
+ 
+ class StatementList(list):
++    """
++    A list of Statement instances.
++
++    This is what is generated by the parser when a make file is parsed.
++
++    Consumers can iterate over all Statement instances in this collection to
++    statically inspect (and even modify) make files before they are executed.
++    """
+     __slots__ = ('mtime',)
+ 
+     def append(self, statement):
+@@ -513,6 +973,9 @@
+         self.dump(fd, '')
+         return fd.getvalue()
+ 
++    def to_source(self):
++        return '\n'.join([s.to_source() for s in self])
++
+ def iterstatements(stmts):
+     for s in stmts:
+         yield s
+diff -r 50f5c2689179 build/pymake/pymake/process.py
+--- a/build/pymake/pymake/process.py	Thu Aug 09 09:10:21 2012 +0200
++++ b/build/pymake/pymake/process.py	Sun Aug 12 03:08:32 2012 +0900
+@@ -15,18 +15,29 @@
+ _log = logging.getLogger('pymake.process')
+ 
+ _escapednewlines = re.compile(r'\\\n')
+-_blacklist = re.compile(r'[$><;[{~`|&()]')
++# Characters that most likely indicate a shell script and that native commands
++# should reject
++_blacklist = re.compile(r'[$><;\[~`|&]' +
++    r'|\${|(?:^|\s){(?:$|\s)')  # Blacklist ${foo} and { commands }
++# Characters that probably indicate a shell script, but that native commands
++# shouldn't just reject
++_graylist = re.compile(r'[()]')
++# Characters that indicate we need to glob
+ _needsglob = re.compile(r'[\*\?]')
+-def clinetoargv(cline):
++
++def clinetoargv(cline, blacklist_gray):
+     """
+     If this command line can safely skip the shell, return an argv array.
+     @returns argv, badchar
+     """
+-
+     str = _escapednewlines.sub('', cline)
+     m = _blacklist.search(str)
+     if m is not None:
+         return None, m.group(0)
++    if blacklist_gray:
++        m = _graylist.search(str)
++        if m is not None:
++            return None, m.group(0)
+ 
+     args = shlex.split(str, comments=True)
+ 
+@@ -64,7 +75,7 @@
+     if msys and cline.startswith('/'):
+         shellreason = "command starts with /"
+     else:
+-        argv, badchar = clinetoargv(cline)
++        argv, badchar = clinetoargv(cline, blacklist_gray=True)
+         if argv is None:
+             shellreason = "command contains shell-special character '%s'" % (badchar,)
+         elif len(argv) and argv[0] in shellwords:
+@@ -208,20 +219,26 @@
+                 return -127                
+             m = sys.modules[self.module]
+             if self.method not in m.__dict__:
+-                print >>sys.stderr, "No method named '%s' in module %s" % (method, module)
++                print >>sys.stderr, "No method named '%s' in module %s" % (self.method, self.module)
+                 return -127
+-            m.__dict__[self.method](self.argv)
++            rv = m.__dict__[self.method](self.argv)
++            if rv != 0 and rv is not None:
++                print >>sys.stderr, (
++                    "Native command '%s %s' returned value '%s'" %
++                    (self.module, self.method, rv))
++                return (rv if isinstance(rv, int) else 1)
++
+         except PythonException, e:
+             print >>sys.stderr, e
+             return e.exitcode
+         except:
+             e = sys.exc_info()[1]
+-            if isinstance(e, SystemExit) and (e.code == 0 or e.code == '0'):
++            if isinstance(e, SystemExit) and (e.code == 0 or e.code is None):
+                 pass # sys.exit(0) is not a failure
+             else:
+                 print >>sys.stderr, e
+                 print >>sys.stderr, traceback.print_exc()
+-                return -127
++                return (e.code if isinstance(e.code, int) else 1)
+         finally:
+             os.environ = oldenv
+         return 0
+diff -r 50f5c2689179 build/pymake/tests/datatests.py
+--- a/build/pymake/tests/datatests.py	Thu Aug 09 09:10:21 2012 +0200
++++ b/build/pymake/tests/datatests.py	Sun Aug 12 03:08:32 2012 +0900
+@@ -1,4 +1,4 @@
+-import pymake.data, pymake.util
++import pymake.data, pymake.functions, pymake.util
+ import unittest
+ import re
+ from cStringIO import StringIO
+@@ -74,5 +74,164 @@
+             self.assertEqual(goti, di,
+                              "debugitems, iteration %i, got %r expected %r" % (i, goti, di))
+ 
++class EqualityTest(unittest.TestCase):
++    def test_string_expansion(self):
++        s1 = pymake.data.StringExpansion('foo bar', None)
++        s2 = pymake.data.StringExpansion('foo bar', None)
++
++        self.assertEqual(s1, s2)
++
++    def test_expansion_simple(self):
++        s1 = pymake.data.Expansion(None)
++        s2 = pymake.data.Expansion(None)
++
++        self.assertEqual(s1, s2)
++
++        s1.appendstr('foo')
++        s2.appendstr('foo')
++        self.assertEqual(s1, s2)
++
++    def test_expansion_string_finish(self):
++        """Adjacent strings should normalize to same value."""
++        s1 = pymake.data.Expansion(None)
++        s2 = pymake.data.Expansion(None)
++
++        s1.appendstr('foo')
++        s2.appendstr('foo')
++
++        s1.appendstr(' bar')
++        s1.appendstr(' baz')
++        s2.appendstr(' bar baz')
++
++        self.assertEqual(s1, s2)
++
++    def test_function(self):
++        s1 = pymake.data.Expansion(None)
++        s2 = pymake.data.Expansion(None)
++
++        n1 = pymake.data.StringExpansion('FOO', None)
++        n2 = pymake.data.StringExpansion('FOO', None)
++
++        v1 = pymake.functions.VariableRef(None, n1)
++        v2 = pymake.functions.VariableRef(None, n2)
++
++        s1.appendfunc(v1)
++        s2.appendfunc(v2)
++
++        self.assertEqual(s1, s2)
++
++
++class StringExpansionTest(unittest.TestCase):
++    def test_base_expansion_interface(self):
++        s1 = pymake.data.StringExpansion('FOO', None)
++
++        self.assertTrue(s1.is_static_string)
++
++        funcs = list(s1.functions())
++        self.assertEqual(len(funcs), 0)
++
++        funcs = list(s1.functions(True))
++        self.assertEqual(len(funcs), 0)
++
++        refs = list(s1.variable_references())
++        self.assertEqual(len(refs), 0)
++
++
++class ExpansionTest(unittest.TestCase):
++    def test_is_static_string(self):
++        e1 = pymake.data.Expansion()
++        e1.appendstr('foo')
++
++        self.assertTrue(e1.is_static_string)
++
++        e1.appendstr('bar')
++        self.assertTrue(e1.is_static_string)
++
++        vname = pymake.data.StringExpansion('FOO', None)
++        func = pymake.functions.VariableRef(None, vname)
++
++        e1.appendfunc(func)
++
++        self.assertFalse(e1.is_static_string)
++
++    def test_get_functions(self):
++        e1 = pymake.data.Expansion()
++        e1.appendstr('foo')
++
++        vname1 = pymake.data.StringExpansion('FOO', None)
++        vname2 = pymake.data.StringExpansion('BAR', None)
++
++        func1 = pymake.functions.VariableRef(None, vname1)
++        func2 = pymake.functions.VariableRef(None, vname2)
++
++        e1.appendfunc(func1)
++        e1.appendfunc(func2)
++
++        funcs = list(e1.functions())
++        self.assertEqual(len(funcs), 2)
++
++        func3 = pymake.functions.SortFunction(None)
++        func3.append(vname1)
++
++        e1.appendfunc(func3)
++
++        funcs = list(e1.functions())
++        self.assertEqual(len(funcs), 3)
++
++        refs = list(e1.variable_references())
++        self.assertEqual(len(refs), 2)
++
++    def test_get_functions_descend(self):
++        e1 = pymake.data.Expansion()
++        vname1 = pymake.data.StringExpansion('FOO', None)
++        func1 = pymake.functions.VariableRef(None, vname1)
++        e2 = pymake.data.Expansion()
++        e2.appendfunc(func1)
++
++        func2 = pymake.functions.SortFunction(None)
++        func2.append(e2)
++
++        e1.appendfunc(func2)
++
++        funcs = list(e1.functions())
++        self.assertEqual(len(funcs), 1)
++
++        funcs = list(e1.functions(True))
++        self.assertEqual(len(funcs), 2)
++
++        self.assertTrue(isinstance(funcs[0], pymake.functions.SortFunction))
++
++    def test_is_filesystem_dependent(self):
++        e = pymake.data.Expansion()
++        vname1 = pymake.data.StringExpansion('FOO', None)
++        func1 = pymake.functions.VariableRef(None, vname1)
++        e.appendfunc(func1)
++
++        self.assertFalse(e.is_filesystem_dependent)
++
++        func2 = pymake.functions.WildcardFunction(None)
++        func2.append(vname1)
++        e.appendfunc(func2)
++
++        self.assertTrue(e.is_filesystem_dependent)
++
++    def test_is_filesystem_dependent_descend(self):
++        sort = pymake.functions.SortFunction(None)
++        wildcard = pymake.functions.WildcardFunction(None)
++
++        e = pymake.data.StringExpansion('foo/*', None)
++        wildcard.append(e)
++
++        e = pymake.data.Expansion(None)
++        e.appendfunc(wildcard)
++
++        sort.append(e)
++
++        e = pymake.data.Expansion(None)
++        e.appendfunc(sort)
++
++        self.assertTrue(e.is_filesystem_dependent)
++
++
+ if __name__ == '__main__':
+     unittest.main()
+diff -r 50f5c2689179 build/pymake/tests/makeflags.mk
+--- a/build/pymake/tests/makeflags.mk	Thu Aug 09 09:10:21 2012 +0200
++++ b/build/pymake/tests/makeflags.mk	Sun Aug 12 03:08:32 2012 +0900
+@@ -2,5 +2,6 @@
+ 
+ all:
+ 	test "$(OVAR)" = "oval"
++	test "$$OVAR" = "oval"
+ 	@echo TEST-PASS
+ 
+diff -r 50f5c2689179 build/pymake/tests/native-command-sys-exit.mk
+--- a/build/pymake/tests/native-command-sys-exit.mk	Thu Aug 09 09:10:21 2012 +0200
++++ b/build/pymake/tests/native-command-sys-exit.mk	Sun Aug 12 03:08:32 2012 +0900
+@@ -5,4 +5,7 @@
+ 
+ all:
+ 	$(CMD) 0
++	-$(CMD) 1
++	$(CMD) None
++	-$(CMD) not-an-integer
+ 	@echo TEST-PASS
+diff -r 50f5c2689179 build/pymake/tests/native-simple.mk
+--- a/build/pymake/tests/native-simple.mk	Thu Aug 09 09:10:21 2012 +0200
++++ b/build/pymake/tests/native-simple.mk	Sun Aug 12 03:08:32 2012 +0900
+@@ -2,9 +2,11 @@
+ TOUCH = touch
+ endif
+ 
+-all: testfile
++all: testfile {testfile2} (testfile3)
+ 	test -f testfile
++	test -f {testfile2}
++	test -f "(testfile3)"
+ 	@echo TEST-PASS
+ 
+-testfile:
+-	$(TOUCH) $@
++testfile {testfile2} (testfile3):
++	$(TOUCH) "$@"
+diff -r 50f5c2689179 build/pymake/tests/pycmd.py
+--- a/build/pymake/tests/pycmd.py	Thu Aug 09 09:10:21 2012 +0200
++++ b/build/pymake/tests/pycmd.py	Sun Aug 12 03:08:32 2012 +0900
+@@ -8,6 +8,16 @@
+   with open(args[0], 'w') as f:
+     f.write(os.environ[args[1]])
+ 
++def convertasplode(arg):
++  try:
++    return int(arg)
++  except:
++    return (None if arg == "None" else arg)
++
+ def asplode(args):
+-  sys.exit(0)
+-  return 0
++  arg0 = convertasplode(args[0])
++  sys.exit(arg0)
++
++def asplode_return(args):
++  arg0 = convertasplode(args[0])
++  return arg0
+diff -r 50f5c2689179 build/pymake/tests/vpath-directive.mk
+--- a/build/pymake/tests/vpath-directive.mk	Thu Aug 09 09:10:21 2012 +0200
++++ b/build/pymake/tests/vpath-directive.mk	Sun Aug 12 03:08:32 2012 +0900
+@@ -1,8 +1,5 @@
+-ifdef __WIN32__
+-VPSEP = ;
+-else
+-VPSEP = :
+-endif
++# On Windows, MSYS make takes Unix paths but Pymake takes Windows paths
++VPSEP := $(if $(and $(__WIN32__),$(.PYMAKE)),;,:)
+ 
+ $(shell \
+ mkdir subd1 subd2 subd3; \
