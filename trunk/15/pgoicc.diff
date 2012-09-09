@@ -1,0 +1,13 @@
+diff -r eb421f1dd8ef build/automation.py.in
+--- a/build/automation.py.in	Thu Jul 12 14:19:16 2012 -0700
++++ b/build/automation.py.in	Tue Jul 17 21:44:58 2012 +0900
+@@ -323,7 +323,8 @@
+ user_pref("layout.debug.enable_data_xbl", true);
+ user_pref("browser.EULA.override", true);
+ user_pref("javascript.options.jit_hardening", true);
+-user_pref("gfx.color_management.force_srgb", true);
++user_pref("gfx.color_management.enablev4",  true);
++user_pref("gfx.color_management.mode", 1);
+ user_pref("network.manage-offline-status", false);
+ user_pref("dom.min_background_timeout_value", 1000);
+ user_pref("test.mousescroll", true);
