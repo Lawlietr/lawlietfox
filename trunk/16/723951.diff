@@ -1,0 +1,95 @@
+diff -r b00f5813a961 browser/base/content/tabbrowser.xml
+--- a/browser/base/content/tabbrowser.xml	Sat Sep 15 03:12:38 2012 -0700
++++ b/browser/base/content/tabbrowser.xml	Sun Sep 16 02:36:14 2012 +0900
+@@ -1848,6 +1848,24 @@
+               delete otherBrowser.registeredOpenURI;
+             }
+ 
++            // Swap popup notifications.
++            if (otherBrowser.popupNotifications) {
++              // Check whether ourBrowser.popupNotifications has be set already.
++              if (!Array.isArray(ourBrowser.popupNotifications)) {
++                ourBrowser.popupNotifications = [];
++              }
++
++              let our_gPopupNotifications = aOurTab.ownerDocument.defaultView.
++                                            PopupNotifications;
++              for (let n of otherBrowser.popupNotifications) {
++                n.browser = ourBrowser;
++                n.owner   = our_gPopupNotifications;
++                ourBrowser.popupNotifications.push(n);
++              }
++
++              delete otherBrowser.popupNotifications;
++            }
++
+             // Workarounds for bug 458697
+             // Icon might have been set on DOMLinkAdded, don't override that.
+             if (!ourBrowser.mIconURL && otherBrowser.mIconURL)
+@@ -1863,6 +1881,13 @@
+             // Swap the docshells
+             ourBrowser.swapDocShells(otherBrowser);
+ 
++            // Fire "TabImport" event.
++            // This indicates that browser's properties are swapped.
++            let event = document.createEvent("DataContainerEvent");
++            event.initEvent("TabImport", true, false);
++            event.setData("remoteTab", aOtherTab);
++            aOurTab.dispatchEvent(event);
++
+             // Finish tearing down the tab that's going away.
+             remoteBrowser._endRemoveTab(aOtherTab);
+ 
+diff -r b00f5813a961 toolkit/content/PopupNotifications.jsm
+--- a/toolkit/content/PopupNotifications.jsm	Sat Sep 15 03:12:38 2012 -0700
++++ b/toolkit/content/PopupNotifications.jsm	Sun Sep 16 02:36:14 2012 +0900
+@@ -11,6 +11,7 @@
+ const NOTIFICATION_EVENT_DISMISSED = "dismissed";
+ const NOTIFICATION_EVENT_REMOVED = "removed";
+ const NOTIFICATION_EVENT_SHOWN = "shown";
++const NOTIFICATION_EVENT_SWAPPED = "swapped";
+ 
+ const ICON_SELECTOR = ".notification-anchor-icon";
+ const ICON_ATTRIBUTE_SHOWING = "showing";
+@@ -102,6 +103,7 @@
+ 
+   this.window.addEventListener("activate", this, true);
+   this.tabbrowser.tabContainer.addEventListener("TabSelect", this, true);
++  this.tabbrowser.tabContainer.addEventListener("TabImported", this, true);
+ }
+ 
+ PopupNotifications.prototype = {
+@@ -330,6 +332,9 @@
+           self._update();
+         }, 0);
+         break;
++      case "TabImport":
++        this._onTabImported(aEvent);
++        break;
+       case "click":
+       case "keypress":
+         this._onIconBoxCommand(aEvent);
+@@ -431,7 +436,7 @@
+ 
+           popupnotification.appendChild(item);
+         }, this);
+-  
++
+         if (n.secondaryActions.length) {
+           let closeItemSeparator = doc.createElementNS(XUL_NS, "menuseparator");
+           popupnotification.appendChild(closeItemSeparator);
+@@ -539,6 +544,14 @@
+     }
+   },
+ 
++  _onTabImported: function PopupNotifications_onTabImported(aEvent) {
++    let browser = this.tabbrowser.getBrowserForTab(aEvent.originalTarget);
++    let notifications = this._getNotificationsForBrowser(browser);
++    notifications.forEach(function (n) {
++      this._fireCallback(n, NOTIFICATION_EVENT_SWAPPED);
++    }, this);
++  },
++
+   _getNotificationsForBrowser: function PopupNotifications_getNotifications(browser) {
+     if (browser.popupNotifications)
+       return browser.popupNotifications;
