@@ -1,0 +1,24 @@
+diff -r 3aa844edaa00 layout/style/nsCSSParser.cpp
+--- a/layout/style/nsCSSParser.cpp	Thu Aug 09 17:57:41 2012 -0400
++++ b/layout/style/nsCSSParser.cpp	Tue Aug 28 23:27:19 2012 +0900
+@@ -1053,10 +1053,6 @@
+   return NS_OK;
+ }
+ 
+-// See Bug 723197
+-#ifdef _MSC_VER
+-#pragma optimize( "", off )
+-#endif
+ nsresult
+ CSSParserImpl::ParseProperty(const nsCSSProperty aPropID,
+                              const nsAString& aPropValue,
+@@ -1133,9 +1129,6 @@
+   ReleaseScanner();
+   return NS_OK;
+ }
+-#ifdef _MSC_VER
+-#pragma optimize( "", on )
+-#endif
+ 
+ nsresult
+ CSSParserImpl::ParseMediaList(const nsSubstring& aBuffer,
