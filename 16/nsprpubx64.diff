@@ -1,0 +1,12 @@
+diff -r eb421f1dd8ef nsprpub/config/autoconf.mk.in
+--- a/nsprpub/config/autoconf.mk.in	Thu Jul 12 14:19:16 2012 -0700
++++ b/nsprpub/config/autoconf.mk.in	Tue Jul 17 21:43:48 2012 +0900
+@@ -85,7 +85,7 @@
+ OS_LIBS         = @OS_LIBS@
+ OS_LDFLAGS	= @LDFLAGS@
+ OS_DLLFLAGS	= @OS_DLLFLAGS@
+-DLLFLAGS	= @DLLFLAGS@
++DLLFLAGS	= @DLLFLAGS@ /MACHINE:X64 /OPT:REF,ICF -LARGEADDRESSAWARE
+ EXEFLAGS  = @EXEFLAGS@
+ OPTIMIZER	= @OPTIMIZER@
+ 
