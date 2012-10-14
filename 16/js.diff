@@ -1,0 +1,343 @@
+diff -r d11d02c2e023 js/src/Makefile.in
+--- a/js/src/Makefile.in	Sat Aug 25 20:31:37 2012 +0900
++++ b/js/src/Makefile.in	Sat Aug 25 21:09:50 2012 +0900
+@@ -865,8 +865,23 @@ endif
+ TestMain$(HOST_BIN_SUFFIX): $(TESTMAIN_OBJS)
+ 	$(CXX) -o TestMain$(HOST_BIN_SUFFIX) $(TESTMAIN_OBJS)
+ endif
+ 
+ #
+ # END kludges for the Nitro assembler
+ ###############################################
+ 
++ifeq (WINNT_1,$(OS_ARCH)_$(MOZ_PROFILE_GENERATE)$(MOZ_PROFILE_USE))
++# Optimizer bug with MSVC PGO (Bug 595653)
++YarrPattern.$(OBJ_SUFFIX): COMPILE_CXXFLAGS := $(COMPILE_CXXFLAGS:arch:SSE2=arch:SSE)
++
++# -LTCG:PGINSTRUMENT bug of MSVC PGO
++PolyIC.$(OBJ_SUFFIX): COMPILE_CXXFLAGS += -GL-
++
++# -LTCG:PGINSTRUMENT bug of MSVC PGO
++MonoIC.$(OBJ_SUFFIX): COMPILE_CXXFLAGS += -GL-
++
++# Optimizer bug with MSVC PGO
++FrameState.$(OBJ_SUFFIX): COMPILE_CXXFLAGS += -GL-
++
++FastOps.$(OBJ_SUFFIX): COMPILE_CXXFLAGS += -GL-
++endif
+
+diff -r 284837bbf631 js/src/jsmath.cpp
+--- a/js/src/jsmath.cpp	Sat Aug 25 07:23:12 2012 +0900
++++ b/js/src/jsmath.cpp	Sat Aug 25 10:10:42 2012 +0900
+@@ -21,16 +21,30 @@
+ #include "jsmath.h"
+ #include "jsnum.h"
+ #include "jslibmath.h"
+ #include "jscompartment.h"
+ 
+ #include "jsinferinlines.h"
+ #include "jsobjinlines.h"
+ 
++#if defined JS_CPU_X86 || defined JS_CPU_X64
++#if _MSC_VER == 1400
++#include <emmintrin.h>
++#else  /* _MSC_VER == 1400 */
++#include <smmintrin.h>
++#endif /* _MSC_VER == 1400 */
++#endif /* defined JS_CPU_X86 || defined JS_CPU_X64 */
++
++# include "assembler/assembler/MacroAssembler.h"
++
++#if (_M_IX86_FP >= 2)
++#pragma function(floor)
++#endif
++
+ using namespace js;
+ 
+ #ifndef M_E
+ #define M_E             2.7182818284590452354
+ #endif
+ #ifndef M_LOG2E
+ #define M_LOG2E         1.4426950408889634074
+ #endif
+@@ -218,23 +232,52 @@ math_atan2(JSContext *cx, unsigned argc,
+     }
+     if (!ToNumber(cx, vp[2], &x) || !ToNumber(cx, vp[3], &y))
+         return JS_FALSE;
+     z = math_atan2_kernel(x, y);
+     vp->setDouble(z);
+     return JS_TRUE;
+ }
+ 
+-double
++JS_ALWAYS_INLINE double
+ js_math_ceil_impl(double x)
+ {
+ #ifdef __APPLE__
+     if (x < 0 && x > -1.0)
+         return js_copysign(0, -1);
+ #endif
++
++#if defined JS_CPU_X86 || defined JS_CPU_X64
++    if (JSC::MacroAssemblerX86Common::getSSEState() >=
++        JSC::MacroAssemblerX86Common::HasSSE4_1) {
++#if _MSC_VER != 1400
++        __m128d xd = _mm_load_sd(&x);
++        double d;
++
++        xd = _mm_ceil_sd(xd, xd);
++        _mm_store_sd(&d, xd);
++        return d;
++#elif defined JS_CPU_X86
++        double d;
++
++        __asm {
++            movsd       xmm0, x
++            /* roundsd  xmm0, xmm0, 2 */
++            __asm _emit 0x66
++            __asm _emit 0x0F
++            __asm _emit 0x3A
++            __asm _emit 0x0B
++            __asm _emit 0xC0
++            __asm _emit 0x02
++            movsd       d, xmm0
++        }
++        return d;
++#endif
++    }
++#endif /* defined JS_CPU_X86 || defined JS_CPU_X64 */
+     return ceil(x);
+ }
+ 
+ JSBool
+ js_math_ceil(JSContext *cx, unsigned argc, Value *vp)
+ {
+     double x, z;
+ 
+@@ -296,19 +339,47 @@ math_exp(JSContext *cx, unsigned argc, V
+     MathCache *mathCache = cx->runtime->getMathCache(cx);
+     if (!mathCache)
+         return JS_FALSE;
+     z = mathCache->lookup(math_exp_body, x);
+     vp->setNumber(z);
+     return JS_TRUE;
+ }
+ 
+-double
++JS_ALWAYS_INLINE double
+ js_math_floor_impl(double x)
+ {
++#if defined JS_CPU_X86 || defined JS_CPU_X64
++    if (JSC::MacroAssemblerX86Common::getSSEState() >=
++        JSC::MacroAssemblerX86Common::HasSSE4_1) {
++#if _MSC_VER != 1400
++        __m128d xd = _mm_load_sd(&x);
++        double d;
++
++        xd = _mm_floor_sd(xd, xd);
++        _mm_store_sd(&d, xd);
++        return d;
++#elif defined JS_CPU_X86
++        double d;
++
++        __asm {
++            movsd       xmm0, x
++            /* roundsd  xmm0, xmm0, 1 */
++            __asm _emit 0x66
++            __asm _emit 0x0F
++            __asm _emit 0x3A
++            __asm _emit 0x0B
++            __asm _emit 0xC0
++            __asm _emit 0x01
++            movsd       d, xmm0
++        }
++        return d;
++#endif
++    }
++#endif /* defined JS_CPU_X86 || defined JS_CPU_X64 */
+     return floor(x);
+ }
+ 
+ JSBool
+ js_math_floor(JSContext *cx, unsigned argc, Value *vp)
+ {
+     double x, z;
+ 
+@@ -530,16 +601,71 @@ random_nextDouble(JSContext *cx)
+ static JSBool
+ math_random(JSContext *cx, unsigned argc, Value *vp)
+ {
+     double z = random_nextDouble(cx);
+     vp->setDouble(z);
+     return JS_TRUE;
+ }
+ 
++#if defined JS_CPU_X86 && _MSC_VER
++static const double  dbhalf =  0.5;
++__declspec(align(16)) static const __int64 mask_sign[2] = { 0x8000000000000000 };
++#endif
++
++JS_ALWAYS_INLINE double
++js_math_round_impl(double x)
++{
++#if defined JS_CPU_X86 || defined JS_CPU_X64
++    if (JSC::MacroAssemblerX86Common::getSSEState() >=
++        JSC::MacroAssemblerX86Common::HasSSE4_1) {
++#if _MSC_VER != 1400
++        __m128d xmm1d = _mm_load_sd(&x);
++        __m128d xmm0d = xmm1d;
++        double d;
++
++        xmm0d = _mm_add_sd(xmm0d, *(__m128d *)&dbhalf);
++        xmm0d = _mm_floor_sd(xmm0d, xmm0d);
++
++        __m128i xmm2i = _mm_load_si128((__m128i *)mask_sign);
++        __m128i xmm1i = _mm_castpd_si128(xmm1d);
++
++        xmm1i = _mm_and_si128(xmm1i, xmm2i);
++        xmm2i = _mm_andnot_si128(xmm2i, _mm_castpd_si128(xmm0d));
++        xmm1i = _mm_or_si128(xmm1i, xmm2i);
++
++        _mm_store_sd(&d, _mm_castsi128_pd(xmm1i));
++        return d;
++#elif defined JS_CPU_X86
++        double d;
++
++        __asm {
++            movsd       xmm1, x
++            movdqa      xmm2, mask_sign
++            movaps      xmm0, xmm1
++            addsd       xmm0, dbhalf
++            pand        xmm1, xmm2
++            /* roundsd  xmm0, xmm0, 1 */
++            __asm _emit 0x66
++            __asm _emit 0x0F
++            __asm _emit 0x3A
++            __asm _emit 0x0B
++            __asm _emit 0xC0
++            __asm _emit 0x01
++            pandn       xmm2, xmm0
++            por         xmm1, xmm2
++            movsd       d, xmm1
++        }
++        return d;
++#endif
++    }
++#endif /* defined JS_CPU_X86 || defined JS_CPU_X64 */
++    return js_copysign(js_math_floor_impl(x + 0.5), x);
++}
++
+ JSBool /* ES5 15.8.2.15. */
+ js_math_round(JSContext *cx, unsigned argc, Value *vp)
+ {
+     CallArgs args = CallArgsFromVp(argc, vp);
+ 
+     if (args.length() == 0) {
+         args.rval().setDouble(js_NaN);
+         return true;
+@@ -556,17 +682,17 @@ js_math_round(JSContext *cx, unsigned ar
+     }
+ 
+     /* Some numbers are so big that adding 0.5 would give the wrong number */
+     if (MOZ_DOUBLE_EXPONENT(x) >= 52) {
+         args.rval().setNumber(x);
+         return true;
+     }
+ 
+-    args.rval().setNumber(js_copysign(floor(x + 0.5), x));
++    args.rval().setNumber(js_math_round_impl(x));
+     return true;
+ }
+ 
+ static JSBool
+ math_sin(JSContext *cx, unsigned argc, Value *vp)
+ {
+     double x, z;
+ 
+
+diff -r 284837bbf631 js/src/methodjit/Compiler.cpp
+--- a/js/src/methodjit/Compiler.cpp	Sat Aug 25 07:23:12 2012 +0900
++++ b/js/src/methodjit/Compiler.cpp	Sat Aug 25 10:12:49 2012 +0900
+@@ -898,16 +898,20 @@ MakeJITScript(JSContext *cx, JSScript *s
+     for (unsigned i = 0; i < jit->nedges; i++) {
+         CrossChunkEdge &edge = jitEdges[i];
+         edge.shimLabel = shimCode + (size_t) edge.shimLabel;
+     }
+ 
+     return jit;
+ }
+ 
++#ifdef _MSC_VER
++#pragma optimize("g", off)
++#endif
++
+ CompileStatus
+ mjit::CanMethodJIT(JSContext *cx, JSScript *script, jsbytecode *pc,
+                    bool construct, CompileRequest request)
+ {
+   restart:
+     if (!cx->methodJitEnabled)
+         return Compile_Abort;
+ 
+@@ -988,16 +992,20 @@ mjit::CanMethodJIT(JSContext *cx, JSScri
+ 
+     /* Non-OOM errors should have an associated exception. */
+     JS_ASSERT_IF(status == Compile_Error,
+                  cx->isExceptionPending() || cx->runtime->hadOutOfMemory);
+ 
+     return status;
+ }
+ 
++#ifdef _MSC_VER
++#pragma optimize("g", on)
++#endif
++
+ CompileStatus
+ mjit::Compiler::generatePrologue()
+ {
+     fastEntryLabel = masm.label();
+ 
+     /*
+      * If there is no function, then this can only be called via JaegerShot(),
+      * which expects an existing frame to be initialized like the interpreter.
+@@ -4555,32 +4563,40 @@ mjit::Compiler::inlineScriptedFunction(u
+  * being set. This includes any API callbacks and any scripted or native call.
+  */
+ void
+ mjit::Compiler::addCallSite(const InternalCallSite &site)
+ {
+     callSites.append(site);
+ }
+ 
++#ifdef _MSC_VER
++#pragma optimize("g", off)
++#endif
++
+ void
+ mjit::Compiler::inlineStubCall(void *stub, RejoinState rejoin, Uses uses)
+ {
+     DataLabelPtr inlinePatch;
+     Call cl = emitStubCall(stub, &inlinePatch);
+     InternalCallSite site(masm.callReturnOffset(cl), a->inlineIndex, PC,
+                           rejoin, false);
+     site.inlinePatch = inlinePatch;
+     if (loop && loop->generatingInvariants()) {
+         Jump j = masm.jump();
+         Label l = masm.label();
+         loop->addInvariantCall(j, l, false, false, callSites.length(), uses);
+     }
+     addCallSite(site);
+ }
+ 
++#ifdef _MSC_VER
++#pragma optimize("g", on)
++#endif
++
+ bool
+ mjit::Compiler::compareTwoValues(JSContext *cx, JSOp op, const Value &lhs, const Value &rhs)
+ {
+     JS_ASSERT(lhs.isPrimitive());
+     JS_ASSERT(rhs.isPrimitive());
+ 
+     if (lhs.isString() && rhs.isString()) {
+         int32_t cmp;
