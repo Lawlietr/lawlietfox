@@ -1,0 +1,86 @@
+diff -r defe56708537 browser/base/content/tabbrowser.xml
+--- a/browser/base/content/tabbrowser.xml	Sat Oct 06 19:17:07 2012 -0700
++++ b/browser/base/content/tabbrowser.xml	Wed Oct 10 10:42:44 2012 +0900
+@@ -1865,6 +1865,24 @@
+             if (!remoteBrowser._beginRemoveTab(aOtherTab, true, true))
+               return;
+ 
++            // Swap popup notifications.
++            if (otherBrowser.popupNotifications) {
++              // Check whether ourBrowser.popupNotifications has be set already.
++              if (!Array.isArray(ourBrowser.popupNotifications)) {
++                ourBrowser.popupNotifications = [];
++              }
++
++              let our_gPopupNotifications = aOurTab.ownerDocument.defaultView.
++                                            PopupNotifications;
++              for (let n of otherBrowser.popupNotifications) {
++                n.browser = ourBrowser;
++                n.owner   = our_gPopupNotifications;
++                ourBrowser.popupNotifications.push(n);
++              }
++
++              delete otherBrowser.popupNotifications;
++            }
++
+             // Workarounds for bug 458697
+             // Icon might have been set on DOMLinkAdded, don't override that.
+             let ourBrowser = this.getBrowserForTab(aOurTab);
+@@ -1881,6 +1899,13 @@
+ 
+             this._swapBrowserDocShells(aOurTab, otherBrowser);
+ 
++            // Fire "TabImport" event.
++            // This indicates that browser's properties are swapped.
++            let event = document.createEvent("DataContainerEvent");
++            event.initEvent("TabImport", true, false);
++            event.setData("remoteTab", aOtherTab);
++            aOurTab.dispatchEvent(event);
++
+             // Finish tearing down the tab that's going away.
+             remoteBrowser._endRemoveTab(aOtherTab);
+ 
+diff -r defe56708537 toolkit/content/PopupNotifications.jsm
+--- a/toolkit/content/PopupNotifications.jsm	Sat Oct 06 19:17:07 2012 -0700
++++ b/toolkit/content/PopupNotifications.jsm	Wed Oct 10 10:42:44 2012 +0900
+@@ -11,6 +11,7 @@
+ const NOTIFICATION_EVENT_DISMISSED = "dismissed";
+ const NOTIFICATION_EVENT_REMOVED = "removed";
+ const NOTIFICATION_EVENT_SHOWN = "shown";
++const NOTIFICATION_EVENT_SWAPPED = "swapped";
+ 
+ const ICON_SELECTOR = ".notification-anchor-icon";
+ const ICON_ATTRIBUTE_SHOWING = "showing";
+@@ -104,6 +105,7 @@
+ 
+   this.window.addEventListener("activate", this, true);
+   this.tabbrowser.tabContainer.addEventListener("TabSelect", this, true);
++  this.tabbrowser.tabContainer.addEventListener("TabImported", this, true);
+ }
+ 
+ PopupNotifications.prototype = {
+@@ -332,6 +334,9 @@
+           self._update();
+         }, 0);
+         break;
++      case "TabImport":
++        this._onTabImported(aEvent);
++        break;
+       case "click":
+       case "keypress":
+         this._onIconBoxCommand(aEvent);
+@@ -544,6 +549,14 @@
+     }
+   },
+ 
++  _onTabImported: function PopupNotifications_onTabImported(event) {
++    let browser = this.tabbrowser.getBrowserForTab(event.originalTarget);
++    let notifications = this._getNotificationsForBrowser(browser);
++    notifications.forEach(function (n) {
++      this._fireCallback(n, NOTIFICATION_EVENT_SWAPPED);
++    }, this);
++  },
++
+   /**
+    * Gets and sets notifications for the browser.
+    */
