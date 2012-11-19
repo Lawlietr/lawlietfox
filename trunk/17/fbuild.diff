@@ -1,0 +1,1939 @@
+diff -r 5764e33f79d6 gfx/2d/Blur.cpp
+--- a/gfx/2d/Blur.cpp	Tue Oct 09 17:07:53 2012 -0700
++++ b/gfx/2d/Blur.cpp	Wed Oct 10 10:53:16 2012 +0900
+@@ -7,6 +7,7 @@
+ #include <algorithm>
+ #include <math.h>
+ #include <string.h>
++#include <windows.h>
+ 
+ #include "mozilla/CheckedInt.h"
+ #include "mozilla/Constants.h"
+@@ -29,6 +30,151 @@
+  * @param aSkipRect An area to skip blurring in.
+  * XXX shouldn't we pass stride in separately here?
+  */
++static DWORD NumberOfProcessors = 0;
++
++static void
++GetNumberOfLogicalProcessors(void)
++{
++    SYSTEM_INFO SystemInfo;
++
++    GetSystemInfo(&SystemInfo);
++    NumberOfProcessors = SystemInfo.dwNumberOfProcessors;
++}
++
++static void
++GetNumberOfProcessors(void)
++{
++    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION SystemLogicalProcessorInformation = NULL;
++    DWORD SizeSystemLogicalProcessorInformation = 0;
++
++    while(!GetLogicalProcessorInformation(SystemLogicalProcessorInformation, &SizeSystemLogicalProcessorInformation)) {
++        if(SystemLogicalProcessorInformation) free(SystemLogicalProcessorInformation);
++
++        if(GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
++            SystemLogicalProcessorInformation =
++                static_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION>(malloc(SizeSystemLogicalProcessorInformation));
++        } else {
++            GetNumberOfLogicalProcessors();
++            return;
++        }
++    }
++
++    DWORD ProcessorCore = 0;
++    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION Ptr = SystemLogicalProcessorInformation;
++
++    for(DWORD Offset = sizeof SYSTEM_LOGICAL_PROCESSOR_INFORMATION;
++        Offset <= SizeSystemLogicalProcessorInformation;
++        Offset += sizeof SYSTEM_LOGICAL_PROCESSOR_INFORMATION) {
++        if(Ptr++->Relationship == RelationProcessorCore) ProcessorCore++;
++    }
++
++    free(SystemLogicalProcessorInformation);
++
++    if(ProcessorCore) {
++        NumberOfProcessors = ProcessorCore;
++    } else {
++        GetNumberOfLogicalProcessors();
++    }
++}
++
++struct BoxBlurHorizontal_Param {
++    BoxBlurHorizontal_Param* Ptr;
++    unsigned char* aInput;
++    unsigned char* aOutput;
++    int32_t aLeftLobe;
++    int32_t aWidth;
++    IntRect* aSkipRect;
++    int32_t boxSize;
++    bool skipRectCoversWholeRow;
++    int32_t y;
++    int32_t Loop;
++    uint32_t reciprocal;
++    int32_t* aInput_next_last;
++};
++
++DWORD WINAPI
++BoxBlurHorizontal_Thread(void* Param)
++{
++//    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
++
++    unsigned char* const aInput = static_cast<BoxBlurHorizontal_Param*>(Param)->Ptr->aInput;
++    unsigned char* const aOutput = static_cast<BoxBlurHorizontal_Param*>(Param)->Ptr->aOutput;
++    const int32_t aLeftLobe = static_cast<BoxBlurHorizontal_Param*>(Param)->Ptr->aLeftLobe;
++    const int32_t aWidth = static_cast<BoxBlurHorizontal_Param*>(Param)->Ptr->aWidth;
++    IntRect* const aSkipRect = static_cast<BoxBlurHorizontal_Param*>(Param)->Ptr->aSkipRect;
++    const int32_t boxSize = static_cast<BoxBlurHorizontal_Param*>(Param)->Ptr->boxSize;
++    const bool skipRectCoversWholeRow = static_cast<BoxBlurHorizontal_Param*>(Param)->Ptr->skipRectCoversWholeRow;
++    const int32_t Loop = static_cast<BoxBlurHorizontal_Param*>(Param)->Loop;
++    const int64_t reciprocal = static_cast<BoxBlurHorizontal_Param*>(Param)->Ptr->reciprocal;
++    int32_t* const aInput_next = static_cast<BoxBlurHorizontal_Param*>(Param)->Ptr->aInput_next_last;
++    int32_t* const aInput_last = aInput_next + aWidth;
++
++    for (int32_t y = static_cast<BoxBlurHorizontal_Param*>(Param)->y; y < Loop; y++) {
++        // Check whether the skip rect intersects this row. If the skip
++        // rect covers the whole surface in this row, we can avoid
++        // this row entirely (and any others along the skip rect).
++        bool inSkipRectY = y >= aSkipRect->y && y < aSkipRect->YMost();
++
++        if (inSkipRectY && skipRectCoversWholeRow) {
++            y = aSkipRect->YMost() - 1;
++            continue;
++        }
++
++        const int32_t aWidth_y = aWidth * y;
++        uint32_t alphaSum = 0;
++
++        for (int32_t i = 0; i < boxSize; i++) {
++            int32_t pos = i - aLeftLobe;
++            // See assertion above; if aWidth is zero, then we would have no
++            // valid position to clamp to.
++            pos = max(pos, 0);
++            pos = min(pos, aWidth - 1);
++            alphaSum += aInput[aWidth_y + pos];
++        }
++
++        unsigned char* ptr_aInput = aInput + aWidth_y;
++        unsigned char* ptr_aOutput = aOutput + aWidth_y;
++        int32_t* ptr_aInput_next = aInput_next;
++        int32_t* ptr_aInput_last = aInput_last;
++
++        for (int32_t x = 0; x < aWidth; x++) {
++            // Check whether we are within the skip rect. If so, go
++            // to the next point outside the skip rect.
++            if (inSkipRectY && x >= aSkipRect->x &&
++                x < aSkipRect->XMost()) {
++                x = aSkipRect->XMost();
++                if (x >= aWidth)
++                    break;
++
++                // Recalculate the neighbouring alpha values for
++                // our new point on the surface.
++                alphaSum = 0;
++
++                ptr_aOutput = aOutput + aWidth_y + x;
++                ptr_aInput_next = aInput_next + x;
++                ptr_aInput_last = aInput_last + x;
++
++                for (int32_t i = 0; i < boxSize; i++) {
++                    int32_t pos = x + i - aLeftLobe;
++                    // See assertion above; if aWidth is zero, then we would have no
++                    // valid position to clamp to.
++                    pos = max(pos, 0);
++                    pos = min(pos, aWidth - 1);
++                    alphaSum += aInput[aWidth_y + pos];
++                }
++            }
++
++            *ptr_aOutput++ = (uint64_t(alphaSum) * reciprocal) >> 32;
++
++            alphaSum += *(ptr_aInput + *ptr_aInput_next++) - *(ptr_aInput + *ptr_aInput_last++);
++        }
++    }
++
++    ExitThread(0);
++
++    return 0;
++}
++
+ static void
+ BoxBlurHorizontal(unsigned char* aInput,
+                   unsigned char* aOutput,
+@@ -40,66 +186,60 @@
+ {
+     MOZ_ASSERT(aWidth > 0);
+ 
+-    int32_t boxSize = aLeftLobe + aRightLobe + 1;
+-    bool skipRectCoversWholeRow = 0 >= aSkipRect.x &&
+-                                  aWidth <= aSkipRect.XMost();
+-    if (boxSize == 1) {
+-        memcpy(aOutput, aInput, aWidth*aRows);
++    const int32_t boxSize = aLeftLobe + aRightLobe + 1;
++
++    if(boxSize == 1) {
++        memcpy(aOutput, aInput, aWidth * aRows);
+         return;
+     }
+-    uint32_t reciprocal = (uint64_t(1) << 32) / boxSize;
+ 
+-    for (int32_t y = 0; y < aRows; y++) {
+-        // Check whether the skip rect intersects this row. If the skip
+-        // rect covers the whole surface in this row, we can avoid
+-        // this row entirely (and any others along the skip rect).
+-        bool inSkipRectY = y >= aSkipRect.y &&
+-                           y < aSkipRect.YMost();
+-        if (inSkipRectY && skipRectCoversWholeRow) {
+-            y = aSkipRect.YMost() - 1;
+-            continue;
+-        }
++    if(NumberOfProcessors == 0) GetNumberOfProcessors();
+ 
+-        uint32_t alphaSum = 0;
+-        for (int32_t i = 0; i < boxSize; i++) {
+-            int32_t pos = i - aLeftLobe;
+-            // See assertion above; if aWidth is zero, then we would have no
+-            // valid position to clamp to.
+-            pos = max(pos, 0);
+-            pos = min(pos, aWidth - 1);
+-            alphaSum += aInput[aWidth * y + pos];
+-        }
+-        for (int32_t x = 0; x < aWidth; x++) {
+-            // Check whether we are within the skip rect. If so, go
+-            // to the next point outside the skip rect.
+-            if (inSkipRectY && x >= aSkipRect.x &&
+-                x < aSkipRect.XMost()) {
+-                x = aSkipRect.XMost();
+-                if (x >= aWidth)
+-                    break;
++    BoxBlurHorizontal_Param* Param = new BoxBlurHorizontal_Param[NumberOfProcessors];
+ 
+-                // Recalculate the neighbouring alpha values for
+-                // our new point on the surface.
+-                alphaSum = 0;
+-                for (int32_t i = 0; i < boxSize; i++) {
+-                    int32_t pos = x + i - aLeftLobe;
+-                    // See assertion above; if aWidth is zero, then we would have no
+-                    // valid position to clamp to.
+-                    pos = max(pos, 0);
+-                    pos = min(pos, aWidth - 1);
+-                    alphaSum += aInput[aWidth * y + pos];
+-                }
+-            }
+-            int32_t tmp = x - aLeftLobe;
+-            int32_t last = max(tmp, 0);
+-            int32_t next = min(tmp + boxSize, aWidth - 1);
++    Param->aInput = aInput;
++    Param->aOutput = aOutput;
++    Param->aLeftLobe = aLeftLobe;
++    Param->aWidth = aWidth;
++    Param->aSkipRect = &const_cast<IntRect&>(aSkipRect);
++    Param->boxSize = boxSize;
++    Param->skipRectCoversWholeRow = 0 >= aSkipRect.x && aWidth <= aSkipRect.XMost();
++    Param->reciprocal = (uint64_t(1) << 32) / boxSize;
++    Param->aInput_next_last = new int32_t[aWidth * 2];
+ 
+-            aOutput[aWidth * y + x] = (uint64_t(alphaSum) * reciprocal) >> 32;
++    int32_t* ptr_aInput_next = Param->aInput_next_last;
++    int32_t* ptr_aInput_last = ptr_aInput_next + aWidth;
++    int32_t tmp = -aLeftLobe;
++    const int32_t aWidth_1 = aWidth - 1;
+ 
+-            alphaSum += aInput[aWidth * y + next] -
+-                        aInput[aWidth * y + last];
+-        }
++    for(int32_t x = 0; x < aWidth; x++) {
++        *ptr_aInput_next++ = min(tmp + boxSize, aWidth_1);
++        *ptr_aInput_last++ = max(tmp, 0);
++        tmp++;
+     }
++
++    const int Step = aRows / NumberOfProcessors;
++    const int Remain = aRows - Step * NumberOfProcessors;
++    HANDLE* Thread = new HANDLE[NumberOfProcessors];
++
++    for(int Idx = 0, y = 0; Idx < NumberOfProcessors; Idx++) {
++        Param[Idx].Ptr = Param;
++        Param[Idx].y = y;
++        y += Step + (Idx == 0 ? Remain : 0);
++        Param[Idx].Loop = y;
++
++        Thread[Idx] = CreateThread(NULL, 0, BoxBlurHorizontal_Thread, Param + Idx, 0, NULL);
++    }
++
++    WaitForMultipleObjects(NumberOfProcessors, Thread, true, INFINITE);
++
++    for(int Idx = 0; Idx < NumberOfProcessors; Idx++) {
++        CloseHandle(Thread[Idx]);
++    }
++
++    delete[] Thread;
++    delete[] Param->aInput_next_last;
++    delete[] Param;
+ }
+ 
+ /**
+@@ -107,6 +247,99 @@
+  * left and right.
+  * XXX shouldn't we pass stride in separately here?
+  */
++struct BoxBlurVertical_Param {
++    BoxBlurVertical_Param* Ptr;
++    unsigned char* aInput;
++    unsigned char* aOutput;
++    int32_t aTopLobe;
++    int32_t aWidth;
++    int32_t aRows;
++    IntRect* aSkipRect;
++    int32_t boxSize;
++    bool skipRectCoversWholeColumn;
++    int32_t x;
++    int32_t Loop;
++    uint32_t reciprocal;
++    int32_t* aInput_next_last;
++};
++
++DWORD WINAPI
++BoxBlurVertical_Thread(void* Param)
++{
++//    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
++
++    unsigned char* const aInput = static_cast<BoxBlurVertical_Param*>(Param)->Ptr->aInput;
++    unsigned char* const aOutput = static_cast<BoxBlurVertical_Param*>(Param)->Ptr->aOutput;
++    const int32_t aTopLobe = static_cast<BoxBlurVertical_Param*>(Param)->Ptr->aTopLobe;
++    const int32_t aWidth = static_cast<BoxBlurVertical_Param*>(Param)->Ptr->aWidth;
++    const int32_t aRows = static_cast<BoxBlurVertical_Param*>(Param)->Ptr->aRows;
++    IntRect* const aSkipRect = static_cast<BoxBlurVertical_Param*>(Param)->Ptr->aSkipRect;
++    const int32_t boxSize = static_cast<BoxBlurVertical_Param*>(Param)->Ptr->boxSize;
++    const bool skipRectCoversWholeColumn = static_cast<BoxBlurVertical_Param*>(Param)->Ptr->skipRectCoversWholeColumn;
++    const int32_t Loop = static_cast<BoxBlurVertical_Param*>(Param)->Loop;
++    const int64_t reciprocal = static_cast<BoxBlurVertical_Param*>(Param)->Ptr->reciprocal;
++    int32_t* const aInput_next = static_cast<BoxBlurVertical_Param*>(Param)->Ptr->aInput_next_last;
++    int32_t* const aInput_last = aInput_next + aRows;
++
++    for (int32_t x = static_cast<BoxBlurVertical_Param*>(Param)->x; x < Loop; x++) {
++        bool inSkipRectX = x >= aSkipRect->x && x < aSkipRect->XMost();
++
++        if (inSkipRectX && skipRectCoversWholeColumn) {
++            x = aSkipRect->XMost() - 1;
++            continue;
++        }
++
++        uint32_t alphaSum = 0;
++
++        for (int32_t i = 0; i < boxSize; i++) {
++            int32_t pos = i - aTopLobe;
++            // See assertion above; if aRows is zero, then we would have no
++            // valid position to clamp to.
++            pos = max(pos, 0);
++            pos = min(pos, aRows - 1);
++            alphaSum += aInput[aWidth * pos + x];
++        }
++
++        unsigned char* ptr_aInput = aInput + x;
++        unsigned char* ptr_aOutput = aOutput + x;
++        int32_t* ptr_aInput_next = aInput_next;
++        int32_t* ptr_aInput_last = aInput_last;
++
++        for (int32_t y = 0; y < aRows; y++) {
++            if (inSkipRectX && y >= aSkipRect->y &&
++                y < aSkipRect->YMost()) {
++                y = aSkipRect->YMost();
++                if (y >= aRows)
++                    break;
++
++                alphaSum = 0;
++
++                ptr_aOutput = aOutput + aWidth * y + x;
++                ptr_aInput_next = aInput_next + y;
++                ptr_aInput_last = aInput_last + y;
++
++                for (int32_t i = 0; i < boxSize; i++) {
++                    int32_t pos = y + i - aTopLobe;
++                    // See assertion above; if aRows is zero, then we would have no
++                    // valid position to clamp to.
++                    pos = max(pos, 0);
++                    pos = min(pos, aRows - 1);
++                    alphaSum += aInput[aWidth * pos + x];
++                }
++            }
++
++            *ptr_aOutput = (uint64_t(alphaSum) * reciprocal) >> 32;
++            ptr_aOutput += aWidth;
++
++            alphaSum += *(ptr_aInput + *ptr_aInput_next++) - *(ptr_aInput + *ptr_aInput_last++);
++        }
++    }
++
++    ExitThread(0);
++
++    return 0;
++}
++
+ static void
+ BoxBlurVertical(unsigned char* aInput,
+                 unsigned char* aOutput,
+@@ -118,59 +351,61 @@
+ {
+     MOZ_ASSERT(aRows > 0);
+ 
+-    int32_t boxSize = aTopLobe + aBottomLobe + 1;
+-    bool skipRectCoversWholeColumn = 0 >= aSkipRect.y &&
+-                                     aRows <= aSkipRect.YMost();
+-    if (boxSize == 1) {
+-        memcpy(aOutput, aInput, aWidth*aRows);
++    const int32_t boxSize = aTopLobe + aBottomLobe + 1;
++
++    if(boxSize == 1) {
++        memcpy(aOutput, aInput, aWidth * aRows);
+         return;
+     }
+-    uint32_t reciprocal = (uint64_t(1) << 32) / boxSize;
+ 
+-    for (int32_t x = 0; x < aWidth; x++) {
+-        bool inSkipRectX = x >= aSkipRect.x &&
+-                           x < aSkipRect.XMost();
+-        if (inSkipRectX && skipRectCoversWholeColumn) {
+-            x = aSkipRect.XMost() - 1;
+-            continue;
+-        }
++    if(NumberOfProcessors == 0) GetNumberOfProcessors();
+ 
+-        uint32_t alphaSum = 0;
+-        for (int32_t i = 0; i < boxSize; i++) {
+-            int32_t pos = i - aTopLobe;
+-            // See assertion above; if aRows is zero, then we would have no
+-            // valid position to clamp to.
+-            pos = max(pos, 0);
+-            pos = min(pos, aRows - 1);
+-            alphaSum += aInput[aWidth * pos + x];
+-        }
+-        for (int32_t y = 0; y < aRows; y++) {
+-            if (inSkipRectX && y >= aSkipRect.y &&
+-                y < aSkipRect.YMost()) {
+-                y = aSkipRect.YMost();
+-                if (y >= aRows)
+-                    break;
++    BoxBlurVertical_Param* Param = new BoxBlurVertical_Param[NumberOfProcessors];
+ 
+-                alphaSum = 0;
+-                for (int32_t i = 0; i < boxSize; i++) {
+-                    int32_t pos = y + i - aTopLobe;
+-                    // See assertion above; if aRows is zero, then we would have no
+-                    // valid position to clamp to.
+-                    pos = max(pos, 0);
+-                    pos = min(pos, aRows - 1);
+-                    alphaSum += aInput[aWidth * pos + x];
+-                }
+-            }
+-            int32_t tmp = y - aTopLobe;
+-            int32_t last = max(tmp, 0);
+-            int32_t next = min(tmp + boxSize, aRows - 1);
++    Param->aInput = aInput;
++    Param->aOutput = aOutput;
++    Param->aTopLobe = aTopLobe;
++    Param->aWidth = aWidth;
++    Param->aRows = aRows;
++    Param->aSkipRect = &const_cast<IntRect&>(aSkipRect);
++    Param->boxSize = boxSize;
++    Param->skipRectCoversWholeColumn = 0 >= aSkipRect.y && aRows <= aSkipRect.YMost();
++    Param->reciprocal = (uint64_t(1) << 32) / boxSize;
++    Param->aInput_next_last = new int32_t[aRows * 2];
+ 
+-            aOutput[aWidth * y + x] = (uint64_t(alphaSum) * reciprocal) >> 32;
++    int32_t* ptr_aInput_next = Param->aInput_next_last;
++    int32_t* ptr_aInput_last = ptr_aInput_next + aRows;
++    int32_t tmp = -aTopLobe;
++    const int32_t aRows_1 = aRows - 1;
+ 
+-            alphaSum += aInput[aWidth * next + x] -
+-                        aInput[aWidth * last + x];
+-        }
++    for(int32_t y = 0; y < aRows; y++) {
++        *ptr_aInput_next++ = aWidth * min(tmp + boxSize, aRows_1);
++        *ptr_aInput_last++ = aWidth * max(tmp, 0);
++        tmp++;
+     }
++
++    const int Step = aWidth / NumberOfProcessors;
++    const int Remain = aWidth - Step * NumberOfProcessors;
++    HANDLE* Thread = new HANDLE[NumberOfProcessors];
++
++    for(int Idx = 0, x = 0; Idx < NumberOfProcessors; Idx++) {
++        Param[Idx].Ptr = Param;
++        Param[Idx].x = x;
++        x += Step + (Idx == 0 ? Remain : 0);
++        Param[Idx].Loop = x;
++
++        Thread[Idx] = CreateThread(NULL, 0, BoxBlurVertical_Thread, Param + Idx, 0, NULL);
++    }
++
++    WaitForMultipleObjects(NumberOfProcessors, Thread, true, INFINITE);
++
++    for(int Idx = 0; Idx < NumberOfProcessors; Idx++) {
++        CloseHandle(Thread[Idx]);
++    }
++
++    delete[] Thread;
++    delete[] Param->aInput_next_last;
++    delete[] Param;
+ }
+ 
+ static void ComputeLobes(int32_t aRadius, int32_t aLobes[3][2])
+diff -r 5764e33f79d6 gfx/2d/DrawTargetD2D.cpp
+--- a/gfx/2d/DrawTargetD2D.cpp	Tue Oct 09 17:07:53 2012 -0700
++++ b/gfx/2d/DrawTargetD2D.cpp	Wed Oct 10 10:53:16 2012 +0900
+@@ -14,6 +14,8 @@
+ #include "Logging.h"
+ #include "Tools.h"
+ #include <algorithm>
++#include <xmmintrin.h>
++#include <emmintrin.h>
+ #include "mozilla/Constants.h"
+ 
+ #include <dwrite.h>
+@@ -45,6 +47,415 @@
+ namespace mozilla {
+ namespace gfx {
+ 
++__forceinline
++GradientStopsCacheD2D::GradientStopsCacheD2D(DrawTargetD2D* const _Target)
++{
++    Target = _Target;
++
++    Cache = nullptr;
++}
++
++__forceinline
++GradientStopsCacheD2D::~GradientStopsCacheD2D(void)
++{
++    if(Cache) {
++        for(_Cache* Idx = Cache; Idx < MaxCacheIdx; Idx++) {
++            if(Idx->StopCollection) {
++                delete[] Idx->GradientStops;
++            } else {
++                break;
++            }
++        }
++
++        delete[] Cache;
++    }
++}
++
++__forceinline RefPtr<ID2D1GradientStopCollection>
++GradientStopsCacheD2D::Create(
++    const D2D1_GRADIENT_STOP* GradientStops,
++    const UINT GradientStopsCount,
++//    const D2D1_GAMMA ColorInterpolationGamma,
++    const D2D1_EXTEND_MODE ExtendMode)
++{
++    if(Cache == nullptr) {
++        Cache = new _Cache[MaxCache];
++        CacheIdx = Cache;
++        MaxCacheIdx = Cache + MaxCache;
++    }
++
++    const size_t SizeGradientStops = GradientStopsCount * sizeof(D2D1_GRADIENT_STOP);
++
++    for(UINT Idx = 0; Idx < MaxCache; Idx++) {
++        _Cache* const Ptr = CacheIdx >= Cache + Idx ? CacheIdx - Idx : CacheIdx + MaxCache - Idx;
++
++        if(Ptr->StopCollection) {
++            if((Ptr->StopCount == GradientStopsCount) &&
++                (memcmp(Ptr->GradientStops, GradientStops, SizeGradientStops) == 0) &&
++//                (Ptr->ColorInterpolationGamma == ColorInterpolationGamma) &&
++                (Ptr->ExtendMode == ExtendMode)) {
++                delete[] GradientStops;
++                return Ptr->StopCollection;
++            }
++        } else {
++            break;
++        }
++    }
++
++    RefPtr<ID2D1GradientStopCollection> StopCollection;
++
++    Target->mRT->CreateGradientStopCollection(
++        GradientStops,
++        GradientStopsCount,
++//        ColorInterpolationGamma,
++        D2D1_GAMMA_2_2,
++        ExtendMode,
++        byRef(StopCollection));
++
++    if(CacheIdx->StopCollection) {
++        CacheIdx = ++CacheIdx < MaxCacheIdx ? CacheIdx : Cache;
++        if(CacheIdx->StopCollection) delete[] CacheIdx->GradientStops;
++    }
++
++    CacheIdx->StopCollection = StopCollection;
++    CacheIdx->GradientStops = const_cast<D2D1_GRADIENT_STOP*>(GradientStops);
++    CacheIdx->StopCount = GradientStopsCount;
++//    CacheIdx->ColorInterpolationGamma = ColorInterpolationGamma;
++    CacheIdx->ExtendMode = ExtendMode;
++
++    return StopCollection;
++}
++
++__forceinline
++GradientBrushCacheD2D::GradientBrushCacheD2D(DrawTargetD2D* const _Target, const int Style)
++{
++    Target = _Target;
++
++    switch(Style) {
++    case Linear:
++        pCreateGradientBrush = &GradientBrushCacheD2D::CreateLinearGradientBrush;
++        pSetPropertiesGradientBrush = &GradientBrushCacheD2D::SetPropertiesLinearGradientBrush;
++        break;
++    case Radial:
++        pCreateGradientBrush = &GradientBrushCacheD2D::CreateRadialGradientBrush;
++        pSetPropertiesGradientBrush = &GradientBrushCacheD2D::SetPropertiesRadialGradientBrush;
++        break;
++    }
++
++    Cache = nullptr;
++}
++
++__forceinline
++GradientBrushCacheD2D::~GradientBrushCacheD2D(void)
++{
++    if(Cache) {
++        for(_Cache* Idx = Cache; Idx < MaxCacheIdx; Idx++) {
++            if(Idx->Brush) {
++                delete[] Idx->GradientStops;
++            } else {
++                break;
++            }
++        }
++
++        delete[] Cache;
++    }
++}
++
++__forceinline TemporaryRef<ID2D1Brush>
++GradientBrushCacheD2D::Create(
++    void* const GradientBrushProperties,
++    const D2D1_BRUSH_PROPERTIES& BrushProperties,
++    ID2D1GradientStopCollection* GradientStopCollection)
++{
++    if(Cache == nullptr) {
++        Cache = new _Cache[MaxCache];
++        CacheIdx = Cache;
++        MaxCacheIdx = Cache + MaxCache;
++    }
++
++    const UINT StopCount = GradientStopCollection->GetGradientStopCount();
++    D2D1_GRADIENT_STOP* const GradientStops = new D2D1_GRADIENT_STOP[StopCount];
++
++    GradientStopCollection->GetGradientStops(GradientStops, StopCount);
++
++//    const D2D1_GAMMA ColorInterpolationGamma = GradientStopCollection->GetColorInterpolationGamma();
++    const D2D1_EXTEND_MODE ExtendMode = GradientStopCollection->GetExtendMode();
++    const size_t SizeGradientStops = StopCount * sizeof(D2D1_GRADIENT_STOP);
++
++    for(UINT Idx = 0; Idx < MaxCache; Idx++) {
++        _Cache* const Ptr = CacheIdx >= Cache + Idx ? CacheIdx - Idx : CacheIdx + MaxCache - Idx;
++
++        if(Ptr->Brush) {
++            if((Ptr->StopCount == StopCount) &&
++                (memcmp(Ptr->GradientStops, GradientStops, SizeGradientStops) == 0) &&
++//                (Ptr->ColorInterpolationGamma == ColorInterpolationGamma) &&
++                (Ptr->ExtendMode == ExtendMode)) {
++                delete[] GradientStops;
++                return (this->*pSetPropertiesGradientBrush)(Ptr, GradientBrushProperties, BrushProperties);
++            }
++        } else {
++            break;
++        }
++    }
++
++    RefPtr<ID2D1Brush> Brush = (this->*pCreateGradientBrush)(
++        GradientBrushProperties,
++        BrushProperties,
++        GradientStopCollection);
++
++    if(CacheIdx->Brush) {
++        CacheIdx = ++CacheIdx < MaxCacheIdx ? CacheIdx : Cache;
++        if(CacheIdx->Brush) delete[] CacheIdx->GradientStops;
++    }
++
++    CacheIdx->Brush = Brush;
++    CacheIdx->GradientStops = GradientStops;
++    CacheIdx->StopCount = StopCount;
++//    CacheIdx->ColorInterpolationGamma = ColorInterpolationGamma;
++    CacheIdx->ExtendMode = ExtendMode;
++
++    return Brush;
++}
++
++TemporaryRef<ID2D1Brush>
++GradientBrushCacheD2D::CreateLinearGradientBrush(
++    void* const GradientBrushProperties,
++    const D2D1_BRUSH_PROPERTIES& BrushProperties,
++    ID2D1GradientStopCollection* GradientStopCollection)
++{
++    RefPtr<ID2D1LinearGradientBrush> LinearGradientBrush;
++
++    Target->mRT->CreateLinearGradientBrush(
++        *static_cast<D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES*>(GradientBrushProperties),
++        BrushProperties,
++        GradientStopCollection,
++        byRef(LinearGradientBrush));
++
++    return LinearGradientBrush;
++}
++
++TemporaryRef<ID2D1Brush>
++GradientBrushCacheD2D::CreateRadialGradientBrush(
++    void* const GradientBrushProperties,
++    const D2D1_BRUSH_PROPERTIES& BrushProperties,
++    ID2D1GradientStopCollection* GradientStopCollection)
++{
++    RefPtr<ID2D1RadialGradientBrush> RadialGradientBrush;
++
++    Target->mRT->CreateRadialGradientBrush(
++        *static_cast<D2D1_RADIAL_GRADIENT_BRUSH_PROPERTIES*>(GradientBrushProperties),
++        BrushProperties,
++        GradientStopCollection,
++        byRef(RadialGradientBrush));
++
++    return RadialGradientBrush;
++}
++
++TemporaryRef<ID2D1Brush>
++GradientBrushCacheD2D::SetPropertiesLinearGradientBrush(
++    _Cache* const Ptr,
++    void* const GradientBrushProperties,
++    const D2D1_BRUSH_PROPERTIES& BrushProperties)
++{
++    RefPtr<ID2D1LinearGradientBrush> LinearGradientBrush = static_cast<ID2D1LinearGradientBrush*>(Ptr->Brush.get());
++    const D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES* const LinearGradientBrushProperties =
++        static_cast<D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES*>(GradientBrushProperties);
++
++    LinearGradientBrush->SetStartPoint(LinearGradientBrushProperties->startPoint);
++    LinearGradientBrush->SetEndPoint(LinearGradientBrushProperties->endPoint);
++
++    LinearGradientBrush->SetOpacity(BrushProperties.opacity);
++    LinearGradientBrush->SetTransform(BrushProperties.transform);
++
++    return LinearGradientBrush;
++}
++
++TemporaryRef<ID2D1Brush>
++GradientBrushCacheD2D::SetPropertiesRadialGradientBrush(
++    _Cache* const Ptr,
++    void* const GradientBrushProperties,
++    const D2D1_BRUSH_PROPERTIES& BrushProperties)
++{
++    RefPtr<ID2D1RadialGradientBrush> RadialGradientBrush = static_cast<ID2D1RadialGradientBrush*>(Ptr->Brush.get());
++    const D2D1_RADIAL_GRADIENT_BRUSH_PROPERTIES* const RadialGradientBrushProperties =
++        static_cast<D2D1_RADIAL_GRADIENT_BRUSH_PROPERTIES*>(GradientBrushProperties);
++
++    RadialGradientBrush->SetCenter(RadialGradientBrushProperties->center);
++    RadialGradientBrush->SetGradientOriginOffset(RadialGradientBrushProperties->gradientOriginOffset);
++    RadialGradientBrush->SetRadiusX(RadialGradientBrushProperties->radiusX);
++    RadialGradientBrush->SetRadiusY(RadialGradientBrushProperties->radiusY);
++
++    RadialGradientBrush->SetOpacity(BrushProperties.opacity);
++    RadialGradientBrush->SetTransform(BrushProperties.transform);
++
++    return RadialGradientBrush;
++}
++
++__forceinline
++GradientTextureCacheD2D::GradientTextureCacheD2D(DrawTargetD2D* const _Target)
++{
++    Target = _Target;
++
++    Cache = nullptr;
++}
++
++__forceinline
++GradientTextureCacheD2D::~GradientTextureCacheD2D(void)
++{
++    if(Cache) {
++        for(_Cache* Idx = Cache; Idx < MaxCacheIdx; Idx++) {
++            if(Idx->Texture) {
++                delete[] Idx->GradientStops;
++            } else {
++                break;
++            }
++        }
++
++        delete[] Cache;
++    }
++}
++
++__forceinline TemporaryRef<ID3D10Texture2D>
++GradientTextureCacheD2D::Create(const GradientStopsD2D* aStops)
++{
++    if(Cache == nullptr) {
++        Cache = new _Cache[MaxCache];
++        CacheIdx = Cache;
++        MaxCacheIdx = Cache + MaxCache;
++    }
++
++    const UINT StopCount = aStops->mStopCollection->GetGradientStopCount();
++    D2D1_GRADIENT_STOP* const GradientStops = new D2D1_GRADIENT_STOP[StopCount];
++
++    aStops->mStopCollection->GetGradientStops(GradientStops, StopCount);
++
++//    const D2D1_GAMMA ColorInterpolationGamma = aStops->mStopCollection->GetColorInterpolationGamma();
++    const D2D1_EXTEND_MODE ExtendMode = aStops->mStopCollection->GetExtendMode();
++    const size_t SizeGradientStops = StopCount * sizeof(D2D1_GRADIENT_STOP);
++
++    for(UINT Idx = 0; Idx < MaxCache; Idx++) {
++        _Cache* const Ptr = CacheIdx >= Cache + Idx ? CacheIdx - Idx : CacheIdx + MaxCache - Idx;
++
++        if(Ptr->Texture) {
++            if((Ptr->StopCount == StopCount) &&
++                (memcmp(Ptr->GradientStops, GradientStops, SizeGradientStops) == 0) &&
++//                (Ptr->ColorInterpolationGamma == ColorInterpolationGamma) &&
++                (Ptr->ExtendMode == ExtendMode)) {
++                delete[] GradientStops;
++                return Ptr->Texture;
++            }
++        } else {
++            break;
++        }
++    }
++
++    RefPtr<ID3D10Texture2D> Texture = CreateGradientTexture(GradientStops, StopCount);
++
++    if(CacheIdx->Texture) {
++        CacheIdx = ++CacheIdx < MaxCacheIdx ? CacheIdx : Cache;
++        if(CacheIdx->Texture) delete[] CacheIdx->GradientStops;
++    }
++
++    CacheIdx->Texture = Texture;
++    CacheIdx->GradientStops = GradientStops;
++    CacheIdx->StopCount = StopCount;
++//    CacheIdx->ColorInterpolationGamma = ColorInterpolationGamma;
++    CacheIdx->ExtendMode = ExtendMode;
++
++    return Texture;
++}
++
++__forceinline TemporaryRef<ID3D10Texture2D>
++GradientTextureCacheD2D::CreateGradientTexture(
++    D2D1_GRADIENT_STOP* const GradientStops,
++    const UINT StopCount)
++{
++    CD3D10_TEXTURE2D_DESC desc(DXGI_FORMAT_B8G8R8A8_UNORM, 4096, 1, 1, 1);
++    unsigned char* texData = new unsigned char[4096 * 4];
++    unsigned char* ptr_texData = texData;
++    float prevColorPos = 0;
++    float nextColorPos = 1.0f;
++    __declspec(align(16)) D2D1_COLOR_F prevColor = GradientStops[0].color;
++    __declspec(align(16)) D2D1_COLOR_F nextColor = prevColor;
++
++    if(StopCount >= 2) {
++        nextColor = GradientStops[1].color;
++        nextColorPos = GradientStops[1].position;
++    }
++
++    const float div_4095 = 1.0f / 4095;
++    uint32_t stopPosition = 2;
++    __m128 xmm0 = _mm_set1_ps(255.0f);
++
++    // Not the most optimized way but this will do for now.
++    for (int i = 0; i < 4096; i++) {
++        // The 4095 seems a little counter intuitive, but we want the gradient
++        // color at offset 0 at the first pixel, and at offset 1.0f at the last
++        // pixel.
++        const float pos = i * div_4095;
++
++        while (pos > nextColorPos) {
++            prevColor = nextColor;
++            prevColorPos = nextColorPos;
++
++            if(StopCount > stopPosition) {
++                nextColor = GradientStops[stopPosition].color;
++                nextColorPos = GradientStops[stopPosition++].position;
++            } else {
++                nextColorPos = 1.0f;
++            }
++        }
++
++        __m128 xmm1;
++        __m128 xmm2;
++        __m128 xmm3;
++        __m128i xmm4;
++
++        if (nextColorPos != prevColorPos) {
++            xmm1 = _mm_load_ss(&pos);
++            xmm2 = _mm_load_ss(&nextColorPos);
++            xmm1 = _mm_movelh_ps(xmm1, xmm2);
++            xmm2 = _mm_set1_ps(prevColorPos);
++            xmm1 = _mm_sub_ps(xmm1, xmm2);
++            xmm2 = _mm_movehl_ps(xmm1, xmm1);
++            xmm1 = _mm_div_ss(xmm1, xmm2);
++            xmm1 = _mm_shuffle_ps(xmm1, xmm1, _MM_SHUFFLE(0, 0, 0, 0));
++        } else {
++            xmm1 = _mm_setzero_ps();
++        }
++
++        xmm2 = _mm_load_ps(&nextColor.r);
++        xmm3 = _mm_load_ps(&prevColor.r);
++        xmm2 = _mm_sub_ps(xmm2, xmm3);
++        xmm1 = _mm_mul_ps(xmm2, xmm1);
++        xmm1 = _mm_add_ps(xmm1, xmm3);
++        xmm1 = _mm_mul_ps(xmm1, xmm0);
++        xmm4 = _mm_cvtps_epi32(xmm1);
++
++        xmm4 = _mm_shuffle_epi32(xmm4, _MM_SHUFFLE(3, 1, 0, 2));
++        *ptr_texData++ = _mm_cvtsi128_si32(xmm4);
++        xmm4 = _mm_shuffle_epi32(xmm4, _MM_SHUFFLE(3, 0, 1, 2));
++        *ptr_texData++ = _mm_cvtsi128_si32(xmm4);
++        xmm4 = _mm_shuffle_epi32(xmm4, _MM_SHUFFLE(3, 2, 0, 1));
++        *ptr_texData++ = _mm_cvtsi128_si32(xmm4);
++        xmm4 = _mm_shuffle_epi32(xmm4, _MM_SHUFFLE(2, 1, 0, 3));
++        *ptr_texData++ = _mm_cvtsi128_si32(xmm4);
++    }
++
++    D3D10_SUBRESOURCE_DATA data;
++
++    data.pSysMem = texData;
++    data.SysMemPitch = 4096 * 4;
++
++    RefPtr<ID3D10Texture2D> tex;
++
++    Target->mDevice->CreateTexture2D(&desc, &data, byRef(tex));
++
++    delete[] texData;
++
++    return tex;
++}
++
+ struct Vertex {
+   float x;
+   float y;
+@@ -153,10 +564,19 @@
+   , mClipsArePushed(false)
+   , mPrivateData(nullptr)
+ {
++  GradientStopsCache = new GradientStopsCacheD2D(this);
++  LinearGradientBrushCache = nullptr;
++  RadialGradientBrushCache = nullptr;
++  GradientTextureCache = nullptr;
+ }
+ 
+ DrawTargetD2D::~DrawTargetD2D()
+ {
++  if(GradientTextureCache) delete GradientTextureCache;
++  if(RadialGradientBrushCache) delete RadialGradientBrushCache;
++  if(LinearGradientBrushCache) delete LinearGradientBrushCache;
++  delete GradientStopsCache;
++
+   if (mRT) {  
+     PopAllClips();
+ 
+@@ -379,10 +799,8 @@
+   mDevice->IASetVertexBuffers(0, 1, &buff, &stride, &offset);
+   mDevice->IASetInputLayout(mPrivateData->mInputLayout);
+ 
+-  mPrivateData->mEffect->GetVariableByName("QuadDesc")->AsVector()->
+-    SetFloatVector(ShaderConstantRectD3D10(-1.0f, 1.0f, 2.0f, -2.0f));
+-  mPrivateData->mEffect->GetVariableByName("TexCoords")->AsVector()->
+-    SetFloatVector(ShaderConstantRectD3D10(0, 0, 1.0f, 1.0f));
++  mPrivateData->Variable_QuadDesc->AsVector()->SetFloatVector(ShaderConstantRectD3D10(-1.0f, 1.0f, 2.0f, -2.0f));
++  mPrivateData->Variable_TexCoords->AsVector()->SetFloatVector(ShaderConstantRectD3D10(0, 0, 1.0f, 1.0f));
+ 
+   // If we create a downsampled source surface we need to correct aOffset for that.
+   Point correctedOffset = aOffset + aDest;
+@@ -397,7 +815,7 @@
+     // them. We generate a version downsampled so that a kernel for a sigma
+     // of 1.7 will produce the right results.
+     float blurWeights[9] = { 0.234671f, 0.197389f, 0.197389f, 0.117465f, 0.117465f, 0.049456f, 0.049456f, 0.014732f, 0.014732f };
+-    mPrivateData->mEffect->GetVariableByName("BlurWeights")->SetRawValue(blurWeights, 0, sizeof(blurWeights));
++    mPrivateData->Variable_BlurWeights->SetRawValue(blurWeights, 0, sizeof(blurWeights));
+     
+     CD3D10_TEXTURE2D_DESC desc(DXGI_FORMAT_B8G8R8A8_UNORM,
+                                aSurface->GetSize().width,
+@@ -472,9 +890,8 @@
+     viewport.TopLeftY = 0;
+ 
+     mDevice->RSSetViewports(1, &viewport);
+-    mPrivateData->mEffect->GetVariableByName("tex")->AsShaderResource()->SetResource(srView);
+-    mPrivateData->mEffect->GetTechniqueByName("SampleTexture")->
+-      GetPassByIndex(0)->Apply(0);
++    mPrivateData->Variable_tex->AsShaderResource()->SetResource(srView);
++    mPrivateData->Technique_SampleTexture->GetPassByIndex(0)->Apply(0);
+ 
+     mDevice->OMSetBlendState(GetBlendStateForOperator(OP_OVER), nullptr, 0xffffffff);
+ 
+@@ -506,7 +923,7 @@
+       }
+     }
+     
+-    mPrivateData->mEffect->GetVariableByName("BlurWeights")->SetRawValue(blurWeights, 0, sizeof(blurWeights));
++    mPrivateData->Variable_BlurWeights->SetRawValue(blurWeights, 0, sizeof(blurWeights));
+ 
+     viewport.MaxDepth = 1;
+     viewport.MinDepth = 0;
+@@ -555,13 +972,12 @@
+   rtViews = tmpRTView;
+   mDevice->OMSetRenderTargets(1, &rtViews, nullptr);
+ 
+-  mPrivateData->mEffect->GetVariableByName("tex")->AsShaderResource()->SetResource(srView);
++  mPrivateData->Variable_tex->AsShaderResource()->SetResource(srView);
+ 
+   // Premultiplied!
+   float shadowColor[4] = { aColor.r * aColor.a, aColor.g * aColor.a,
+                            aColor.b * aColor.a, aColor.a };
+-  mPrivateData->mEffect->GetVariableByName("ShadowColor")->AsVector()->
+-    SetFloatVector(shadowColor);
++  mPrivateData->Variable_ShadowColor->AsVector()->SetFloatVector(shadowColor);
+ 
+   float pixelOffset = 1.0f / float(srcSurfSize.width);
+   float blurOffsetsH[9] = { 0, pixelOffset, -pixelOffset,
+@@ -575,13 +991,10 @@
+                             3.0f * pixelOffset, -3.0f * pixelOffset,
+                             4.0f * pixelOffset, - 4.0f * pixelOffset };
+ 
+-  mPrivateData->mEffect->GetVariableByName("BlurOffsetsH")->
+-    SetRawValue(blurOffsetsH, 0, sizeof(blurOffsetsH));
+-  mPrivateData->mEffect->GetVariableByName("BlurOffsetsV")->
+-    SetRawValue(blurOffsetsV, 0, sizeof(blurOffsetsV));
+-
+-  mPrivateData->mEffect->GetTechniqueByName("SampleTextureWithShadow")->
+-    GetPassByIndex(0)->Apply(0);
++  mPrivateData->Variable_BlurOffsetsH->SetRawValue(blurOffsetsH, 0, sizeof(blurOffsetsH));
++  mPrivateData->Variable_BlurOffsetsV->SetRawValue(blurOffsetsV, 0, sizeof(blurOffsetsV));
++
++  mPrivateData->Technique_SampleTextureWithShadow->GetPassByIndex(0)->Apply(0);
+ 
+   mDevice->Draw(4, 0);
+ 
+@@ -594,58 +1007,52 @@
+ 
+   mDevice->RSSetViewports(1, &viewport);
+ 
+-  mPrivateData->mEffect->GetVariableByName("tex")->AsShaderResource()->SetResource(tmpSRView);
+-
++  mPrivateData->Variable_tex->AsShaderResource()->SetResource(tmpSRView);
+   rtViews = destRTView;
+   mDevice->OMSetRenderTargets(1, &rtViews, nullptr);
+ 
+   Point shadowDest = aDest + aOffset;
+ 
+-  mPrivateData->mEffect->GetVariableByName("QuadDesc")->AsVector()->
++  mPrivateData->Variable_QuadDesc->AsVector()->
+     SetFloatVector(ShaderConstantRectD3D10(-1.0f + ((shadowDest.x / mSize.width) * 2.0f),
+                                            1.0f - (shadowDest.y / mSize.height * 2.0f),
+                                            (Float(aSurface->GetSize().width) / mSize.width) * 2.0f,
+                                            (-Float(aSurface->GetSize().height) / mSize.height) * 2.0f));
+-  mPrivateData->mEffect->GetVariableByName("TexCoords")->AsVector()->
++  mPrivateData->Variable_TexCoords->AsVector()->
+     SetFloatVector(ShaderConstantRectD3D10(0, 0, Float(srcSurfSize.width) / tmpSurfSize.width,
+                                                  Float(srcSurfSize.height) / tmpSurfSize.height));
+ 
+   if (mPushedClips.size()) {
+-    mPrivateData->mEffect->GetVariableByName("mask")->AsShaderResource()->SetResource(maskSRView);
+-    mPrivateData->mEffect->GetVariableByName("MaskTexCoords")->AsVector()->
++    mPrivateData->Variable_mask->AsShaderResource()->SetResource(maskSRView);
++    mPrivateData->Variable_MaskTexCoords->AsVector()->
+       SetFloatVector(ShaderConstantRectD3D10(shadowDest.x / mSize.width, shadowDest.y / mSize.height,
+                                              Float(aSurface->GetSize().width) / mSize.width,
+                                              Float(aSurface->GetSize().height) / mSize.height));
+-    mPrivateData->mEffect->GetTechniqueByName("SampleTextureWithShadow")->
+-      GetPassByIndex(2)->Apply(0);
++    mPrivateData->Technique_SampleTextureWithShadow->GetPassByIndex(2)->Apply(0);
+   } else {
+-    mPrivateData->mEffect->GetTechniqueByName("SampleTextureWithShadow")->
+-      GetPassByIndex(1)->Apply(0);
++    mPrivateData->Technique_SampleTextureWithShadow->GetPassByIndex(1)->Apply(0);
+   }
+ 
+   mDevice->OMSetBlendState(GetBlendStateForOperator(aOperator), nullptr, 0xffffffff);
+ 
+   mDevice->Draw(4, 0);
+ 
+-  mPrivateData->mEffect->GetVariableByName("QuadDesc")->AsVector()->
++  mPrivateData->Variable_QuadDesc->AsVector()->
+     SetFloatVector(ShaderConstantRectD3D10(-1.0f + ((aDest.x / mSize.width) * 2.0f),
+                                            1.0f - (aDest.y / mSize.height * 2.0f),
+                                            (Float(aSurface->GetSize().width) / mSize.width) * 2.0f,
+                                            (-Float(aSurface->GetSize().height) / mSize.height) * 2.0f));
+-  mPrivateData->mEffect->GetVariableByName("tex")->AsShaderResource()->SetResource(static_cast<SourceSurfaceD2DTarget*>(aSurface)->GetSRView());
+-  mPrivateData->mEffect->GetVariableByName("TexCoords")->AsVector()->
+-    SetFloatVector(ShaderConstantRectD3D10(0, 0, 1.0f, 1.0f));
++  mPrivateData->Variable_tex->AsShaderResource()->SetResource(static_cast<SourceSurfaceD2DTarget*>(aSurface)->GetSRView());
++  mPrivateData->Variable_TexCoords->AsVector()->SetFloatVector(ShaderConstantRectD3D10(0, 0, 1.0f, 1.0f));
+ 
+   if (mPushedClips.size()) {
+-    mPrivateData->mEffect->GetVariableByName("MaskTexCoords")->AsVector()->
++    mPrivateData->Variable_MaskTexCoords->AsVector()->
+       SetFloatVector(ShaderConstantRectD3D10(aDest.x / mSize.width, aDest.y / mSize.height,
+                                              Float(aSurface->GetSize().width) / mSize.width,
+                                              Float(aSurface->GetSize().height) / mSize.height));
+-    mPrivateData->mEffect->GetTechniqueByName("SampleMaskedTexture")->
+-      GetPassByIndex(0)->Apply(0);
++    mPrivateData->Technique_SampleMaskedTexture->GetPassByIndex(0)->Apply(0);
+   } else {
+-    mPrivateData->mEffect->GetTechniqueByName("SampleTexture")->
+-      GetPassByIndex(0)->Apply(0);
++    mPrivateData->Technique_SampleTexture->GetPassByIndex(0)->Apply(0);
+   }
+ 
+   mDevice->OMSetBlendState(GetBlendStateForOperator(aOperator), nullptr, 0xffffffff);
+@@ -1119,20 +1526,11 @@
+     stops[i].color = D2DColor(rawStops[i].color);
+   }
+ 
+-  RefPtr<ID2D1GradientStopCollection> stopCollection;
+-
+-  HRESULT hr =
+-    mRT->CreateGradientStopCollection(stops, aNumStops,
+-                                      D2D1_GAMMA_2_2, D2DExtend(aExtendMode),
+-                                      byRef(stopCollection));
+-  delete [] stops;
+-
+-  if (FAILED(hr)) {
+-    gfxWarning() << "Failed to create GradientStopCollection. Code: " << hr;
+-    return nullptr;
+-  }
+-
+-  return new GradientStopsD2D(stopCollection);
++  return new GradientStopsD2D(
++      GradientStopsCache->Create(
++      stops,
++      aNumStops,
++      D2DExtend(aExtendMode)));
+ }
+ 
+ void*
+@@ -1248,13 +1646,37 @@
+   privateDataSize = sizeof(mPrivateData);
+   mDevice->SetPrivateData(sPrivateDataD2D, privateDataSize, &mPrivateData);
+ 
++  mPrivateData->Technique_SampleMaskedTexture = mPrivateData->mEffect->GetTechniqueByName("SampleMaskedTexture");
++  mPrivateData->Technique_SampleRadialGradient = mPrivateData->mEffect->GetTechniqueByName("SampleRadialGradient");
++  mPrivateData->Technique_SampleTextTexture = mPrivateData->mEffect->GetTechniqueByName("SampleTextTexture");
++  mPrivateData->Technique_SampleTexture = mPrivateData->mEffect->GetTechniqueByName("SampleTexture");
++  mPrivateData->Technique_SampleTextureWithShadow = mPrivateData->mEffect->GetTechniqueByName("SampleTextureWithShadow");
++
++  mPrivateData->Variable_A = mPrivateData->mEffect->GetVariableByName("A");
++  mPrivateData->Variable_BlurOffsetsH = mPrivateData->mEffect->GetVariableByName("BlurOffsetsH");
++  mPrivateData->Variable_BlurOffsetsV = mPrivateData->mEffect->GetVariableByName("BlurOffsetsV");
++  mPrivateData->Variable_BlurWeights = mPrivateData->mEffect->GetVariableByName("BlurWeights");
++  mPrivateData->Variable_center1 = mPrivateData->mEffect->GetVariableByName("center1");
++  mPrivateData->Variable_DeviceSpaceToUserSpace = mPrivateData->mEffect->GetVariableByName("DeviceSpaceToUserSpace");
++  mPrivateData->Variable_diff = mPrivateData->mEffect->GetVariableByName("diff");
++  mPrivateData->Variable_dimensions = mPrivateData->mEffect->GetVariableByName("dimensions");
++  mPrivateData->Variable_mask = mPrivateData->mEffect->GetVariableByName("mask");
++  mPrivateData->Variable_MaskTexCoords= mPrivateData->mEffect->GetVariableByName("MaskTexCoords");
++  mPrivateData->Variable_QuadDesc = mPrivateData->mEffect->GetVariableByName("QuadDesc");
++  mPrivateData->Variable_radius1 = mPrivateData->mEffect->GetVariableByName("radius1");
++  mPrivateData->Variable_ShadowColor = mPrivateData->mEffect->GetVariableByName("ShadowColor");
++  mPrivateData->Variable_sq_radius1 = mPrivateData->mEffect->GetVariableByName("sq_radius1");
++  mPrivateData->Variable_tex = mPrivateData->mEffect->GetVariableByName("tex");
++  mPrivateData->Variable_TexCoords = mPrivateData->mEffect->GetVariableByName("TexCoords");
++  mPrivateData->Variable_TextColor = mPrivateData->mEffect->GetVariableByName("TextColor");
++
+   D3D10_INPUT_ELEMENT_DESC layout[] =
+   {
+     { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D10_INPUT_PER_VERTEX_DATA, 0 },
+   };
+   D3D10_PASS_DESC passDesc;
+   
+-  mPrivateData->mEffect->GetTechniqueByName("SampleTexture")->GetPassByIndex(0)->GetDesc(&passDesc);
++  mPrivateData->Technique_SampleTexture->GetPassByIndex(0)->GetDesc(&passDesc);
+ 
+   hr = mDevice->CreateInputLayout(layout,
+                                   sizeof(layout) / sizeof(D3D10_INPUT_ELEMENT_DESC),
+@@ -1547,14 +1969,12 @@
+   viewport.TopLeftY = 0;
+ 
+   mDevice->RSSetViewports(1, &viewport);
+-  mPrivateData->mEffect->GetVariableByName("QuadDesc")->AsVector()->
+-    SetFloatVector(ShaderConstantRectD3D10(-1.0f, 1.0f, 2.0f, -2.0f));
++  mPrivateData->Variable_QuadDesc->AsVector()->SetFloatVector(ShaderConstantRectD3D10(-1.0f, 1.0f, 2.0f, -2.0f));
+ 
+   if (!IsPatternSupportedByD2D(aPattern)) {
+-    mPrivateData->mEffect->GetVariableByName("TexCoords")->AsVector()->
+-      SetFloatVector(ShaderConstantRectD3D10(0, 0, 1.0f, 1.0f));
+-    mPrivateData->mEffect->GetVariableByName("tex")->AsShaderResource()->SetResource(mSRView);
+-    mPrivateData->mEffect->GetTechniqueByName("SampleTexture")->GetPassByIndex(0)->Apply(0);
++    mPrivateData->Variable_TexCoords->AsVector()->SetFloatVector(ShaderConstantRectD3D10(0, 0, 1.0f, 1.0f));
++    mPrivateData->Variable_tex->AsShaderResource()->SetResource(mSRView);
++    mPrivateData->Technique_SampleTexture->GetPassByIndex(0)->Apply(0);
+   } else if (aPattern.GetType() == PATTERN_RADIAL_GRADIENT) {
+     const RadialGradientPattern *pat = static_cast<const RadialGradientPattern*>(&aPattern);
+ 
+@@ -1563,7 +1983,7 @@
+       return;
+     }
+ 
+-    mPrivateData->mEffect->GetVariableByName("mask")->AsShaderResource()->SetResource(mSRView);
++    mPrivateData->Variable_mask->AsShaderResource()->SetResource(mSRView);
+ 
+     SetupEffectForRadialGradient(pat);
+   }
+@@ -1909,20 +2329,16 @@
+ 
+   SetupStateForRendering();
+ 
+-  ID3D10EffectTechnique *technique = mPrivateData->mEffect->GetTechniqueByName("SampleTextTexture");
+-
+-  mPrivateData->mEffect->GetVariableByName("QuadDesc")->AsVector()->
++  mPrivateData->Variable_QuadDesc->AsVector()->
+     SetFloatVector(ShaderConstantRectD3D10(-1.0f + ((Float(rectBounds.x) / mSize.width) * 2.0f),
+                                            1.0f - (Float(rectBounds.y) / mSize.height * 2.0f),
+                                            (Float(rectBounds.width) / mSize.width) * 2.0f,
+                                            (-Float(rectBounds.height) / mSize.height) * 2.0f));
+-  mPrivateData->mEffect->GetVariableByName("TexCoords")->AsVector()->
+-    SetFloatVector(ShaderConstantRectD3D10(0, 0, 1.0f, 1.0f));
++  mPrivateData->Variable_TexCoords->AsVector()->SetFloatVector(ShaderConstantRectD3D10(0, 0, 1.0f, 1.0f));
+   FLOAT color[4] = { aColor.r, aColor.g, aColor.b, aColor.a };
+-  mPrivateData->mEffect->GetVariableByName("TextColor")->AsVector()->
+-    SetFloatVector(color);
++  mPrivateData->Variable_TextColor->AsVector()->SetFloatVector(color);
+   
+-  mPrivateData->mEffect->GetVariableByName("tex")->AsShaderResource()->SetResource(srView);
++  mPrivateData->Variable_tex->AsShaderResource()->SetResource(srView);
+ 
+   bool isMasking = false;
+ 
+@@ -1952,15 +2368,15 @@
+       return false;
+     }
+ 
+-    mPrivateData->mEffect->GetVariableByName("mask")->AsShaderResource()->SetResource(srViewMask);
+-
+-    mPrivateData->mEffect->GetVariableByName("MaskTexCoords")->AsVector()->
++    mPrivateData->Variable_mask->AsShaderResource()->SetResource(srViewMask);
++
++    mPrivateData->Variable_MaskTexCoords->AsVector()->
+       SetFloatVector(ShaderConstantRectD3D10(Float(rectBounds.x) / mSize.width, Float(rectBounds.y) / mSize.height,
+                                              Float(rectBounds.width) / mSize.width, Float(rectBounds.height) / mSize.height));
+ 
+-    technique->GetPassByIndex(1)->Apply(0);
++    mPrivateData->Technique_SampleTextTexture->GetPassByIndex(1)->Apply(0);
+   } else {
+-    technique->GetPassByIndex(0)->Apply(0);
++    mPrivateData->Technique_SampleTextTexture->GetPassByIndex(0)->Apply(0);
+   }  
+ 
+   RefPtr<ID3D10RenderTargetView> rtView;
+@@ -1992,7 +2408,6 @@
+                                byRef(colBrush));
+     return colBrush;
+   } else if (aPattern.GetType() == PATTERN_LINEAR_GRADIENT) {
+-    RefPtr<ID2D1LinearGradientBrush> gradBrush;
+     const LinearGradientPattern *pat =
+       static_cast<const LinearGradientPattern*>(&aPattern);
+ 
+@@ -2014,14 +2429,15 @@
+       return colBrush;
+     }
+ 
+-    mRT->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(D2DPoint(pat->mBegin),
+-                                                                       D2DPoint(pat->mEnd)),
+-                                   D2D1::BrushProperties(aAlpha, D2DMatrix(pat->mMatrix)),
+-                                   stops->mStopCollection,
+-                                   byRef(gradBrush));
+-    return gradBrush;
++    if(LinearGradientBrushCache == nullptr) {
++        LinearGradientBrushCache = new GradientBrushCacheD2D(this, GradientBrushCacheD2D::Linear);
++    }
++
++    return LinearGradientBrushCache->Create(
++        &D2D1::LinearGradientBrushProperties(D2DPoint(pat->mBegin), D2DPoint(pat->mEnd)),
++        D2D1::BrushProperties(aAlpha, D2DMatrix(pat->mMatrix)),
++        stops->mStopCollection);
+   } else if (aPattern.GetType() == PATTERN_RADIAL_GRADIENT) {
+-    RefPtr<ID2D1RadialGradientBrush> gradBrush;
+     const RadialGradientPattern *pat =
+       static_cast<const RadialGradientPattern*>(&aPattern);
+ 
+@@ -2032,16 +2448,15 @@
+       return nullptr;
+     }
+ 
++    if(RadialGradientBrushCache == nullptr) {
++        RadialGradientBrushCache = new GradientBrushCacheD2D(this, GradientBrushCacheD2D::Radial);
++    }
++
+     // This will not be a complex radial gradient brush.
+-    mRT->CreateRadialGradientBrush(
+-      D2D1::RadialGradientBrushProperties(D2DPoint(pat->mCenter1),
+-                                          D2D1::Point2F(),
+-                                          pat->mRadius2, pat->mRadius2),
+-      D2D1::BrushProperties(aAlpha, D2DMatrix(pat->mMatrix)),
+-      stops->mStopCollection,
+-      byRef(gradBrush));
+-
+-    return gradBrush;
++    return RadialGradientBrushCache->Create(
++        &D2D1::RadialGradientBrushProperties(D2DPoint(pat->mCenter1), D2D1::Point2F(), pat->mRadius2, pat->mRadius2),
++        D2D1::BrushProperties(aAlpha, D2DMatrix(pat->mMatrix)),
++        stops->mStopCollection);
+   } else if (aPattern.GetType() == PATTERN_SURFACE) {
+     RefPtr<ID2D1BitmapBrush> bmBrush;
+     const SurfacePattern *pat =
+@@ -2183,73 +2598,11 @@
+ TemporaryRef<ID3D10Texture2D>
+ DrawTargetD2D::CreateGradientTexture(const GradientStopsD2D *aStops)
+ {
+-  CD3D10_TEXTURE2D_DESC desc(DXGI_FORMAT_B8G8R8A8_UNORM, 4096, 1, 1, 1);
+-
+-  std::vector<D2D1_GRADIENT_STOP> rawStops;
+-  rawStops.resize(aStops->mStopCollection->GetGradientStopCount());
+-  aStops->mStopCollection->GetGradientStops(&rawStops.front(), rawStops.size());
+-
+-  std::vector<unsigned char> textureData;
+-  textureData.resize(4096 * 4);
+-  unsigned char *texData = &textureData.front();
+-
+-  float prevColorPos = 0;
+-  float nextColorPos = 1.0f;
+-  D2D1_COLOR_F prevColor = rawStops[0].color;
+-  D2D1_COLOR_F nextColor = prevColor;
+-
+-  if (rawStops.size() >= 2) {
+-    nextColor = rawStops[1].color;
+-    nextColorPos = rawStops[1].position;
++  if(GradientTextureCache == nullptr) {
++    GradientTextureCache = new GradientTextureCacheD2D(this);
+   }
+ 
+-  uint32_t stopPosition = 2;
+-
+-  // Not the most optimized way but this will do for now.
+-  for (int i = 0; i < 4096; i++) {
+-    // The 4095 seems a little counter intuitive, but we want the gradient
+-    // color at offset 0 at the first pixel, and at offset 1.0f at the last
+-    // pixel.
+-    float pos = float(i) / 4095;
+-
+-    while (pos > nextColorPos) {
+-      prevColor = nextColor;
+-      prevColorPos = nextColorPos;
+-      if (rawStops.size() > stopPosition) {
+-        nextColor = rawStops[stopPosition].color;
+-        nextColorPos = rawStops[stopPosition++].position;
+-      } else {
+-        nextColorPos = 1.0f;
+-      }
+-    }
+-
+-    float interp;
+-    
+-    if (nextColorPos != prevColorPos) {
+-      interp = (pos - prevColorPos) / (nextColorPos - prevColorPos);
+-    } else {
+-      interp = 0;
+-    }
+-
+-    Color newColor(prevColor.r + (nextColor.r - prevColor.r) * interp,
+-                    prevColor.g + (nextColor.g - prevColor.g) * interp,
+-                    prevColor.b + (nextColor.b - prevColor.b) * interp,
+-                    prevColor.a + (nextColor.a - prevColor.a) * interp);
+-
+-    texData[i * 4] = (char)(255.0f * newColor.b);
+-    texData[i * 4 + 1] = (char)(255.0f * newColor.g);
+-    texData[i * 4 + 2] = (char)(255.0f * newColor.r);
+-    texData[i * 4 + 3] = (char)(255.0f * newColor.a);
+-  }
+-
+-  D3D10_SUBRESOURCE_DATA data;
+-  data.pSysMem = &textureData.front();
+-  data.SysMemPitch = 4096 * 4;
+-
+-  RefPtr<ID3D10Texture2D> tex;
+-  mDevice->CreateTexture2D(&desc, &data, byRef(tex));
+-
+-  return tex;
++  return GradientTextureCache->Create(aStops);
+ }
+ 
+ TemporaryRef<ID3D10Texture2D>
+@@ -2442,13 +2795,11 @@
+ void
+ DrawTargetD2D::SetupEffectForRadialGradient(const RadialGradientPattern *aPattern)
+ {
+-  mPrivateData->mEffect->GetTechniqueByName("SampleRadialGradient")->GetPassByIndex(0)->Apply(0);
+-  mPrivateData->mEffect->GetVariableByName("MaskTexCoords")->AsVector()->
+-    SetFloatVector(ShaderConstantRectD3D10(0, 0, 1.0f, 1.0f));
++  mPrivateData->Technique_SampleRadialGradient->GetPassByIndex(0)->Apply(0);
++  mPrivateData->Variable_MaskTexCoords->AsVector()->SetFloatVector(ShaderConstantRectD3D10(0, 0, 1.0f, 1.0f));
+ 
+   float dimensions[] = { float(mSize.width), float(mSize.height), 0, 0 };
+-  mPrivateData->mEffect->GetVariableByName("dimensions")->AsVector()->
+-    SetFloatVector(dimensions);
++  mPrivateData->Variable_dimensions->AsVector()->SetFloatVector(dimensions);
+ 
+   const GradientStopsD2D *stops =
+     static_cast<const GradientStopsD2D*>(aPattern->mStops.get());
+@@ -2458,23 +2809,19 @@
+   RefPtr<ID3D10ShaderResourceView> srView;
+   mDevice->CreateShaderResourceView(tex, nullptr, byRef(srView));
+ 
+-  mPrivateData->mEffect->GetVariableByName("tex")->AsShaderResource()->SetResource(srView);
++  mPrivateData->Variable_tex->AsShaderResource()->SetResource(srView);
+ 
+   Point dc = aPattern->mCenter2 - aPattern->mCenter1;
+   float dr = aPattern->mRadius2 - aPattern->mRadius1;
+ 
+   float diffv[] = { dc.x, dc.y, dr, 0 };
+-  mPrivateData->mEffect->GetVariableByName("diff")->AsVector()->
+-    SetFloatVector(diffv);
++  mPrivateData->Variable_diff->AsVector()->SetFloatVector(diffv);
+ 
+   float center1[] = { aPattern->mCenter1.x, aPattern->mCenter1.y, dr, 0 };
+-  mPrivateData->mEffect->GetVariableByName("center1")->AsVector()->
+-    SetFloatVector(center1);
+-
+-  mPrivateData->mEffect->GetVariableByName("radius1")->AsScalar()->
+-    SetFloat(aPattern->mRadius1);
+-  mPrivateData->mEffect->GetVariableByName("sq_radius1")->AsScalar()->
+-    SetFloat(pow(aPattern->mRadius1, 2));
++  mPrivateData->Variable_center1->AsVector()->SetFloatVector(center1);
++
++  mPrivateData->Variable_radius1->AsScalar()->SetFloat(aPattern->mRadius1);
++  mPrivateData->Variable_sq_radius1->AsScalar()->SetFloat(pow(aPattern->mRadius1, 2));
+ 
+   Matrix invTransform = mTransform;
+ 
+@@ -2487,8 +2834,7 @@
+                       invTransform._31, invTransform._32, 1.0f, 0,
+                       0, 0, 0, 1.0f };
+ 
+-  mPrivateData->mEffect->GetVariableByName("DeviceSpaceToUserSpace")->
+-    AsMatrix()->SetMatrix(matrix);
++  mPrivateData->Variable_DeviceSpaceToUserSpace->AsMatrix()->SetMatrix(matrix);
+ 
+   float A = dc.x * dc.x + dc.y * dc.y - dr * dr;
+ 
+@@ -2505,12 +2851,10 @@
+   }
+ 
+   if (A == 0) {
+-    mPrivateData->mEffect->GetTechniqueByName("SampleRadialGradient")->
+-      GetPassByIndex(offset * 2 + 1)->Apply(0);
++    mPrivateData->Technique_SampleRadialGradient->GetPassByIndex(offset * 2 + 1)->Apply(0);
+   } else {
+-    mPrivateData->mEffect->GetVariableByName("A")->AsScalar()->SetFloat(A);
+-    mPrivateData->mEffect->GetTechniqueByName("SampleRadialGradient")->
+-      GetPassByIndex(offset * 2)->Apply(0);
++    mPrivateData->Variable_A->AsScalar()->SetFloat(A);
++    mPrivateData->Technique_SampleRadialGradient->GetPassByIndex(offset * 2)->Apply(0);
+   }
+ }
+ 
+diff -r 5764e33f79d6 gfx/2d/DrawTargetD2D.h
+--- a/gfx/2d/DrawTargetD2D.h	Tue Oct 09 17:07:53 2012 -0700
++++ b/gfx/2d/DrawTargetD2D.h	Wed Oct 10 10:53:16 2012 +0900
+@@ -25,6 +25,7 @@
+ namespace mozilla {
+ namespace gfx {
+ 
++class DrawTargetD2D;
+ class SourceSurfaceD2DTarget;
+ class SourceSurfaceD2D;
+ class GradientStopsD2D;
+@@ -32,12 +33,145 @@
+ 
+ const int32_t kLayerCacheSize = 5;
+ 
++class GradientStopsCacheD2D
++{
++public:
++    GradientStopsCacheD2D(DrawTargetD2D* const _Target);
++    ~GradientStopsCacheD2D(void);
++
++    RefPtr<ID2D1GradientStopCollection> Create(
++        const D2D1_GRADIENT_STOP* GradientStops,
++        const UINT GradientStopsCount,
++//        const D2D1_GAMMA ColorInterpolationGamma,
++        const D2D1_EXTEND_MODE ExtendMode);
++
++private:
++    struct _Cache {
++        RefPtr<ID2D1GradientStopCollection> StopCollection;
++        D2D1_GRADIENT_STOP* GradientStops;
++        UINT StopCount;
++//        D2D1_GAMMA ColorInterpolationGamma;
++        D2D1_EXTEND_MODE ExtendMode;
++    };
++    static const UINT MaxCache = 128;
++    DrawTargetD2D* Target;
++    _Cache* Cache;
++    _Cache* CacheIdx;
++    _Cache* MaxCacheIdx;
++};
++
++class GradientBrushCacheD2D
++{
++public:
++    enum {
++        Linear, Radial,
++    };
++
++    GradientBrushCacheD2D(DrawTargetD2D* const _Target, const int Style);
++    ~GradientBrushCacheD2D(void);
++
++    TemporaryRef<ID2D1Brush> Create(
++        void* const GradientBrushProperties,
++        const D2D1_BRUSH_PROPERTIES& BrushProperties,
++        ID2D1GradientStopCollection* GradientStopCollection);
++
++private:
++    struct _Cache {
++        RefPtr<ID2D1Brush> Brush;
++        D2D1_GRADIENT_STOP* GradientStops;
++        UINT StopCount;
++//        D2D1_GAMMA ColorInterpolationGamma;
++        D2D1_EXTEND_MODE ExtendMode;
++    };
++    static const UINT MaxCache = 128;
++    DrawTargetD2D* Target;
++    _Cache* Cache;
++    _Cache* CacheIdx;
++    _Cache* MaxCacheIdx;
++    TemporaryRef<ID2D1Brush> (GradientBrushCacheD2D::*pCreateGradientBrush)(
++        void* const GradientBrushProperties,
++        const D2D1_BRUSH_PROPERTIES& BrushProperties,
++        ID2D1GradientStopCollection* GradientStopCollection);
++    TemporaryRef<ID2D1Brush> (GradientBrushCacheD2D::*pSetPropertiesGradientBrush)(
++        _Cache* const Ptr,
++        void* const GradientBrushProperties,
++        const D2D1_BRUSH_PROPERTIES& BrushProperties);
++
++    TemporaryRef<ID2D1Brush> CreateLinearGradientBrush(
++        void* const GradientBrushProperties,
++        const D2D1_BRUSH_PROPERTIES& BrushProperties,
++        ID2D1GradientStopCollection* GradientStopCollection);
++    TemporaryRef<ID2D1Brush> CreateRadialGradientBrush(
++        void* const GradientBrushProperties,
++        const D2D1_BRUSH_PROPERTIES& BrushProperties,
++        ID2D1GradientStopCollection* GradientStopCollection);
++    TemporaryRef<ID2D1Brush> SetPropertiesLinearGradientBrush(
++        _Cache* const Ptr,
++        void* const GradientBrushProperties,
++        const D2D1_BRUSH_PROPERTIES& BrushProperties);
++    TemporaryRef<ID2D1Brush> SetPropertiesRadialGradientBrush(
++        _Cache* const Ptr,
++        void* const GradientBrushProperties,
++        const D2D1_BRUSH_PROPERTIES& BrushProperties);
++};
++
++class GradientTextureCacheD2D
++{
++public:
++    GradientTextureCacheD2D(DrawTargetD2D* const _Target);
++    ~GradientTextureCacheD2D(void);
++
++    TemporaryRef<ID3D10Texture2D> Create(const GradientStopsD2D* aStops);
++
++private:
++    struct _Cache {
++        RefPtr<ID3D10Texture2D> Texture;
++        D2D1_GRADIENT_STOP* GradientStops;
++        UINT StopCount;
++//        D2D1_GAMMA ColorInterpolationGamma;
++        D2D1_EXTEND_MODE ExtendMode;
++    };
++    static const UINT MaxCache = 128;
++    DrawTargetD2D* Target;
++    _Cache* Cache;
++    _Cache* CacheIdx;
++    _Cache* MaxCacheIdx;
++
++    TemporaryRef<ID3D10Texture2D> CreateGradientTexture(
++        D2D1_GRADIENT_STOP* const GradientStops,
++        const UINT StopCount);
++};
++
+ struct PrivateD3D10DataD2D
+ {
+   RefPtr<ID3D10Effect> mEffect;
+   RefPtr<ID3D10InputLayout> mInputLayout;
+   RefPtr<ID3D10Buffer> mVB;
+   RefPtr<ID3D10BlendState> mBlendStates[OP_COUNT];
++
++  ID3D10EffectTechnique* Technique_SampleMaskedTexture;
++  ID3D10EffectTechnique* Technique_SampleRadialGradient;
++  ID3D10EffectTechnique* Technique_SampleTextTexture;
++  ID3D10EffectTechnique* Technique_SampleTexture;
++  ID3D10EffectTechnique* Technique_SampleTextureWithShadow;
++
++  ID3D10EffectVariable* Variable_A;
++  ID3D10EffectVariable* Variable_BlurOffsetsH;
++  ID3D10EffectVariable* Variable_BlurOffsetsV;
++  ID3D10EffectVariable* Variable_BlurWeights;
++  ID3D10EffectVariable* Variable_center1;
++  ID3D10EffectVariable* Variable_DeviceSpaceToUserSpace;
++  ID3D10EffectVariable* Variable_diff;
++  ID3D10EffectVariable* Variable_dimensions;
++  ID3D10EffectVariable* Variable_mask;
++  ID3D10EffectVariable* Variable_MaskTexCoords;
++  ID3D10EffectVariable* Variable_QuadDesc;
++  ID3D10EffectVariable* Variable_radius1;
++  ID3D10EffectVariable* Variable_ShadowColor;
++  ID3D10EffectVariable* Variable_sq_radius1;
++  ID3D10EffectVariable* Variable_tex;
++  ID3D10EffectVariable* Variable_TexCoords;
++  ID3D10EffectVariable* Variable_TextColor;
+ };
+ 
+ class DrawTargetD2D : public DrawTarget
+@@ -141,6 +275,9 @@
+   static uint64_t mVRAMUsageSS;
+ 
+ private:
++  friend class GradientStopsCacheD2D;
++  friend class GradientBrushCacheD2D;
++  friend class GradientTextureCacheD2D;
+   friend class AutoSaveRestoreClippedOut;
+   friend class SourceSurfaceD2DTarget;
+ 
+@@ -251,6 +388,11 @@
+   PrivateD3D10DataD2D *mPrivateData;
+   static ID2D1Factory *mFactory;
+   static IDWriteFactory *mDWriteFactory;
++
++  GradientStopsCacheD2D* GradientStopsCache;
++  GradientBrushCacheD2D* LinearGradientBrushCache;
++  GradientBrushCacheD2D* RadialGradientBrushCache;
++  GradientTextureCacheD2D* GradientTextureCache;
+ };
+ 
+ }
+diff -r 5764e33f79d6 gfx/2d/GradientStopsD2D.h
+--- a/gfx/2d/GradientStopsD2D.h	Tue Oct 09 17:07:53 2012 -0700
++++ b/gfx/2d/GradientStopsD2D.h	Wed Oct 10 10:53:16 2012 +0900
+@@ -23,6 +23,7 @@
+   virtual BackendType GetBackendType() const { return BACKEND_DIRECT2D; }
+ 
+ private:
++  friend class GradientTextureCacheD2D;
+   friend class DrawTargetD2D;
+ 
+   mutable RefPtr<ID2D1GradientStopCollection> mStopCollection;
+diff -r 5764e33f79d6 gfx/cairo/cairo/src/cairo-d2d-private.h
+--- a/gfx/cairo/cairo/src/cairo-d2d-private.h	Tue Oct 09 17:07:53 2012 -0700
++++ b/gfx/cairo/cairo/src/cairo-d2d-private.h	Wed Oct 10 10:53:16 2012 +0900
+@@ -77,12 +77,72 @@
+ const unsigned int TEXT_TEXTURE_HEIGHT = 512;
+ typedef struct _cairo_d2d_device cairo_d2d_device_t;
+ 
++struct _cairo_d2d_surface;
++typedef struct _cairo_d2d_surface cairo_d2d_surface_t;
++
++class GradientBrushCache
++{
++public:
++    enum {
++        Linear, Radial,
++    };
++
++    GradientBrushCache(cairo_d2d_surface_t* const _d2dsurf, const int Style);
++    ~GradientBrushCache(void);
++
++    TemporaryRef<ID2D1Brush> Create(
++        void* const GradientBrushProperties,
++        const D2D1_BRUSH_PROPERTIES& BrushProperties,
++        const UINT StopCount,
++        D2D1_GRADIENT_STOP* const GradientStops);
++
++private:
++    struct _Cache {
++        RefPtr<ID2D1Brush> Brush;
++        UINT StopCount;
++        D2D1_GRADIENT_STOP* GradientStops;
++    };
++    static const UINT MaxCache = 128;
++    cairo_d2d_surface_t* d2dsurf;
++    _Cache* Cache;
++    _Cache* CacheIdx;
++    _Cache* MaxCacheIdx;
++    TemporaryRef<ID2D1Brush> (GradientBrushCache::*pCreateGradientBrush)(
++        void* const GradientBrushProperties,
++        const D2D1_BRUSH_PROPERTIES& BrushProperties,
++        ID2D1GradientStopCollection* GradientStopCollection);
++    TemporaryRef<ID2D1Brush> (GradientBrushCache::*pSetPropertiesGradientBrush)(
++        _Cache* const Ptr,
++        void* const GradientBrushProperties,
++        const D2D1_BRUSH_PROPERTIES& BrushProperties);
++
++    TemporaryRef<ID2D1Brush> CreateLinearGradientBrush(
++        void* const GradientBrushProperties,
++        const D2D1_BRUSH_PROPERTIES& BrushProperties,
++        ID2D1GradientStopCollection* GradientStopCollection);
++    TemporaryRef<ID2D1Brush> CreateRadialGradientBrush(
++        void* const GradientBrushProperties,
++        const D2D1_BRUSH_PROPERTIES& BrushProperties,
++        ID2D1GradientStopCollection* GradientStopCollection);
++    TemporaryRef<ID2D1Brush> SetPropertiesLinearGradientBrush(
++        _Cache* const Ptr,
++        void* const GradientBrushProperties,
++        const D2D1_BRUSH_PROPERTIES& BrushProperties);
++    TemporaryRef<ID2D1Brush> SetPropertiesRadialGradientBrush(
++        _Cache* const Ptr,
++        void* const GradientBrushProperties,
++        const D2D1_BRUSH_PROPERTIES& BrushProperties);
++};
++
+ struct _cairo_d2d_surface {
+     _cairo_d2d_surface() : d2d_clip(NULL), clipping(false), isDrawing(false),
+             textRenderingState(TEXT_RENDERING_UNINITIALIZED)
+     {
+ 	_cairo_clip_init (&this->clip);
+         cairo_list_init(&this->dependent_surfaces);
++
++        LinearGradientBrushCache = NULL;
++        RadialGradientBrushCache = NULL;
+     }
+     
+     ~_cairo_d2d_surface();
+@@ -152,8 +212,10 @@
+     // no longer be what it was when the drawing command was issued.
+     cairo_list_t dependent_surfaces;
+     //cairo_surface_clipper_t clipper;
++
++    GradientBrushCache* LinearGradientBrushCache;
++    GradientBrushCache* RadialGradientBrushCache;
+ };
+-typedef struct _cairo_d2d_surface cairo_d2d_surface_t;
+ 
+ struct _cairo_d2d_surface_entry
+ {
+diff -r 5764e33f79d6 gfx/cairo/cairo/src/cairo-d2d-surface.cpp
+--- a/gfx/cairo/cairo/src/cairo-d2d-surface.cpp	Tue Oct 09 17:07:53 2012 -0700
++++ b/gfx/cairo/cairo/src/cairo-d2d-surface.cpp	Wed Oct 10 10:53:16 2012 +0900
+@@ -48,6 +48,168 @@
+ 
+ #define CAIRO_INT_STATUS_SUCCESS (cairo_int_status_t)CAIRO_STATUS_SUCCESS
+ 
++__forceinline
++GradientBrushCache::GradientBrushCache(cairo_d2d_surface_t* const _d2dsurf, const int Style)
++{
++    d2dsurf = _d2dsurf;
++
++    switch(Style) {
++    case Linear:
++        pCreateGradientBrush = &GradientBrushCache::CreateLinearGradientBrush;
++        pSetPropertiesGradientBrush = &GradientBrushCache::SetPropertiesLinearGradientBrush;
++        break;
++    case Radial:
++        pCreateGradientBrush = &GradientBrushCache::CreateRadialGradientBrush;
++        pSetPropertiesGradientBrush = &GradientBrushCache::SetPropertiesRadialGradientBrush;
++        break;
++    }
++
++    Cache = NULL;
++}
++
++__forceinline
++GradientBrushCache::~GradientBrushCache(void)
++{
++    if(Cache) {
++        for(_Cache* Idx = Cache; Idx < MaxCacheIdx; Idx++) {
++            if(Idx->Brush) {
++                delete[] Idx->GradientStops;
++            } else {
++                break;
++            }
++        }
++
++        delete[] Cache;
++    }
++}
++
++__forceinline TemporaryRef<ID2D1Brush>
++GradientBrushCache::Create(
++    void* const GradientBrushProperties,
++    const D2D1_BRUSH_PROPERTIES& BrushProperties,
++    const UINT StopCount,
++    D2D1_GRADIENT_STOP* const GradientStops)
++{
++    if(Cache == NULL) {
++        Cache = new _Cache[MaxCache];
++        CacheIdx = Cache;
++        MaxCacheIdx = Cache + MaxCache;
++    }
++
++    const size_t SizeGradientStops = StopCount * sizeof(D2D1_GRADIENT_STOP);
++
++    for(UINT Idx = 0; Idx < MaxCache; Idx++) {
++        _Cache* const Ptr = CacheIdx >= Cache + Idx ? CacheIdx - Idx : CacheIdx + MaxCache - Idx;
++
++        if(Ptr->Brush) {
++            if((Ptr->StopCount == StopCount) &&
++                (memcmp(Ptr->GradientStops, GradientStops, SizeGradientStops) == 0)) {
++                return (this->*pSetPropertiesGradientBrush)(Ptr, GradientBrushProperties, BrushProperties);
++            }
++        } else {
++            break;
++        }
++    }
++
++    RefPtr<ID2D1GradientStopCollection> GradientStopCollection;
++
++    d2dsurf->rt->CreateGradientStopCollection(
++        GradientStops,
++        StopCount,
++        &GradientStopCollection);
++
++    RefPtr<ID2D1Brush> Brush = (this->*pCreateGradientBrush)(
++        GradientBrushProperties,
++        BrushProperties,
++        GradientStopCollection);
++
++    if(CacheIdx->Brush) {
++        CacheIdx = ++CacheIdx < MaxCacheIdx ? CacheIdx : Cache;
++        if(CacheIdx->Brush) delete[] CacheIdx->GradientStops;
++    }
++
++    CacheIdx->Brush = Brush;
++    CacheIdx->StopCount = StopCount;
++    CacheIdx->GradientStops = new D2D1_GRADIENT_STOP[StopCount];
++    memcpy(CacheIdx->GradientStops, GradientStops, SizeGradientStops);
++
++    return Brush;
++}
++
++TemporaryRef<ID2D1Brush>
++GradientBrushCache::CreateLinearGradientBrush(
++    void* const GradientBrushProperties,
++    const D2D1_BRUSH_PROPERTIES& BrushProperties,
++    ID2D1GradientStopCollection* GradientStopCollection)
++{
++    RefPtr<ID2D1LinearGradientBrush> LinearGradientBrush;
++
++    d2dsurf->rt->CreateLinearGradientBrush(
++        *static_cast<D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES*>(GradientBrushProperties),
++        BrushProperties,
++        GradientStopCollection,
++        &LinearGradientBrush);
++
++    return LinearGradientBrush;
++}
++
++TemporaryRef<ID2D1Brush>
++GradientBrushCache::CreateRadialGradientBrush(
++    void* const GradientBrushProperties,
++    const D2D1_BRUSH_PROPERTIES& BrushProperties,
++    ID2D1GradientStopCollection* GradientStopCollection)
++{
++    RefPtr<ID2D1RadialGradientBrush> RadialGradientBrush;
++
++    d2dsurf->rt->CreateRadialGradientBrush(
++        *static_cast<D2D1_RADIAL_GRADIENT_BRUSH_PROPERTIES*>(GradientBrushProperties),
++        BrushProperties,
++        GradientStopCollection,
++        &RadialGradientBrush);
++
++    return RadialGradientBrush;
++}
++
++TemporaryRef<ID2D1Brush>
++GradientBrushCache::SetPropertiesLinearGradientBrush(
++    _Cache* const Ptr,
++    void* const GradientBrushProperties,
++    const D2D1_BRUSH_PROPERTIES& BrushProperties)
++{
++    RefPtr<ID2D1LinearGradientBrush> LinearGradientBrush = static_cast<ID2D1LinearGradientBrush*>(Ptr->Brush.get());
++    const D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES* const LinearGradientBrushProperties =
++        static_cast<D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES*>(GradientBrushProperties);
++
++    LinearGradientBrush->SetStartPoint(LinearGradientBrushProperties->startPoint);
++    LinearGradientBrush->SetEndPoint(LinearGradientBrushProperties->endPoint);
++
++    LinearGradientBrush->SetOpacity(BrushProperties.opacity);
++    LinearGradientBrush->SetTransform(BrushProperties.transform);
++
++    return LinearGradientBrush;
++}
++
++TemporaryRef<ID2D1Brush>
++GradientBrushCache::SetPropertiesRadialGradientBrush(
++    _Cache* const Ptr,
++    void* const GradientBrushProperties,
++    const D2D1_BRUSH_PROPERTIES& BrushProperties)
++{
++    RefPtr<ID2D1RadialGradientBrush> RadialGradientBrush = static_cast<ID2D1RadialGradientBrush*>(Ptr->Brush.get());
++    const D2D1_RADIAL_GRADIENT_BRUSH_PROPERTIES* const RadialGradientBrushProperties =
++        static_cast<D2D1_RADIAL_GRADIENT_BRUSH_PROPERTIES*>(GradientBrushProperties);
++
++    RadialGradientBrush->SetCenter(RadialGradientBrushProperties->center);
++    RadialGradientBrush->SetGradientOriginOffset(RadialGradientBrushProperties->gradientOriginOffset);
++    RadialGradientBrush->SetRadiusX(RadialGradientBrushProperties->radiusX);
++    RadialGradientBrush->SetRadiusY(RadialGradientBrushProperties->radiusY);
++
++    RadialGradientBrush->SetOpacity(BrushProperties.opacity);
++    RadialGradientBrush->SetTransform(BrushProperties.transform);
++
++    return RadialGradientBrush;
++}
++
+ struct Vertex
+ {
+     float position[2];
+@@ -1519,17 +1681,16 @@
+ 	return NULL;
+     }
+ 
+-    RefPtr<ID2D1GradientStopCollection> stopCollection;
+-    d2dsurf->rt->CreateGradientStopCollection(stops, num_stops, &stopCollection);
+-    RefPtr<ID2D1RadialGradientBrush> brush;
+-
+-    d2dsurf->rt->CreateRadialGradientBrush(D2D1::RadialGradientBrushProperties(center,
+-									       origin,
+-									       outer_radius,
+-									       outer_radius),
+-					   brushProps,
+-					   stopCollection,
+-					   &brush);
++    if(d2dsurf->RadialGradientBrushCache == NULL) {
++        d2dsurf->RadialGradientBrushCache = new GradientBrushCache(d2dsurf, GradientBrushCache::Radial);
++    }
++
++    RefPtr<ID2D1Brush> brush = d2dsurf->RadialGradientBrushCache->Create(
++        &D2D1::RadialGradientBrushProperties(center, origin, outer_radius, outer_radius),
++        brushProps,
++        num_stops,
++        stops);
++
+     delete [] stops;
+     return brush;
+ }
+@@ -1696,14 +1857,17 @@
+ 	stops[source_pattern->base.n_stops + 1].position = 1.0f;
+ 	stops[source_pattern->base.n_stops + 1].color = D2D1::ColorF(0, 0);
+     }
+-    RefPtr<ID2D1GradientStopCollection> stopCollection;
+-    d2dsurf->rt->CreateGradientStopCollection(stops, num_stops, &stopCollection);
+-    RefPtr<ID2D1LinearGradientBrush> brush;
+-    d2dsurf->rt->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(D2D1::Point2F((FLOAT)p1.x, (FLOAT)p1.y),
+-									       D2D1::Point2F((FLOAT)p2.x, (FLOAT)p2.y)),
+-					   brushProps,
+-					   stopCollection,
+-					   &brush);
++
++    if(d2dsurf->LinearGradientBrushCache == NULL) {
++        d2dsurf->LinearGradientBrushCache = new GradientBrushCache(d2dsurf, GradientBrushCache::Linear);
++    }
++
++    RefPtr<ID2D1Brush> brush = d2dsurf->LinearGradientBrushCache->Create(
++        &D2D1::LinearGradientBrushProperties(D2D1::Point2F((FLOAT)p1.x, (FLOAT)p1.y), D2D1::Point2F((FLOAT)p2.x, (FLOAT)p2.y)),
++        brushProps,
++        num_stops,
++        stops);
++
+     delete [] stops;
+     return brush;
+ }
+@@ -2379,6 +2543,9 @@
+     
+ _cairo_d2d_surface::~_cairo_d2d_surface()
+ {
++    if(RadialGradientBrushCache) delete RadialGradientBrushCache;
++    if(LinearGradientBrushCache) delete LinearGradientBrushCache;
++
+     _cairo_d2d_surface_entry *entry, *next;
+     cairo_list_foreach_entry_safe(entry, next, _cairo_d2d_surface_entry, &dependent_surfaces, link) {
+ 	// We do not need to flush, the contents of our texture has not changed,
