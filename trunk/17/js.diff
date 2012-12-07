@@ -1,9 +1,9 @@
 diff -r d11d02c2e023 js/src/Makefile.in
---- a/js/src/Makefile.in	Sat Aug 25 20:31:37 2012 +0900
-+++ b/js/src/Makefile.in	Sat Aug 25 21:09:50 2012 +0900
+--- a/js/src/Makefile.in    Sat Aug 25 20:31:37 2012 +0900
++++ b/js/src/Makefile.in    Sat Aug 25 21:09:50 2012 +0900
 @@ -865,8 +865,23 @@ endif
  TestMain$(HOST_BIN_SUFFIX): $(TESTMAIN_OBJS)
- 	$(CXX) -o TestMain$(HOST_BIN_SUFFIX) $(TESTMAIN_OBJS)
+     $(CXX) -o TestMain$(HOST_BIN_SUFFIX) $(TESTMAIN_OBJS)
  endif
  
  #
@@ -27,8 +27,8 @@ diff -r d11d02c2e023 js/src/Makefile.in
 +endif
 
 diff -r 284837bbf631 js/src/jsmath.cpp
---- a/js/src/jsmath.cpp	Sat Aug 25 07:23:12 2012 +0900
-+++ b/js/src/jsmath.cpp	Sat Aug 25 10:10:42 2012 +0900
+--- a/js/src/jsmath.cpp    Sat Aug 25 07:23:12 2012 +0900
++++ b/js/src/jsmath.cpp    Sat Aug 25 10:10:42 2012 +0900
 @@ -21,16 +21,30 @@
  #include "jsmath.h"
  #include "jsnum.h"
@@ -256,8 +256,8 @@ diff -r 284837bbf631 js/src/jsmath.cpp
  
 
 diff -r 284837bbf631 js/src/methodjit/Compiler.cpp
---- a/js/src/methodjit/Compiler.cpp	Sat Aug 25 07:23:12 2012 +0900
-+++ b/js/src/methodjit/Compiler.cpp	Sat Aug 25 10:12:49 2012 +0900
+--- a/js/src/methodjit/Compiler.cpp    Sat Aug 25 07:23:12 2012 +0900
++++ b/js/src/methodjit/Compiler.cpp    Sat Aug 25 10:12:49 2012 +0900
 @@ -898,16 +898,20 @@ MakeJITScript(JSContext *cx, JSScript *s
      for (unsigned i = 0; i < jit->nedges; i++) {
          CrossChunkEdge &edge = jitEdges[i];
@@ -341,3 +341,4 @@ diff -r 284837bbf631 js/src/methodjit/Compiler.cpp
  
      if (lhs.isString() && rhs.isString()) {
          int32_t cmp;
+
