@@ -1,0 +1,104 @@
+diff --git a/config/config.mk b/config/config.mk
+--- a/config/config.mk
++++ b/config/config.mk
+@@ -614,7 +614,7 @@
+ ifdef GNU_CC
+ WIN32_EXE_LDFLAGS	+= -mwindows
+ else
+-WIN32_EXE_LDFLAGS	+= -SUBSYSTEM:WINDOWS
++WIN32_EXE_LDFLAGS	+= -SUBSYSTEM:WINDOWS,5.01
+ endif
+ endif
+ endif
+
+diff --git a/configure.in b/configure.in
+--- a/configure.in
++++ b/configure.in
+@@ -2180,17 +2180,17 @@ ia64*-hpux*)
+         LIB_SUFFIX=lib
+         DLL_PREFIX=
+         LIB_PREFIX=
+         IMPORT_LIB_SUFFIX=lib
+         MKSHLIB='$(LD) -NOLOGO -DLL -OUT:$@ -PDB:$(LINK_PDBFILE) $(DSO_LDOPTS)'
+         MKCSHLIB='$(LD) -NOLOGO -DLL -OUT:$@ -PDB:$(LINK_PDBFILE) $(DSO_LDOPTS)'
+         MKSHLIB_FORCE_ALL=
+         MKSHLIB_UNFORCE_ALL=
+-        DSO_LDOPTS=-SUBSYSTEM:WINDOWS
++        DSO_LDOPTS=-SUBSYSTEM:WINDOWS,5.01
+         _USE_CPP_INCLUDE_FLAG=1
+         _DEFINES_CFLAGS='-FI $(DEPTH)/dist/include/mozilla-config.h -DMOZILLA_CLIENT'
+         _DEFINES_CXXFLAGS='-FI $(DEPTH)/dist/include/mozilla-config.h -DMOZILLA_CLIENT'
+         CFLAGS="$CFLAGS -W3 -Gy -Fd\$(COMPILE_PDBFILE)"
+         CXXFLAGS="$CXXFLAGS -W3 -Gy -Fd\$(COMPILE_PDBFILE)"
+         # MSVC warning C4345 warns of newly conformant behavior as of VS2003.
+         # MSVC warning C4351 warns of newly conformant behavior as of VS2005.
+         # MSVC warning C4800 warns when a value is implicitly cast to bool,
+diff --git a/js/src/config/config.mk b/js/src/config/config.mk
+--- a/js/src/config/config.mk
++++ b/js/src/config/config.mk
+@@ -614,7 +614,7 @@
+ ifdef GNU_CC
+ WIN32_EXE_LDFLAGS	+= -mwindows
+ else
+-WIN32_EXE_LDFLAGS	+= -SUBSYSTEM:WINDOWS
++WIN32_EXE_LDFLAGS	+= -SUBSYSTEM:WINDOWS,5.01
+ endif
+ endif
+ endif
+
+diff --git a/js/src/configure.in b/js/src/configure.in
+--- a/js/src/configure.in
++++ b/js/src/configure.in
+@@ -1762,17 +1762,17 @@ ia64*-hpux*)
+         LIB_SUFFIX=lib
+         DLL_PREFIX=
+         LIB_PREFIX=
+         IMPORT_LIB_SUFFIX=lib
+         MKSHLIB='$(LD) -NOLOGO -DLL -OUT:$@ -PDB:$(LINK_PDBFILE) $(DSO_LDOPTS)'
+         MKCSHLIB='$(LD) -NOLOGO -DLL -OUT:$@ -PDB:$(LINK_PDBFILE) $(DSO_LDOPTS)'
+         MKSHLIB_FORCE_ALL=
+         MKSHLIB_UNFORCE_ALL=
+-        DSO_LDOPTS=-SUBSYSTEM:WINDOWS
++        DSO_LDOPTS=-SUBSYSTEM:WINDOWS,5.01
+         _USE_CPP_INCLUDE_FLAG=1
+         _DEFINES_CFLAGS='-FI $(DEPTH)/js-confdefs.h -DMOZILLA_CLIENT'
+         _DEFINES_CXXFLAGS='-FI $(DEPTH)/js-confdefs.h -DMOZILLA_CLIENT'
+         CFLAGS="$CFLAGS -W3 -Gy -Fd\$(COMPILE_PDBFILE)"
+         CXXFLAGS="$CXXFLAGS -W3 -Gy -Fd\$(COMPILE_PDBFILE)"
+         # MSVC warning C4244 is ubiquitous, useless, and annoying.
+         CXXFLAGS="$CXXFLAGS -wd4244"
+         # make 'foo == bar;' error out
+diff --git a/nsprpub/configure.in b/nsprpub/configure.in
+--- a/nsprpub/configure.in
++++ b/nsprpub/configure.in
+@@ -1958,17 +1958,17 @@ tools are selected during the Xcode/Deve
+                 DLLFLAGS="$DLLFLAGS -DEBUG -OPT:REF"
+                 LDFLAGS="$LDFLAGS -DEBUG -OPT:REF"
+             else
+                 DLLFLAGS="$DLLFLAGS -DEBUG"
+                 LDFLAGS="$LDFLAGS -DEBUG"
+             fi
+         fi
+ 
+-        OS_DLLFLAGS="-nologo -DLL -SUBSYSTEM:WINDOWS"
++        OS_DLLFLAGS="-nologo -DLL -SUBSYSTEM:WINDOWS,5.01"
+         if test "$MSC_VER" -le "1200" -a -z "$MOZ_DEBUG_SYMBOLS"; then
+             OS_DLLFLAGS="$OS_DLLFLAGS -PDB:NONE"
+         fi
+         
+         if test "$OS_TARGET" = "WINNT"; then
+             CFLAGS="$CFLAGS -GT"
+             LIBNSPR='$(dist_libdir)/libnspr$(MOD_MAJOR_VERSION).$(LIB_SUFFIX)'
+             LIBPLC='$(dist_libdir)/libplc$(MOD_MAJOR_VERSION).$(LIB_SUFFIX)'
+diff --git a/security/coreconf/WIN32.mk b/security/coreconf/WIN32.mk
+--- a/security/coreconf/WIN32.mk
++++ b/security/coreconf/WIN32.mk
+@@ -113,7 +113,7 @@
+ else # !NS_USE_GCC
+     OS_CFLAGS += -W3 -nologo -D_CRT_SECURE_NO_WARNINGS \
+ 		 -D_CRT_NONSTDC_NO_WARNINGS
+-    OS_DLLFLAGS += -nologo -DLL -SUBSYSTEM:WINDOWS
++    OS_DLLFLAGS += -nologo -DLL -SUBSYSTEM:WINDOWS,5.01
+     ifeq ($(_MSC_VER),$(_MSC_VER_6))
+     ifndef MOZ_DEBUG_SYMBOLS
+ 	OS_DLLFLAGS += -PDB:NONE
