@@ -3,10 +3,10 @@ diff --git a/config/config.mk b/config/config.mk
 +++ b/config/config.mk
 @@ -608,7 +608,7 @@
  ifdef GNU_CC
- WIN32_EXE_LDFLAGS	+= -mwindows
+ WIN32_EXE_LDFLAGS    += -mwindows
  else
--WIN32_EXE_LDFLAGS	+= -SUBSYSTEM:WINDOWS
-+WIN32_EXE_LDFLAGS   += -SUBSYSTEM:WINDOWS,5.01
+-WIN32_EXE_LDFLAGS    += -SUBSYSTEM:WINDOWS
++WIN32_EXE_LDFLAGS    += -SUBSYSTEM:WINDOWS,5.01
  endif
  endif
  endif
@@ -29,10 +29,10 @@ diff --git a/js/src/config/config.mk b/js/src/config/config.mk
 +++ b/js/src/config/config.mk
 @@ -608,7 +608,7 @@
  ifdef GNU_CC
- WIN32_EXE_LDFLAGS	+= -mwindows
+ WIN32_EXE_LDFLAGS    += -mwindows
  else
--WIN32_EXE_LDFLAGS	+= -SUBSYSTEM:WINDOWS
-+WIN32_EXE_LDFLAGS	+= -SUBSYSTEM:WINDOWS,5.01
+-WIN32_EXE_LDFLAGS    += -SUBSYSTEM:WINDOWS
++WIN32_EXE_LDFLAGS    += -SUBSYSTEM:WINDOWS,5.01
  endif
  endif
  endif
@@ -56,12 +56,12 @@ diff --git a/security/coreconf/WIN32.mk b/security/coreconf/WIN32.mk
 @@ -145,7 +145,7 @@
  else # !NS_USE_GCC
      OS_CFLAGS += -W3 -nologo -D_CRT_SECURE_NO_WARNINGS \
- 		 -D_CRT_NONSTDC_NO_WARNINGS
+          -D_CRT_NONSTDC_NO_WARNINGS
 -    OS_DLLFLAGS += -nologo -DLL -SUBSYSTEM:WINDOWS
 +    OS_DLLFLAGS += -nologo -DLL -SUBSYSTEM:WINDOWS,5.01
      ifeq ($(_MSC_VER),$(_MSC_VER_6))
      ifndef MOZ_DEBUG_SYMBOLS
- 	OS_DLLFLAGS += -PDB:NONE
+     OS_DLLFLAGS += -PDB:NONE
  
 diff --git a/nsprpub/configure.in b/nsprpub/configure.in
 --- a/nsprpub/configure.in
@@ -75,3 +75,4 @@ diff --git a/nsprpub/configure.in b/nsprpub/configure.in
          if test "$MSC_VER" -le "1200" -a -z "$MOZ_DEBUG_SYMBOLS"; then
              OS_DLLFLAGS="$OS_DLLFLAGS -PDB:NONE"
          fi
+
