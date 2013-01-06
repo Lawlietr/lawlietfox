@@ -1,0 +1,40 @@
+--- mozilla-release/browser/branding/unofficial/branding.nsi 2011-11-06 11:31:15 +0900
++++ mozilla-release/browser/branding/unofficial/branding.nsi	2011-11-06 11:30:47 +0900
+@@ -8,10 +8,10 @@
+ 
+ # BrandFullNameInternal is used for some registry and file system values
+ # instead of BrandFullName and typically should not be modified.
+-!define BrandFullNameInternal "Mozilla Developer Preview"
+-!define CompanyName           "mozilla.org"
+-!define URLInfoAbout          "http://www.mozilla.org"
+-!define URLUpdateInfo         "http://www.mozilla.org/projects/firefox"
++!define BrandFullNameInternal "Third Party Unofficial Builds Firefox"
++!define CompanyName           "yanzilme@gmail.com"
++!define URLInfoAbout          "https://code.google.com/p/lawlietfox/"
++!define URLUpdateInfo         "https://code.google.com/p/lawlietfox/"
+ 
+ !define URLStubDownload "http://download.mozilla.org/?product=firefox-latest&os=win&lang=${AB_CD}"
+ !define URLManualDownload "https://www.mozilla.org/firefox/installer-help/?channel=release"
+
+--- a/browser/branding/unofficial/configure.sh
++++ b/browser/branding/unofficial/configure.sh
+@@ -2,4 +2,4 @@
+ # License, v. 2.0. If a copy of the MPL was not distributed with this
+ # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ 
+-MOZ_APP_DISPLAYNAME=MozillaDeveloperPreview
++MOZ_APP_DISPLAYNAME=ThirdPartyUnofficialBuildsFirefox
+
+diff --git a/browser/branding/unofficial/locales/en-US/brand.dtd b/browser/branding/unofficial/locales/en-US/brand.dtd
+--- a/browser/branding/unofficial/locales/en-US/brand.dtd
++++ b/browser/branding/unofficial/locales/en-US/brand.dtd
+@@ -2,7 +2,7 @@
+    - License, v. 2.0. If a copy of the MPL was not distributed with this
+    - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+ 
+-<!ENTITY  brandShortName        "Mozilla Developer Preview">
+-<!ENTITY  brandFullName         "Mozilla Developer Preview">
++<!ENTITY  brandShortName        "Lawlietfox">
++<!ENTITY  brandFullName         "Third Party Unofficial Builds Firefox">
+ <!ENTITY  vendorShortName       "mozilla.org">
+ <!ENTITY  trademarkInfo.part1   " ">
