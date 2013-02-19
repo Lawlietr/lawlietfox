@@ -1,0 +1,628 @@
+diff -r c1e60736791c accessible/Makefile.in
+--- a/accessible/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/accessible/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -15,5 +15,8 @@
+ 
+ TEST_DIRS += tests
+ 
++CFLAGS		+= -fp:precise
++CXXFLAGS	+= -fp:precise
++
+ include $(topsrcdir)/config/rules.mk
+ 
+diff -r c1e60736791c browser/app/Makefile.in
+--- a/browser/app/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/browser/app/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -216,3 +216,6 @@
+ endif #} cocoa
+ endif #} SKIP_COPY_XULRUNNER
+ endif #} LIBXUL_SDK
++
++CFLAGS   += -GA
++CXXFLAGS += -GA
+diff -r c1e60736791c caps/src/Makefile.in
+--- a/caps/src/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/caps/src/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -26,6 +26,9 @@
+ 		nsSecurityManagerFactory.cpp \
+ 		$(NULL)
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+ 
+ INCLUDES	+= -I$(srcdir)/../include \
+diff -r c1e60736791c chrome/Makefile.in
+--- a/chrome/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/chrome/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -14,5 +14,8 @@
+ 
+ TEST_DIRS += test
+ 
++CFLAGS		+= -fp:precise
++CXXFLAGS	+= -fp:precise
++
+ include $(topsrcdir)/config/rules.mk
+ 
+diff -r c1e60736791c db/sqlite3/src/Makefile.in
+--- a/db/sqlite3/src/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/db/sqlite3/src/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -127,6 +127,9 @@
+ endif
+ endif
+ 
++CFLAGS += -fp:precise
++CXXFLAGS += -fp:precise
++
+ include $(topsrcdir)/config/rules.mk
+ 
+ # next line allows use of MOZ_OBJDIR in .mozconfig with older gcc on BeOS, maybe others
+diff -r c1e60736791c docshell/Makefile.in
+--- a/docshell/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/docshell/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -20,4 +20,7 @@
+ 
+ TEST_DIRS += test
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c dom/Makefile.in
+--- a/dom/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/dom/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -107,4 +107,7 @@
+ TEST_DIRS += plugins/test
+ endif
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c editor/Makefile.in
+--- a/editor/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/editor/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -14,5 +14,8 @@
+ MODULE           := editor
+ PARALLEL_DIRS    := public idl txtsvc libeditor txmgr composer
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+ 
+diff -r c1e60736791c embedding/Makefile.in
+--- a/embedding/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/embedding/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -26,4 +26,7 @@
+ endif
+ endif
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c extensions/Makefile.in
+--- a/extensions/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/extensions/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -12,4 +12,7 @@
+ 
+ PARALLEL_DIRS = $(MOZ_EXTENSIONS)
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c gfx/Makefile.in
+--- a/gfx/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/gfx/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -30,4 +30,7 @@
+ TOOL_DIRS	+= tests
+ endif
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c hal/Makefile.in
+--- a/hal/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/hal/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -145,8 +145,8 @@
+ include $(topsrcdir)/ipc/chromium/chromium-config.mk
+ include $(topsrcdir)/config/rules.mk
+ 
+-CFLAGS          += $(MOZ_DBUS_GLIB_CFLAGS)
+-CXXFLAGS        += $(MOZ_DBUS_GLIB_CFLAGS)
++CFLAGS          += -fp:fast $(MOZ_DBUS_GLIB_CFLAGS)
++CXXFLAGS        += -fp:fast $(MOZ_DBUS_GLIB_CFLAGS)
+ 
+ ifeq (gonk,$(MOZ_WIDGET_TOOLKIT))
+ # So that we can call nsScreenManagerGonk::GetConfiguration().
+diff -r c1e60736791c image/Makefile.in
+--- a/image/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/image/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -18,6 +18,9 @@
+ 
+ DIRS		+= build
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+ 
+ 
+diff -r c1e60736791c intl/Makefile.in
+--- a/intl/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/intl/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -24,4 +24,7 @@
+   build \
+   $(NULL)
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c ipc/Makefile.in
+--- a/ipc/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/ipc/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -29,4 +29,7 @@
+ 
+ TOOL_DIRS = app
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c ipc/app/Makefile.in
+--- a/ipc/app/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/ipc/app/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -96,3 +96,6 @@
+ 	$(NSINSTALL) $(PROGRAM) $(DIST)/bin/$(PROGRAM).app/Contents/MacOS
+ 	$(RM) $(DIST)/bin/$(PROGRAM)
+ endif #}
++
++CFLAGS   += -GA -fp:fast
++CXXFLAGS += -GA -fp:fast
+diff -r c1e60736791c layout/Makefile.in
+--- a/layout/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/layout/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -51,4 +51,7 @@
+ endif
+ endif
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c media/libjpeg/Makefile.in
+--- a/media/libjpeg/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/media/libjpeg/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -162,4 +162,7 @@
+ # need static lib for some of the libimg componentry to link properly
+ FORCE_STATIC_LIB = 1
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c media/libnestegg/Makefile.in
+--- a/media/libnestegg/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/media/libnestegg/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -16,4 +16,7 @@
+ 		src \
+ 		$(NULL)
+ 
++CFLAGS += -fp:fast
++CXXFLAGS += -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c media/libogg/Makefile.in
+--- a/media/libogg/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/media/libogg/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -16,4 +16,7 @@
+ 		src \
+ 		$(NULL)
+ 
++CFLAGS += -fp:fast
++CXXFLAGS += -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c media/libpng/Makefile.in
+--- a/media/libpng/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/media/libpng/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -49,6 +49,9 @@
+ 
+ FORCE_STATIC_LIB = 1
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+ 
+ ifeq ($(OS_ARCH),WINNT)
+diff -r c1e60736791c media/libsydneyaudio/Makefile.in
+--- a/media/libsydneyaudio/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/media/libsydneyaudio/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -16,4 +16,7 @@
+ 		src \
+ 		$(NULL)
+ 
++CFLAGS += -fp:fast
++CXXFLAGS += -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c media/libtheora/Makefile.in
+--- a/media/libtheora/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/media/libtheora/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -16,4 +16,7 @@
+ 		lib \
+ 		$(NULL)
+ 
++CFLAGS += -fp:fast
++CXXFLAGS += -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c media/libvorbis/Makefile.in
+--- a/media/libvorbis/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/media/libvorbis/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -16,4 +16,7 @@
+ 		lib \
+ 		$(NULL)
+ 
++CFLAGS += -fp:fast
++CXXFLAGS += -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c media/libvpx/Makefile.in
+--- a/media/libvpx/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/media/libvpx/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -485,6 +485,9 @@
+ 
+ EXTRA_MDDEPEND_FILES = asm_enc_offsets.s.pp asm_enc_offsets.$(OBJ_SUFFIX).pp asm_com_offsets.s.pp asm_com_offsets.$(OBJ_SUFFIX).pp
+ 
++CFLAGS += -fp:fast
++CXXFLAGS += -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+ 
+ # This must be after rules.mk in order to use $(OBJ_SUFFIX) outside a
+diff -r c1e60736791c memory/jemalloc/Makefile.in
+--- a/memory/jemalloc/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/memory/jemalloc/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -24,6 +24,9 @@
+ CSRCS := $(filter-out zone.c,$(CSRCS))
+ endif
+ 
++CFLAGS		+= -fp:precise
++CXXFLAGS	+= -fp:precise
++
+ include $(topsrcdir)/config/rules.mk
+ 
+ LOCAL_INCLUDES += \
+diff -r c1e60736791c mfbt/Makefile.in
+--- a/mfbt/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/mfbt/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -31,4 +31,7 @@
+ 
+ DEFINES += -DIMPL_MFBT
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c modules/libbz2/Makefile.in
+--- a/modules/libbz2/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/modules/libbz2/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -14,4 +14,7 @@
+ MODULE		= libbz2
+ DIRS		= src
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c modules/libjar/Makefile.in
+--- a/modules/libjar/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/modules/libjar/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -37,6 +37,9 @@
+ 
+ EXPORTS		= $(MODULES_LIBJAR_LEXPORTS)
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/config.mk
+ include $(topsrcdir)/ipc/chromium/chromium-config.mk
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c mozglue/Makefile.in
+--- a/mozglue/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/mozglue/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -23,4 +23,7 @@
+ 
+ TEST_DIRS = tests
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c netwerk/Makefile.in
+--- a/netwerk/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/netwerk/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -56,6 +56,9 @@
+ 
+ EXPORTS     = necko-config.h
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+ 
+ DEFINES += -DIMPL_NS_NET
+diff -r c1e60736791c nsprpub/Makefile.in
+--- a/nsprpub/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/nsprpub/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -30,6 +30,9 @@
+ 
+ all:: config.status export
+ 
++CFLAGS += -fp:precise
++CXXFLAGS += -fp:precise
++
+ include $(topsrcdir)/config/rules.mk
+ 
+ config.status:: configure
+diff -r c1e60736791c other-licenses/snappy/Makefile.in
+--- a/other-licenses/snappy/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/other-licenses/snappy/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -34,4 +34,7 @@
+   snappy-stubs-public.h \
+   $(NULL)
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c parser/Makefile.in
+--- a/parser/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/parser/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -16,4 +16,7 @@
+   nsCharsetSource.h \
+   $(NULL)
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c profile/dirserviceprovider/Makefile.in
+--- a/profile/dirserviceprovider/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/profile/dirserviceprovider/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -12,5 +12,8 @@
+ MODULE		= profdirserviceprovider
+ DIRS		= public src standalone
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+ 
+diff -r c1e60736791c rdf/Makefile.in
+--- a/rdf/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/rdf/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -17,4 +17,7 @@
+ TOOL_DIRS	+= tests
+ endif
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c security/coreconf/Makefile
+--- a/security/coreconf/Makefile	Tue Nov 20 14:27:39 2012 -0500
++++ b/security/coreconf/Makefile	Tue Dec 04 02:46:10 2012 +0900
+@@ -10,6 +10,10 @@
+ DIRS		= nsinstall
+ 
+ include $(DEPTH)/coreconf/config.mk
++
++CFLAGS += -fp:precise
++CXXFLAGS += -fp:precise
++
+ include $(DEPTH)/coreconf/rules.mk
+ 
+ export:: libs
+diff -r c1e60736791c security/dbm/Makefile
+--- a/security/dbm/Makefile	Tue Nov 20 14:27:39 2012 -0500
++++ b/security/dbm/Makefile	Tue Dec 04 02:46:10 2012 +0900
+@@ -36,6 +36,9 @@
+ # (5) Execute "global" rules. (OPTIONAL)                              #
+ #######################################################################
+ 
++CFLAGS += -fp:precise
++CXXFLAGS += -fp:precise
++
+ include $(CORE_DEPTH)/coreconf/rules.mk
+ 
+ #######################################################################
+diff -r c1e60736791c security/manager/Makefile.in
+--- a/security/manager/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/security/manager/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -20,4 +20,7 @@
+ DIRS += pki
+ endif
+ 
++CFLAGS += -fp:precise
++CXXFLAGS += -fp:precise
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c security/nss/Makefile
+--- a/security/nss/Makefile	Tue Nov 20 14:27:39 2012 -0500
++++ b/security/nss/Makefile	Tue Dec 04 02:46:10 2012 +0900
+@@ -34,6 +34,9 @@
+ # (5) Execute "global" rules. (OPTIONAL)                              #
+ #######################################################################
+ 
++CFLAGS += -fp:precise
++CXXFLAGS += -fp:precise
++
+ include $(CORE_DEPTH)/coreconf/rules.mk
+ 
+ #######################################################################
+diff -r c1e60736791c services/crypto/component/Makefile.in
+--- a/services/crypto/component/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/services/crypto/component/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -31,4 +31,7 @@
+ 
+ TEST_DIRS += tests
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c startupcache/Makefile.in
+--- a/startupcache/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/startupcache/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -38,4 +38,7 @@
+ XPIDLSRCS = nsIStartupCache.idl \
+   $(NULL)
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c storage/Makefile.in
+--- a/storage/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/storage/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -25,5 +25,8 @@
+ TOOL_DIRS += test
+ endif
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+ 
+diff -r c1e60736791c toolkit/Makefile.in
+--- a/toolkit/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/toolkit/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -63,6 +63,9 @@
+   xre \
+   $(NULL)
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+ 
+ export::
+diff -r c1e60736791c tools/profiler/Makefile.in
+--- a/tools/profiler/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/tools/profiler/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -100,4 +100,7 @@
+ 
+ endif
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c uriloader/Makefile.in
+--- a/uriloader/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/uriloader/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -22,4 +22,7 @@
+   prefetch \
+   $(NULL)
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c view/Makefile.in
+--- a/view/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/view/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -13,5 +13,8 @@
+ MODULE		= view
+ DIRS		= public src
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+ 
+diff -r c1e60736791c webapprt/win/Makefile.in
+--- a/webapprt/win/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/webapprt/win/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -94,6 +94,9 @@
+ 
+ GARBAGE_DIRS += instgen
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+ include $(topsrcdir)/toolkit/mozapps/installer/windows/nsis/makensis.mk
+ 
+diff -r c1e60736791c widget/Makefile.in
+--- a/widget/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/widget/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -158,5 +158,8 @@
+ 
+ EXPORTS		:= $(addprefix $(srcdir)/, $(EXPORTS))
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+ 
+diff -r c1e60736791c xpcom/Makefile.in
+--- a/xpcom/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/xpcom/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -56,5 +56,8 @@
+ DIRS += analysis
+ endif
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+ 
+diff -r c1e60736791c xpfe/appshell/Makefile.in
+--- a/xpfe/appshell/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/xpfe/appshell/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -13,5 +13,8 @@
+ MODULE		= appshell
+ DIRS		= public src
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+ 
+diff -r c1e60736791c xpfe/components/Makefile.in
+--- a/xpfe/components/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/xpfe/components/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -20,4 +20,7 @@
+     build \
+     $(NULL)
+ 
++CFLAGS		+= -fp:fast
++CXXFLAGS	+= -fp:fast
++
+ include $(topsrcdir)/config/rules.mk
+diff -r c1e60736791c xulrunner/app/Makefile.in
+--- a/xulrunner/app/Makefile.in	Tue Nov 20 14:27:39 2012 -0500
++++ b/xulrunner/app/Makefile.in	Tue Dec 04 02:46:10 2012 +0900
+@@ -109,6 +109,8 @@
+ # set stack to 2MB on x64 build.  See bug 582910
+ LDFLAGS += -STACK:2097152
+ endif
++CFLAGS   += -GA
++CXXFLAGS += -GA
+ endif
+ endif
+ 
+@@ -172,3 +174,4 @@
+ libs::
+ 	$(INSTALL) $(IFLAGS1) $(README_FILE) $(DIST)/bin
+ 	$(INSTALL) $(IFLAGS1) $(topsrcdir)/LICENSE	$(DIST)/bin
++
