@@ -1,6 +1,6 @@
 diff -r 6a3897dad583 nsprpub/pr/include/md/_win95.h
---- a/nsprpub/pr/include/md/_win95.h	Sat Oct 06 15:30:41 2012 +0900
-+++ b/nsprpub/pr/include/md/_win95.h	Sat Oct 06 15:42:56 2012 +0900
+--- a/nsprpub/pr/include/md/_win95.h    Sat Oct 06 15:30:41 2012 +0900
++++ b/nsprpub/pr/include/md/_win95.h    Sat Oct 06 15:42:56 2012 +0900
 @@ -474,16 +474,27 @@ extern __declspec(thread) struct PRThrea
  extern __declspec(thread) struct PRThread *_pr_thread_last_run;
  #define _MD_LAST_THREAD() _pr_thread_last_run
@@ -32,7 +32,51 @@ diff -r 6a3897dad583 nsprpub/pr/include/md/_win95.h
 diff --git a/gfx/2d/2D.h b/gfx/2d/2D.h
 --- a/gfx/2d/2D.h
 +++ b/gfx/2d/2D.h
-@@ -839,16 +839,17 @@ class DrawEventRecorder : public RefCoun
+@@ -11,16 +11,18 @@
+ #include "Rect.h"
+ #include "Matrix.h"
+ #include "UserData.h"
+ // This RefPtr class isn't ideal for usage in Azure, as it doesn't allow T**
+ // outparams using the &-operator. But it will have to do as there's no easy
+ // solution.
+ #include "mozilla/RefPtr.h"
+ 
++#include <string.h>
++
+ #ifdef MOZ_ENABLE_FREETYPE
+ #include <string>
+ #endif
+ 
+ struct _cairo_surface;
+ typedef _cairo_surface cairo_surface_t;
+ 
+ struct _cairo_scaled_font;
+@@ -790,18 +792,22 @@ public:
+                         ExtendMode aExtendMode = EXTEND_CLAMP) const = 0;
+ 
+   const Matrix &GetTransform() const { return mTransform; }
+ 
+   /*
+    * Set a transform on the surface, this transform is applied at drawing time
+    * to both the mask and source of the operation.
+    */
+-  virtual void SetTransform(const Matrix &aTransform)
+-    { mTransform = aTransform; mTransformDirty = true; }
++  virtual void SetTransform(const Matrix &aTransform) {
++    if (memcmp(&mTransform, &aTransform, sizeof(Matrix)) != 0) {
++      mTransform = aTransform;
++      mTransformDirty = true;
++    }
++  }
+ 
+   SurfaceFormat GetFormat() { return mFormat; }
+ 
+   /* Tries to get a native surface for a DrawTarget, this may fail if the
+    * draw target cannot convert to this surface type.
+    */
+   virtual void *GetNativeSurface(NativeSurfaceType aType) { return NULL; }
+ 
+@@ -848,16 +854,17 @@ class DrawEventRecorder : public RefCoun
  public:
    virtual ~DrawEventRecorder() { }
  };
@@ -51,8 +95,8 @@ diff --git a/gfx/2d/2D.h b/gfx/2d/2D.h
    static TemporaryRef<DrawTarget>
      CreateRecordingDrawTarget(DrawEventRecorder *aRecorder, DrawTarget *aDT);
 diff -r 6a3897dad583 mfbt/Attributes.h
---- a/mfbt/Attributes.h	Sat Oct 06 15:30:41 2012 +0900
-+++ b/mfbt/Attributes.h	Sat Oct 06 15:38:57 2012 +0900
+--- a/mfbt/Attributes.h    Sat Oct 06 15:30:41 2012 +0900
++++ b/mfbt/Attributes.h    Sat Oct 06 15:38:57 2012 +0900
 @@ -8,16 +8,22 @@
  #ifndef mozilla_Attributes_h_
  #define mozilla_Attributes_h_
@@ -158,7 +202,12 @@ diff --git a/gfx/2d/BaseRect.h b/gfx/2d/BaseRect.h
 diff --git a/gfx/2d/Blur.cpp b/gfx/2d/Blur.cpp
 --- a/gfx/2d/Blur.cpp
 +++ b/gfx/2d/Blur.cpp
-@@ -11,6 +11,7 @@
+@@ -6,16 +6,17 @@
+ 
+ #include <algorithm>
+ #include <math.h>
+ #include <string.h>
+ 
  #include "mozilla/CheckedInt.h"
  #include "mozilla/Constants.h"
  #include "mozilla/Util.h"
@@ -166,7 +215,17 @@ diff --git a/gfx/2d/Blur.cpp b/gfx/2d/Blur.cpp
  
  #include "2D.h"
  #include "Tools.h"
-@@ -33,13 +34,15 @@
+ 
+ using namespace std;
+ 
+ namespace mozilla {
+ namespace gfx {
+@@ -28,35 +29,43 @@ namespace gfx {
+  * @param aLeftLobe The number of pixels to blend on the left.
+  * @param aRightLobe The number of pixels to blend on the right.
+  * @param aWidth The number of columns in the buffers.
+  * @param aRows The number of rows in the buffers.
+  * @param aSkipRect An area to skip blurring in.
   * XXX shouldn't we pass stride in separately here?
   */
  static void
@@ -185,7 +244,12 @@ diff --git a/gfx/2d/Blur.cpp b/gfx/2d/Blur.cpp
  {
      MOZ_ASSERT(aWidth > 0);
  
-@@ -52,6 +55,12 @@
+     int32_t boxSize = aLeftLobe + aRightLobe + 1;
+     bool skipRectCoversWholeRow = 0 >= aSkipRect.x &&
+                                   aWidth <= aSkipRect.XMost();
+     if (boxSize == 1) {
+         memcpy(aOutput, aInput, aWidth*aRows);
+         return;
      }
      uint32_t reciprocal = uint32_t((uint64_t(1) << 32) / boxSize);
  
@@ -198,7 +262,17 @@ diff --git a/gfx/2d/Blur.cpp b/gfx/2d/Blur.cpp
      for (int32_t y = 0; y < aRows; y++) {
          // Check whether the skip rect intersects this row. If the skip
          // rect covers the whole surface in this row, we can avoid
-@@ -93,14 +102,11 @@
+         // this row entirely (and any others along the skip rect).
+         bool inSkipRectY = y >= aSkipRect.y &&
+                            y < aSkipRect.YMost();
+         if (inSkipRectY && skipRectCoversWholeRow) {
+             y = aSkipRect.YMost() - 1;
+@@ -88,53 +97,58 @@ BoxBlurHorizontal(unsigned char* aInput,
+                     int32_t pos = x + i - aLeftLobe;
+                     // See assertion above; if aWidth is zero, then we would have no
+                     // valid position to clamp to.
+                     pos = max(pos, 0);
+                     pos = min(pos, aWidth - 1);
                      alphaSum += aInput[aWidth * y + pos];
                  }
              }
@@ -215,7 +289,10 @@ diff --git a/gfx/2d/Blur.cpp b/gfx/2d/Blur.cpp
          }
      }
  }
-@@ -111,13 +117,15 @@
+ 
+ /**
+  * Identical to BoxBlurHorizontal, except it blurs top and bottom instead of
+  * left and right.
   * XXX shouldn't we pass stride in separately here?
   */
  static void
@@ -234,7 +311,12 @@ diff --git a/gfx/2d/Blur.cpp b/gfx/2d/Blur.cpp
  {
      MOZ_ASSERT(aRows > 0);
  
-@@ -130,6 +138,12 @@
+     int32_t boxSize = aTopLobe + aBottomLobe + 1;
+     bool skipRectCoversWholeColumn = 0 >= aSkipRect.y &&
+                                      aRows <= aSkipRect.YMost();
+     if (boxSize == 1) {
+         memcpy(aOutput, aInput, aWidth*aRows);
+         return;
      }
      uint32_t reciprocal = uint32_t((uint64_t(1) << 32) / boxSize);
  
@@ -247,7 +329,17 @@ diff --git a/gfx/2d/Blur.cpp b/gfx/2d/Blur.cpp
      for (int32_t x = 0; x < aWidth; x++) {
          bool inSkipRectX = x >= aSkipRect.x &&
                             x < aSkipRect.XMost();
-@@ -164,14 +178,11 @@
+         if (inSkipRectX && skipRectCoversWholeColumn) {
+             x = aSkipRect.XMost() - 1;
+             continue;
+         }
+ 
+@@ -159,24 +173,21 @@ BoxBlurVertical(unsigned char* aInput,
+                     int32_t pos = y + i - aTopLobe;
+                     // See assertion above; if aRows is zero, then we would have no
+                     // valid position to clamp to.
+                     pos = max(pos, 0);
+                     pos = min(pos, aRows - 1);
                      alphaSum += aInput[aWidth * pos + x];
                  }
              }
@@ -264,27 +356,86 @@ diff --git a/gfx/2d/Blur.cpp b/gfx/2d/Blur.cpp
          }
      }
  }
-@@ -466,7 +477,15 @@
+ 
+ static void ComputeLobes(int32_t aRadius, int32_t aLobes[3][2])
+ {
+     int32_t major, minor, final;
+ 
+@@ -495,31 +506,41 @@ AlphaBoxBlur::Blur()
+       // Fallback to old blurring code when the surface is so large it may
+       // overflow our integral image!
+ 
+       // No need to use CheckedInt here - we have validated it in the constructor.
        size_t szB = stride * size.height;
-       unsigned char* tmpData = new uint8_t[szB];
+       uint8_t* tmpData = new uint8_t[szB];
+       memset(tmpData, 0, szB);
  
--      memset(tmpData, 0, szB);
-+    size_t szLastsNexts = 0;
-+    if (mBlurRadius.width > 0) {
-+      szLastsNexts = stride;
-+    }
-+    if (mBlurRadius.height > 0) {
-+      szLastsNexts = max<size_t>(szLastsNexts, GetSize().height);
-+    }
-+    nsAutoArrayPtr<int32_t> tmpLasts(new int32_t[szLastsNexts]);
-+    nsAutoArrayPtr<int32_t> tmpNexts(new int32_t[szLastsNexts]);
++      size_t szLastsNexts = 0;
++      if (mBlurRadius.width > 0) {
++        szLastsNexts = stride;
++      }
++      if (mBlurRadius.height > 0) {
++        szLastsNexts = max<size_t>(szLastsNexts, GetSize().height);
++      }
++      nsAutoArrayPtr<int32_t> tmpLasts(new int32_t[szLastsNexts]);
++      nsAutoArrayPtr<int32_t> tmpNexts(new int32_t[szLastsNexts]);
++
+       uint8_t* a = mData;
+       uint8_t* b = tmpData;
+       if (mBlurRadius.width > 0) {
+-        BoxBlurHorizontal(a, b, horizontalLobes[0][0], horizontalLobes[0][1], stride, GetSize().height, mSkipRect);
+-        BoxBlurHorizontal(b, a, horizontalLobes[1][0], horizontalLobes[1][1], stride, GetSize().height, mSkipRect);
+-        BoxBlurHorizontal(a, b, horizontalLobes[2][0], horizontalLobes[2][1], stride, GetSize().height, mSkipRect);
++        BoxBlurHorizontal(a, b, horizontalLobes[0][0], horizontalLobes[0][1], stride, GetSize().height, mSkipRect, tmpLasts, tmpNexts);
++        BoxBlurHorizontal(b, a, horizontalLobes[1][0], horizontalLobes[1][1], stride, GetSize().height, mSkipRect, tmpLasts, tmpNexts);
++        BoxBlurHorizontal(a, b, horizontalLobes[2][0], horizontalLobes[2][1], stride, GetSize().height, mSkipRect, tmpLasts, tmpNexts);
+       } else {
+         a = tmpData;
+         b = mData;
+       }
+       // The result is in 'b' here.
+       if (mBlurRadius.height > 0) {
+-        BoxBlurVertical(b, a, verticalLobes[0][0], verticalLobes[0][1], stride, GetSize().height, mSkipRect);
+-        BoxBlurVertical(a, b, verticalLobes[1][0], verticalLobes[1][1], stride, GetSize().height, mSkipRect);
+-        BoxBlurVertical(b, a, verticalLobes[2][0], verticalLobes[2][1], stride, GetSize().height, mSkipRect);
++        BoxBlurVertical(b, a, verticalLobes[0][0], verticalLobes[0][1], stride, GetSize().height, mSkipRect, tmpLasts, tmpNexts);
++        BoxBlurVertical(a, b, verticalLobes[1][0], verticalLobes[1][1], stride, GetSize().height, mSkipRect, tmpLasts, tmpNexts);
++        BoxBlurVertical(b, a, verticalLobes[2][0], verticalLobes[2][1], stride, GetSize().height, mSkipRect, tmpLasts, tmpNexts);
+       } else {
+         a = b;
+       }
+       // The result is in 'a' here.
+       if (a == tmpData) {
+         memcpy(mData, tmpData, szB);
+       }
+       delete [] tmpData;
+diff -r 6a3897dad583 browser/installer/Makefile.in
+--- a/browser/installer/Makefile.in    Sat Oct 06 15:30:41 2012 +0900
++++ b/browser/installer/Makefile.in    Sat Oct 06 16:20:40 2012 +0900
+@@ -75,20 +75,16 @@ endif
+ include $(topsrcdir)/ipc/app/defs.mk
+ DEFINES += -DMOZ_CHILD_PROCESS_NAME=$(MOZ_CHILD_PROCESS_NAME)
  
-       SpreadHorizontal(mData, tmpData, mSpreadRadius.width, GetSize().width, GetSize().height, stride, mSkipRect);
-       SpreadVertical(tmpData, mData, mSpreadRadius.height, GetSize().width, GetSize().height, stride, mSkipRect);
-
+ # Set MSVC dlls version to package, if any.
+ ifdef WIN32_REDIST_DIR
+ DEFINES += -DMOZ_MSVC_REDIST=$(_MSC_VER)
+ endif
+ 
+-ifneq (,$(filter aurora beta,$(MOZ_UPDATE_CHANNEL)))
+-DEFINES += -DSHIP_FEEDBACK=1
+-endif
+-
+ ifneq (,$(filter WINNT Darwin Android,$(OS_TARGET)))
+ DEFINES += -DMOZ_SHARED_MOZGLUE=1
+ endif
+ 
+ ifdef MOZ_JSDEBUGGER
+ DEFINES += -DMOZ_JSDEBUGGER
+ endif
+ 
 diff -r 00f36792c9e9 gfx/cairo/cairo/src/cairo-d2d-private.h
---- a/gfx/cairo/cairo/src/cairo-d2d-private.h	Wed Nov 16 17:34:18 2011 +0900
-+++ b/gfx/cairo/cairo/src/cairo-d2d-private.h	Sat Nov 19 16:45:23 2011 +0900
+--- a/gfx/cairo/cairo/src/cairo-d2d-private.h    Wed Nov 16 17:34:18 2011 +0900
++++ b/gfx/cairo/cairo/src/cairo-d2d-private.h    Sat Nov 19 16:45:23 2011 +0900
 @@ -37,16 +37,17 @@
  #define CAIRO_D2D_PRIVATE_H
  
@@ -359,12 +510,12 @@ diff --git a/gfx/cairo/cairo/src/cairo-d2d-surface.cpp b/gfx/cairo/cairo/src/cai
 --- a/gfx/cairo/cairo/src/cairo-d2d-surface.cpp
 +++ b/gfx/cairo/cairo/src/cairo-d2d-surface.cpp
 @@ -1536,29 +1536,64 @@ static RefPtr<ID2D1Brush>
- 	    stops[i].color = _cairo_d2d_color_from_cairo_color_stop(stop->color);
- 	}
- 	stops[i].position = 1.0f;
- 	stops[i].color = D2D1::ColorF(0, 0);
+         stops[i].color = _cairo_d2d_color_from_cairo_color_stop(stop->color);
+     }
+     stops[i].position = 1.0f;
+     stops[i].color = D2D1::ColorF(0, 0);
      } else {
- 	return NULL;
+     return NULL;
      }
  
 -    RefPtr<ID2D1GradientStopCollection> stopCollection;
@@ -372,12 +523,12 @@ diff --git a/gfx/cairo/cairo/src/cairo-d2d-surface.cpp b/gfx/cairo/cairo/src/cai
 -    RefPtr<ID2D1RadialGradientBrush> brush;
 -
 -    d2dsurf->rt->CreateRadialGradientBrush(D2D1::RadialGradientBrushProperties(center,
--									       origin,
--									       outer_radius,
--									       outer_radius),
--					   brushProps,
--					   stopCollection,
--					   &brush);
+-                                           origin,
+-                                           outer_radius,
+-                                           outer_radius),
+-                       brushProps,
+-                       stopCollection,
+-                       &brush);
 +    std::list<radial_gradient>::iterator iterRadialGradient = d2dsurf->mRadialGradientCache.end();
 +
 +    if (d2dsurf->mRadialGradientCache.size() > 0) {
@@ -431,27 +582,27 @@ diff --git a/gfx/cairo/cairo/src/cairo-d2d-surface.cpp b/gfx/cairo/cairo/src/cai
  
  static RefPtr<ID2D1Brush>
  _cairo_d2d_create_linear_gradient_brush(cairo_d2d_surface_t *d2dsurf,
- 					cairo_path_fixed_t *fill_path,
- 					cairo_linear_pattern_t *source_pattern)
+                     cairo_path_fixed_t *fill_path,
+                     cairo_linear_pattern_t *source_pattern)
  {
      if (source_pattern->p1.x == source_pattern->p2.x &&
 @@ -1713,26 +1748,60 @@ static RefPtr<ID2D1Brush>
- 	for (unsigned int i = 1; i < source_pattern->base.n_stops + 1; i++) {
- 	    cairo_gradient_stop_t *stop = &source_pattern->base.stops[i - 1];
- 	    stops[i].position = (FLOAT)stop->offset;
- 	    stops[i].color = _cairo_d2d_color_from_cairo_color_stop(stop->color);
- 	}
- 	stops[source_pattern->base.n_stops + 1].position = 1.0f;
- 	stops[source_pattern->base.n_stops + 1].color = D2D1::ColorF(0, 0);
+     for (unsigned int i = 1; i < source_pattern->base.n_stops + 1; i++) {
+         cairo_gradient_stop_t *stop = &source_pattern->base.stops[i - 1];
+         stops[i].position = (FLOAT)stop->offset;
+         stops[i].color = _cairo_d2d_color_from_cairo_color_stop(stop->color);
+     }
+     stops[source_pattern->base.n_stops + 1].position = 1.0f;
+     stops[source_pattern->base.n_stops + 1].color = D2D1::ColorF(0, 0);
      }
 -    RefPtr<ID2D1GradientStopCollection> stopCollection;
 -    d2dsurf->rt->CreateGradientStopCollection(stops, num_stops, &stopCollection);
 -    RefPtr<ID2D1LinearGradientBrush> brush;
 -    d2dsurf->rt->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(D2D1::Point2F((FLOAT)p1.x, (FLOAT)p1.y),
--									       D2D1::Point2F((FLOAT)p2.x, (FLOAT)p2.y)),
--					   brushProps,
--					   stopCollection,
--					   &brush);
+-                                           D2D1::Point2F((FLOAT)p2.x, (FLOAT)p2.y)),
+-                       brushProps,
+-                       stopCollection,
+-                       &brush);
 +
 +    std::list<linear_gradient>::iterator iterLinearGradient = d2dsurf->mLinearGradientCache.end();
 +
@@ -508,13 +659,13 @@ diff --git a/gfx/cairo/cairo/src/cairo-d2d-surface.cpp b/gfx/cairo/cairo/src/cai
 diff --git a/content/canvas/src/Makefile.in b/content/canvas/src/Makefile.in
 --- a/content/canvas/src/Makefile.in
 +++ b/content/canvas/src/Makefile.in
-@@ -95,8 +95,14 @@ INCLUDES	+= \
- 		-I$(srcdir)/../../../layout/generic \
- 		-I$(srcdir)/../../base/src \
- 		-I$(srcdir)/../../html/content/src \
- 		-I$(srcdir)/../../../js/xpconnect/src \
- 		-I$(srcdir)/../../../dom/base \
- 		$(NULL)
+@@ -88,8 +88,14 @@ INCLUDES    += \
+         -I$(srcdir)/../../../layout/generic \
+         -I$(srcdir)/../../base/src \
+         -I$(srcdir)/../../html/content/src \
+         -I$(srcdir)/../../../js/xpconnect/src \
+         -I$(srcdir)/../../../dom/base \
+         $(NULL)
  
  DEFINES += -D_IMPL_NS_LAYOUT
 +
@@ -523,10 +674,95 @@ diff --git a/content/canvas/src/Makefile.in b/content/canvas/src/Makefile.in
 +CanvasUtils.$(OBJ_SUFFIX): COMPILE_CXXFLAGS += -GL- -openmp
 +endif
 +endif
+diff --git a/content/canvas/src/CanvasRenderingContext2D.cpp b/content/canvas/src/CanvasRenderingContext2D.cpp
+--- a/content/canvas/src/CanvasRenderingContext2D.cpp
++++ b/content/canvas/src/CanvasRenderingContext2D.cpp
+@@ -3435,39 +3435,17 @@ CanvasRenderingContext2D::GetImageDataAr
+   }
+ 
+   // NOTE! dst is the same as src, and this relies on reading
+   // from src and advancing that ptr before writing to dst.
+   // NOTE! I'm not sure that it is, I think this comment might have been
+   // inherited from Thebes canvas and is no longer true
+   uint8_t* dst = data + dstWriteRect.y * (aWidth * 4) + dstWriteRect.x * 4;
+ 
+-  for (int32_t j = 0; j < dstWriteRect.height; ++j) {
+-    for (int32_t i = 0; i < dstWriteRect.width; ++i) {
+-      // XXX Is there some useful swizzle MMX we can use here?
+-#ifdef IS_LITTLE_ENDIAN
+-      uint8_t b = *src++;
+-      uint8_t g = *src++;
+-      uint8_t r = *src++;
+-      uint8_t a = *src++;
+-#else
+-      uint8_t a = *src++;
+-      uint8_t r = *src++;
+-      uint8_t g = *src++;
+-      uint8_t b = *src++;
+-#endif
+-      // Convert to non-premultiplied color
+-      *dst++ = gfxUtils::sUnpremultiplyTable[a * 256 + r];
+-      *dst++ = gfxUtils::sUnpremultiplyTable[a * 256 + g];
+-      *dst++ = gfxUtils::sUnpremultiplyTable[a * 256 + b];
+-      *dst++ = a;
+-    }
+-    src += srcStride - (dstWriteRect.width * 4);
+-    dst += (aWidth * 4) - (dstWriteRect.width * 4);
+-  }
++  GetImageData_component(src, dst, dstWriteRect.width, dstWriteRect.height, srcStride, aWidth * 4);
+ 
+   *aRetval = darray;
+   return NS_OK;
+ }
+ 
+ void
+ CanvasRenderingContext2D::EnsureErrorTarget()
+ {
+@@ -3598,37 +3576,17 @@ CanvasRenderingContext2D::PutImageData_e
+                                                           false);
+   if (!imgsurf || imgsurf->CairoStatus()) {
+     return NS_ERROR_FAILURE;
+   }
+ 
+   uint8_t *src = aData;
+   uint8_t *dst = imgsurf->Data();
+ 
+-  for (uint32_t j = 0; j < h; j++) {
+-    for (uint32_t i = 0; i < w; i++) {
+-      uint8_t r = *src++;
+-      uint8_t g = *src++;
+-      uint8_t b = *src++;
+-      uint8_t a = *src++;
+-
+-      // Convert to premultiplied color (losslessly if the input came from getImageData)
+-#ifdef IS_LITTLE_ENDIAN
+-      *dst++ = gfxUtils::sPremultiplyTable[a * 256 + b];
+-      *dst++ = gfxUtils::sPremultiplyTable[a * 256 + g];
+-      *dst++ = gfxUtils::sPremultiplyTable[a * 256 + r];
+-      *dst++ = a;
+-#else
+-      *dst++ = a;
+-      *dst++ = gfxUtils::sPremultiplyTable[a * 256 + r];
+-      *dst++ = gfxUtils::sPremultiplyTable[a * 256 + g];
+-      *dst++ = gfxUtils::sPremultiplyTable[a * 256 + b];
+-#endif
+-    }
+-  }
++  PutImageData_component(src, dst, w, h, w * 4, w * 4);
+ 
+   EnsureTarget();
+   if (!IsTargetValid()) {
+     return NS_ERROR_FAILURE;
+   }
+ 
+   RefPtr<SourceSurface> sourceSurface =
+     mTarget->CreateSourceSurfaceFromData(imgsurf->Data(), IntSize(w, h), imgsurf->Stride(), FORMAT_B8G8R8A8);
 diff --git a/content/canvas/src/CanvasUtils.cpp b/content/canvas/src/CanvasUtils.cpp
 --- a/content/canvas/src/CanvasUtils.cpp
 +++ b/content/canvas/src/CanvasUtils.cpp
-@@ -3,6 +3,21 @@
+@@ -1,13 +1,29 @@
+ /* -*- Mode: C++; tab-width: 20; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+ /* This Source Code Form is subject to the terms of the Mozilla Public
   * License, v. 2.0. If a copy of the MPL was not distributed with this
   * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
  
@@ -544,68 +780,75 @@ diff --git a/content/canvas/src/CanvasUtils.cpp b/content/canvas/src/CanvasUtils
 +#include <tmmintrin.h>
 +#endif
 +#include "mozilla/SSE.h"
++#include "gfxUtils.h"
 +
  #include <stdlib.h>
  #include <stdarg.h>
  
-@@ -178,6 +193,261 @@
+ #include "prprf.h"
+ 
+ #include "nsIServiceManager.h"
+ 
+ #include "nsIConsoleService.h"
+@@ -175,10 +191,263 @@ MatrixToJSVal(const Matrix& matrix, JSCo
+     jsval elts[] = {
+         DOUBLE_TO_JSVAL(matrix._11), DOUBLE_TO_JSVAL(matrix._12),
+         DOUBLE_TO_JSVAL(matrix._21), DOUBLE_TO_JSVAL(matrix._22),
          DOUBLE_TO_JSVAL(matrix._31), DOUBLE_TO_JSVAL(matrix._32)
      };
      return MatrixEltsToJSVal(elts, cx, val);
-+}
-+
+ }
+ 
 +void
-+GetImageData_component(PRUint8* _src, PRUint8* _dst,
-+                       PRUint32 width, PRUint32 height,
-+                       PRUint32 srcStride, PRUint32 dstStride,
-+                       PRUint8 (*sUnpremultiplyTable)[256])
++GetImageData_component(uint8_t* _src, uint8_t* _dst,
++                       int32_t width, int32_t height,
++                       uint32_t srcStride, uint32_t dstStride)
 +{
-+    PRUint8 *srcFirst = _src;
-+    PRUint8 *dstFirst = _dst;
++    uint8_t *srcFirst = _src;
++    uint8_t *dstFirst = _dst;
 +
 +#if defined(TT_MEMUTIL) && defined(_MSC_VER)
 +    int omp_thread_counts = omp_get_max_threads();
 +
 +#pragma omp parallel for schedule(guided) default(none) \
-+shared(srcFirst, dstFirst, width, height, srcStride, dstStride, sUnpremultiplyTable) \
++shared(srcFirst, dstFirst, width, height, srcStride, dstStride, gfxUtils::sUnpremultiplyTable) \
 +if (omp_thread_counts >= 2 && \
-+    height >= (PRUint32)omp_thread_counts && \
++    height >= (int32_t)omp_thread_counts && \
 +    width * height >= 4096)
 +#endif // defined(TT_MEMUTIL) && defined(_MSC_VER)
-+    for (PRInt64 j = 0; j < height; j++) {
-+        PRUint8 *src = srcFirst + (srcStride * j);
-+        PRUint8 *dst = dstFirst + (dstStride * j);
++    for (int32_t j = 0; j < height; ++j) {
++        uint8_t *src = srcFirst + (srcStride * j);
++        uint8_t *dst = dstFirst + (dstStride * j);
 +
-+        for (PRUint32 i = 0; i < width; i++) {
++        for (int32_t i = 0; i < width; ++i) {
 +            // XXX Is there some useful swizzle MMX we can use here?
 +#ifdef IS_LITTLE_ENDIAN
-+            PRUint8 b = *src++;
-+            PRUint8 g = *src++;
-+            PRUint8 r = *src++;
-+            PRUint8 a = *src++;
++            uint8_t b = *src++;
++            uint8_t g = *src++;
++            uint8_t r = *src++;
++            uint8_t a = *src++;
 +#else
-+            PRUint8 a = *src++;
-+            PRUint8 r = *src++;
-+            PRUint8 g = *src++;
-+            PRUint8 b = *src++;
++            uint8_t a = *src++;
++            uint8_t r = *src++;
++            uint8_t g = *src++;
++            uint8_t b = *src++;
 +#endif
 +            // Convert to non-premultiplied color
-+            *dst++ = sUnpremultiplyTable[a][r];
-+            *dst++ = sUnpremultiplyTable[a][g];
-+            *dst++ = sUnpremultiplyTable[a][b];
++            *dst++ = gfxUtils::sUnpremultiplyTable[a * 256 + r];
++            *dst++ = gfxUtils::sUnpremultiplyTable[a * 256 + g];
++            *dst++ = gfxUtils::sUnpremultiplyTable[a * 256 + b];
 +            *dst++ = a;
 +        }
 +    }
 +}
 +
 +void
-+PutImageData_component(PRUint8* _src, PRUint8* _dst,
-+                       PRUint32 width, PRUint32 height,
-+                       PRUint32 srcStride, PRUint32 dstStride,
-+                       PRUint8 (*sPremultiplyTable)[256])
++PutImageData_component(uint8_t* _src, uint8_t* _dst,
++                       int32_t width, int32_t height,
++                       uint32_t srcStride, uint32_t dstStride)
 +{
-+    PRUint8 *srcFirst = _src;
-+    PRUint8 *dstFirst = _dst;
++    uint8_t *srcFirst = _src;
++    uint8_t *dstFirst = _dst;
 +
 +#if (_MSC_VER != 1400) || !defined(_M_AMD64)
 +    if (mozilla::supports_ssse3()) {
@@ -620,26 +863,26 @@ diff --git a/content/canvas/src/CanvasUtils.cpp b/content/canvas/src/CanvasUtils
 +        int omp_thread_counts = omp_get_max_threads();
 +
 +#pragma omp parallel for schedule(guided) default(none) \
-+shared(srcFirst, dstFirst, width, height, srcStride, dstStride, sPremultiplyTable) \
++shared(srcFirst, dstFirst, width, height, srcStride, dstStride, gfxUtils::sPremultiplyTable) \
 +if (omp_thread_counts >= 2 && \
-+    height >= (PRUint32)omp_thread_counts && \
++    height >= (int32_t)omp_thread_counts && \
 +    width * height >= 12000)
 +#endif // defined(TT_MEMUTIL) && defined(_MSC_VER)
 +        for (int j = 0; j < height; j++) {
-+            PRUint8 *src = srcFirst + (srcStride * j);
-+            PRUint8 *dst = dstFirst + (dstStride * j);
-+            PRUint32 i = width;
++            uint8_t *src = srcFirst + (srcStride * j);
++            uint8_t *dst = dstFirst + (dstStride * j);
++            int32_t i = width;
 +
 +            while (i >= 1 && ((unsigned)dst & 15)) {
-+                PRUint8 r = *src++;
-+                PRUint8 g = *src++;
-+                PRUint8 b = *src++;
-+                PRUint8 a = *src++;
++                uint8_t r = *src++;
++                uint8_t g = *src++;
++                uint8_t b = *src++;
++                uint8_t a = *src++;
 +
 +                // Convert to premultiplied color (losslessly if the input came from getImageData)
-+                *dst++ = sPremultiplyTable[a][b];
-+                *dst++ = sPremultiplyTable[a][g];
-+                *dst++ = sPremultiplyTable[a][r];
++                *dst++ = gfxUtils::sPremultiplyTable[a * 256 + b];
++                *dst++ = gfxUtils::sPremultiplyTable[a * 256 + g];
++                *dst++ = gfxUtils::sPremultiplyTable[a * 256 + r];
 +                *dst++ = a;
 +                i -= 1;
 +            }
@@ -756,15 +999,15 @@ diff --git a/content/canvas/src/CanvasUtils.cpp b/content/canvas/src/CanvasUtils
 +            }
 +
 +            while (i >= 1) {
-+                PRUint8 r = *src++;
-+                PRUint8 g = *src++;
-+                PRUint8 b = *src++;
-+                PRUint8 a = *src++;
++                uint8_t r = *src++;
++                uint8_t g = *src++;
++                uint8_t b = *src++;
++                uint8_t a = *src++;
 +
 +                // Convert to premultiplied color (losslessly if the input came from getImageData)
-+                *dst++ = sPremultiplyTable[a][b];
-+                *dst++ = sPremultiplyTable[a][g];
-+                *dst++ = sPremultiplyTable[a][r];
++                *dst++ = gfxUtils::sPremultiplyTable[a * 256 + b];
++                *dst++ = gfxUtils::sPremultiplyTable[a * 256 + g];
++                *dst++ = gfxUtils::sPremultiplyTable[a * 256 + r];
 +                *dst++ = a;
 +                i -= 1;
 +            }
@@ -776,66 +1019,73 @@ diff --git a/content/canvas/src/CanvasUtils.cpp b/content/canvas/src/CanvasUtils
 +        int omp_thread_counts = omp_get_max_threads();
 +
 +#pragma omp parallel for schedule(guided) default(none) \
-+shared(srcFirst, dstFirst, width, height, srcStride, dstStride, sPremultiplyTable) \
++shared(srcFirst, dstFirst, width, height, srcStride, dstStride, gfxUtils::sPremultiplyTable) \
 +if (omp_thread_counts >= 2 && \
-+    height >= (PRUint32)omp_thread_counts && \
++    height >= (int32_t)omp_thread_counts && \
 +    width * height >= 4096)
 +#endif // defined(TT_MEMUTIL) && defined(_MSC_VER)
-+        for (PRInt64 j = 0; j < height; j++) {
-+            PRUint8 *src = srcFirst + (srcStride * j);
-+            PRUint8 *dst = dstFirst + (dstStride * j);
++        for (int64_t j = 0; j < height; j++) {
++            uint8_t *src = srcFirst + (srcStride * j);
++            uint8_t *dst = dstFirst + (dstStride * j);
 +
-+            for (PRUint32 i = 0; i < width; i++) {
++            for (int32_t i = 0; i < width; i++) {
 +                // XXX Is there some useful swizzle MMX we can use here?
-+                PRUint8 r = *src++;
-+                PRUint8 g = *src++;
-+                PRUint8 b = *src++;
-+                PRUint8 a = *src++;
++                uint8_t r = *src++;
++                uint8_t g = *src++;
++                uint8_t b = *src++;
++                uint8_t a = *src++;
 +
 +                // Convert to premultiplied color (losslessly if the input came from getImageData)
 +#ifdef IS_LITTLE_ENDIAN
-+                *dst++ = sPremultiplyTable[a][b];
-+                *dst++ = sPremultiplyTable[a][g];
-+                *dst++ = sPremultiplyTable[a][r];
++                *dst++ = gfxUtils::sPremultiplyTable[a * 256 + b];
++                *dst++ = gfxUtils::sPremultiplyTable[a * 256 + g];
++                *dst++ = gfxUtils::sPremultiplyTable[a * 256 + r];
 +                *dst++ = a;
 +#else
 +                *dst++ = a;
-+                *dst++ = sPremultiplyTable[a][r];
-+                *dst++ = sPremultiplyTable[a][g];
-+                *dst++ = sPremultiplyTable[a][b];
++                *dst++ = gfxUtils::sPremultiplyTable[a * 256 + r];
++                *dst++ = gfxUtils::sPremultiplyTable[a * 256 + g];
++                *dst++ = gfxUtils::sPremultiplyTable[a * 256 + b];
 +#endif
 +            }
 +        }
 +    }
- }
- 
++}
++
  } // namespace CanvasUtils
-
+ } // namespace mozilla
 diff --git a/content/canvas/src/CanvasUtils.h b/content/canvas/src/CanvasUtils.h
 --- a/content/canvas/src/CanvasUtils.h
 +++ b/content/canvas/src/CanvasUtils.h
-@@ -22,6 +22,16 @@
+@@ -17,16 +17,24 @@ namespace mozilla {
+ 
+ namespace gfx {
+ class Matrix;
+ }
+ 
  namespace CanvasUtils {
  
  
-+void GetImageData_component(PRUint8* _src, PRUint8* _dst,
-+                            PRUint32 width, PRUint32 height,
-+                            PRUint32 srcStride, PRUint32 dstStride,
-+                            PRUint8 (*sUnpremultiplyTable)[256]);
++void GetImageData_component(uint8_t* _src, uint8_t* _dst,
++                            int32_t width, int32_t height,
++                            uint32_t srcStride, uint32_t dstStride);
 +
-+void PutImageData_component(PRUint8* _src, PRUint8* _dst,
-+                            PRUint32 width, PRUint32 height,
-+                            PRUint32 srcStride, PRUint32 dstStride,
-+                            PRUint8 (*sPremultiplyTable)[256]);
++void PutImageData_component(uint8_t* _src, uint8_t* _dst,
++                            int32_t width, int32_t height,
++                            uint32_t srcStride, uint32_t dstStride);
 +
  // Check that the rectangle [x,y,w,h] is a subrectangle of [0,0,realWidth,realHeight]
  
  inline bool CheckSaneSubrectSize(int32_t x, int32_t y, int32_t w, int32_t h,
-
+                             int32_t realWidth, int32_t realHeight) {
+     CheckedInt32 checked_xmost  = CheckedInt32(x) + w;
+     CheckedInt32 checked_ymost  = CheckedInt32(y) + h;
+ 
+     return w >= 0 && h >= 0 && x >= 0 && y >= 0 &&
 diff --git a/js/src/methodjit/Compiler.cpp b/js/src/methodjit/Compiler.cpp
 --- a/js/src/methodjit/Compiler.cpp
 +++ b/js/src/methodjit/Compiler.cpp
-@@ -984,16 +984,20 @@ IonGetsFirstChance(JSContext *cx, JSScri
+@@ -987,16 +987,20 @@ IonGetsFirstChance(JSContext *cx, JSScri
      if (script->ion == ION_COMPILING_SCRIPT)
          return false;
  
@@ -856,7 +1106,7 @@ diff --git a/js/src/methodjit/Compiler.cpp b/js/src/methodjit/Compiler.cpp
      RootedScript script(cx, scriptArg);
    checkOutput:
      if (!cx->methodJitEnabled)
-@@ -1121,16 +1125,20 @@ mjit::CanMethodJIT(JSContext *cx, JSScri
+@@ -1124,16 +1128,20 @@ mjit::CanMethodJIT(JSContext *cx, JSScri
  
      /* Non-OOM errors should have an associated exception. */
      JS_ASSERT_IF(status == Compile_Error,
@@ -877,7 +1127,7 @@ diff --git a/js/src/methodjit/Compiler.cpp b/js/src/methodjit/Compiler.cpp
      /*
       * If there is no function, then this can only be called via JaegerShot(),
       * which expects an existing frame to be initialized like the interpreter.
-@@ -4845,32 +4853,40 @@ mjit::Compiler::inlineScriptedFunction(u
+@@ -4830,32 +4838,40 @@ mjit::Compiler::inlineScriptedFunction(u
   * being set. This includes any API callbacks and any scripted or native call.
   */
  void
@@ -921,7 +1171,7 @@ diff --git a/js/src/methodjit/Compiler.cpp b/js/src/methodjit/Compiler.cpp
 diff --git a/content/media/Makefile.in b/content/media/Makefile.in
 --- a/content/media/Makefile.in
 +++ b/content/media/Makefile.in
-@@ -102,8 +102,20 @@ TEST_DIRS += test
+@@ -103,8 +103,20 @@ TEST_DIRS += test
  
  FORCE_STATIC_LIB = 1
  
@@ -943,8 +1193,8 @@ diff --git a/content/media/Makefile.in b/content/media/Makefile.in
 +endif
 +endif
 diff -r 284837bbf631 toolkit/content/debug.js
---- a/toolkit/content/debug.js	Sat Aug 25 07:23:12 2012 +0900
-+++ b/toolkit/content/debug.js	Sat Aug 25 11:13:23 2012 +0900
+--- a/toolkit/content/debug.js    Sat Aug 25 07:23:12 2012 +0900
++++ b/toolkit/content/debug.js    Sat Aug 25 11:13:23 2012 +0900
 @@ -36,17 +36,17 @@ function NS_ASSERT(condition, message) {
    var releaseBuild = true;
    var defB = Components.classes["@mozilla.org/preferences-service;1"]
@@ -967,7 +1217,7 @@ diff -r 284837bbf631 toolkit/content/debug.js
 diff --git a/dom/ipc/Makefile.in b/dom/ipc/Makefile.in
 --- a/dom/ipc/Makefile.in
 +++ b/dom/ipc/Makefile.in
-@@ -113,8 +113,13 @@ ifeq ($(MOZ_WIDGET_TOOLKIT),$(findstring
+@@ -114,8 +114,13 @@ ifeq ($(MOZ_WIDGET_TOOLKIT),$(findstring
  DEFINES += -DMOZ_ENABLE_FREETYPE
  endif
  
@@ -1156,10 +1406,50 @@ diff --git a/gfx/2d/DrawTargetD2D.cpp b/gfx/2d/DrawTargetD2D.cpp
  {
    HRESULT hr;
  
+diff --git a/js/src/builtin/Eval.cpp b/js/src/builtin/Eval.cpp
+--- a/js/src/builtin/Eval.cpp
++++ b/js/src/builtin/Eval.cpp
+@@ -219,32 +219,32 @@ EvalKernel(JSContext *cx, const CallArgs
+     // isn't JSON, JSON parsing will probably fail quickly, so little time
+     // will be lost.
+     //
+     // Don't use the JSON parser if the caller is strict mode code, because in
+     // strict mode object literals must not have repeated properties, and the
+     // JSON parser cheerfully (and correctly) accepts them.  If you're parsing
+     // JSON with eval and using strict mode, you deserve to be slow.
+     if (length > 2 &&
+-        ((chars[0] == '[' && chars[length - 1] == ']') ||
+-        (chars[0] == '(' && chars[length - 1] == ')')) &&
++        ((chars.get()[0] == '[' && chars.get()[length - 1] == ']') ||
++        (chars.get()[0] == '(' && chars.get()[length - 1] == ')')) &&
+          (!caller || !caller->script()->strictModeCode))
+     {
+         // Remarkably, JavaScript syntax is not a superset of JSON syntax:
+         // strings in JavaScript cannot contain the Unicode line and paragraph
+         // terminator characters U+2028 and U+2029, but strings in JSON can.
+         // Rather than force the JSON parser to handle this quirk when used by
+         // eval, we simply don't use the JSON parser when either character
+         // appears in the provided string.  See bug 657367.
+-        for (const jschar *cp = &chars[1], *end = &chars[length - 2]; ; cp++) {
++        for (const jschar *cp = &chars.get()[1], *end = &chars.get()[length - 2]; ; cp++) {
+             if (*cp == 0x2028 || *cp == 0x2029)
+                 break;
+ 
+             if (cp == end) {
+-                bool isArray = (chars[0] == '[');
++                bool isArray = (chars.get()[0] == '[');
+                 JSONParser parser(cx, isArray ? chars : chars + 1U, isArray ? length : length - 2,
+                                   JSONParser::StrictJSON, JSONParser::NoError);
+                 RootedValue tmp(cx);
+                 if (!parser.parse(&tmp))
+                     return false;
+                 if (tmp.isUndefined())
+                     break;
+                 args.rval().set(tmp);
 diff --git a/gfx/2d/Factory.cpp b/gfx/2d/Factory.cpp
 --- a/gfx/2d/Factory.cpp
 +++ b/gfx/2d/Factory.cpp
-@@ -157,16 +157,29 @@ Factory::HasSSE2()
+@@ -164,16 +164,29 @@ Factory::HasSSE2()
    return true;
  #elif defined(HAVE_CPU_DETECTION)
    return HasCPUIDBit(1u, edx, (1u<<26));
@@ -1192,7 +1482,12 @@ diff --git a/gfx/2d/Factory.cpp b/gfx/2d/Factory.cpp
 diff --git a/layout/base/FrameLayerBuilder.cpp b/layout/base/FrameLayerBuilder.cpp
 --- a/layout/base/FrameLayerBuilder.cpp
 +++ b/layout/base/FrameLayerBuilder.cpp
-@@ -294,6 +294,10 @@
+@@ -289,37 +289,55 @@ public:
+ 
+   nscoord GetAppUnitsPerDevPixel() { return mAppUnitsPerDevPixel; }
+ 
+   nsIntRect ScaleToNearestPixels(const nsRect& aRect)
+   {
      return aRect.ScaleToNearestPixels(mParameters.mXScale, mParameters.mYScale,
                                        mAppUnitsPerDevPixel);
    }
@@ -1203,7 +1498,13 @@ diff --git a/layout/base/FrameLayerBuilder.cpp b/layout/base/FrameLayerBuilder.c
    nsIntRegion ScaleRegionToNearestPixels(const nsRegion& aRegion)
    {
      return aRegion.ScaleToNearestPixels(mParameters.mXScale, mParameters.mYScale,
-@@ -307,6 +311,13 @@
+                                         mAppUnitsPerDevPixel);
+   }
+   nsIntRect ScaleToOutsidePixels(const nsRect& aRect, bool aSnap)
+   {
+     if (aSnap && mSnappingEnabled) {
+       return ScaleToNearestPixels(aRect);
+     }
      return aRect.ScaleToOutsidePixels(mParameters.mXScale, mParameters.mYScale,
                                        mAppUnitsPerDevPixel);
    }
@@ -1217,11 +1518,11 @@ diff --git a/layout/base/FrameLayerBuilder.cpp b/layout/base/FrameLayerBuilder.c
    nsIntRect ScaleToInsidePixels(const nsRect& aRect, bool aSnap)
    {
      if (aSnap && mSnappingEnabled) {
-@@ -315,7 +326,13 @@
+       return ScaleToNearestPixels(aRect);
+     }
      return aRect.ScaleToInsidePixels(mParameters.mXScale, mParameters.mYScale,
                                       mAppUnitsPerDevPixel);
    }
--
 +  nsIntRect ToInsidePixels(const nsRect& aRect, bool aSnap)
 +  {
 +    if (aSnap && mSnappingEnabled) {
@@ -1229,18 +1530,38 @@ diff --git a/layout/base/FrameLayerBuilder.cpp b/layout/base/FrameLayerBuilder.c
 +    }
 +    return aRect.ToInsidePixels(mAppUnitsPerDevPixel);
 +  }
+ 
    nsIntRegion ScaleRegionToInsidePixels(const nsRegion& aRegion, bool aSnap)
    {
      if (aSnap && mSnappingEnabled) {
-@@ -2045,6 +2062,7 @@
+       return ScaleRegionToNearestPixels(aRegion);
+     }
+     return aRegion.ScaleToInsidePixels(mParameters.mXScale, mParameters.mYScale,
+                                         mAppUnitsPerDevPixel);
+@@ -2040,16 +2058,17 @@ ContainerState::ProcessDisplayItems(cons
+                                     FrameLayerBuilder::Clip& aClip,
+                                     uint32_t aFlags,
+                                     const nsIFrame* aForceActiveScrolledRoot)
+ {
+   SAMPLE_LABEL("ContainerState", "ProcessDisplayItems");
  
    const nsIFrame* lastActiveScrolledRoot = nullptr;
    nsPoint topLeft;
-+   const bool scaled = mParameters.Scaled();
++  const bool scaled = mParameters.Scaled();
  
    // When NO_COMPONENT_ALPHA is set, items will be flattened into a single
    // layer, so we need to choose which active scrolled root to use for all
-@@ -2072,13 +2090,16 @@
+   // items.
+   if (aFlags & NO_COMPONENT_ALPHA) {
+     if (aForceActiveScrolledRoot) {
+       lastActiveScrolledRoot = aForceActiveScrolledRoot;
+     } else if (!ChooseActiveScrolledRoot(aList, &lastActiveScrolledRoot)) {
+@@ -2067,23 +2086,26 @@ ContainerState::ProcessDisplayItems(cons
+       ProcessDisplayItems(*item->GetSameCoordinateSystemChildren(), childClip, aFlags, lastActiveScrolledRoot);
+       continue;
+     }
+ 
+     NS_ASSERTION(mAppUnitsPerDevPixel == AppUnitsPerDevPixel(item),
        "items in a container layer should all have the same app units per dev pixel");
  
      nsIntRect itemVisibleRect =
@@ -1260,7 +1581,17 @@ diff --git a/layout/base/FrameLayerBuilder.cpp b/layout/base/FrameLayerBuilder.c
        itemDrawRect.IntersectRect(itemDrawRect, clipRect);
      }
      mBounds.UnionRect(mBounds, itemContent);
-@@ -2161,7 +2182,8 @@
+     itemVisibleRect.IntersectRect(itemVisibleRect, itemDrawRect);
+ 
+     LayerState layerState = item->GetLayerState(mBuilder, mManager, mParameters);
+ 
+     bool isFixed;
+@@ -2156,17 +2178,18 @@ ContainerState::ProcessDisplayItems(cons
+       NS_ASSERTION(ownLayer->Manager() == mManager, "Wrong manager");
+       NS_ASSERTION(!ownLayer->HasUserData(&gLayerManagerUserData),
+                    "We shouldn't have a FrameLayerBuilder-managed layer here!");
+       NS_ASSERTION(aClip.mHaveClipRect ||
+                      aClip.mRoundedClipRects.IsEmpty(),
                     "If we have rounded rects, we must have a clip rect");
        // It has its own layer. Update that layer's clip and visible rects.
        if (aClip.mHaveClipRect) {
@@ -1270,7 +1601,11 @@ diff --git a/layout/base/FrameLayerBuilder.cpp b/layout/base/FrameLayerBuilder.c
          clip.MoveBy(mParameters.mOffset);
          ownLayer->IntersectClipRect(clip);
        }
-
+       ThebesLayerData* data = GetTopThebesLayerData();
+       if (data) {
+         data->mVisibleAboveRegion.Or(data->mVisibleAboveRegion, itemVisibleRect);
+         data->mVisibleAboveRegion.SimplifyOutward(4);
+         // Add the entire bounds rect to the mDrawAboveRegion.
 diff --git a/layout/base/FrameLayerBuilder.h b/layout/base/FrameLayerBuilder.h
 --- a/layout/base/FrameLayerBuilder.h
 +++ b/layout/base/FrameLayerBuilder.h
@@ -1299,12 +1634,7 @@ diff --git a/layout/base/FrameLayerBuilder.h b/layout/base/FrameLayerBuilder.h
 diff --git a/security/nss/lib/freebl/Makefile b/security/nss/lib/freebl/Makefile
 --- a/security/nss/lib/freebl/Makefile
 +++ b/security/nss/lib/freebl/Makefile
-@@ -124,21 +124,20 @@ ifdef NS_USE_GCC
- #     DEFINES += -DMP_ASSEMBLY_MULTIPLY -DMP_ASSEMBLY_SQUARE \
- #                -DMP_ASSEMBLY_DIV_2DX1D
- # but we haven't figured out how to make it work, so we are not
- # using assembler right now.
-     ASFILES  =
+@@ -129,11 +129,10 @@
      DEFINES += -DMP_NO_MP_WORD -DMP_USE_UINT_DIGIT
  else
  # MSVC
@@ -1312,26 +1642,22 @@ diff --git a/security/nss/lib/freebl/Makefile b/security/nss/lib/freebl/Makefile
      DEFINES += -DMP_ASSEMBLY_MULTIPLY -DMP_ASSEMBLY_SQUARE 
      DEFINES += -DMP_ASSEMBLY_DIV_2DX1D -DMP_USE_UINT_DIGIT -DMP_NO_MP_WORD
      ifdef BUILD_OPT
--	OPTIMIZER += -Ox  # maximum optimization for freebl
-+	OPTIMIZER += -O2  # maximum optimization for freebl
+-    OPTIMIZER += -Ox  # maximum optimization for freebl
++    OPTIMIZER += -O2  # maximum optimization for freebl
      endif
- endif
- else
-     # -DMP_NO_MP_WORD
-     DEFINES += -DMP_CHAR_STORE_SLOW -DMP_IS_LITTLE_ENDIAN
- ifdef NS_USE_GCC
- # Ideally, we should use amd64 assembly code, but it's not yet mingw-w64
- # compatible.
+     # Intel AES-NI support (required VS2008 or later)
+     DEFINES += -DUSE_HW_AES
+
 diff --git a/security/nss/lib/freebl/manifest.mn b/security/nss/lib/freebl/manifest.mn
 --- a/security/nss/lib/freebl/manifest.mn
 +++ b/security/nss/lib/freebl/manifest.mn
 @@ -59,17 +59,21 @@ PRIVATE_EXPORTS = \
- 	secmpi.h \
- 	secrng.h \
- 	ec.h \
- 	ecl.h \
- 	ecl-curve.h \
- 	$(NULL)
+     secmpi.h \
+     secrng.h \
+     ec.h \
+     ecl.h \
+     ecl-curve.h \
+     $(NULL)
  
  MPI_HDRS = mpi-config.h mpi.h mpi-priv.h mplogic.h mpprime.h logtab.h mp_gf2m.h
 +ifdef USE_64
@@ -1344,13 +1670,18 @@ diff --git a/security/nss/lib/freebl/manifest.mn b/security/nss/lib/freebl/manif
  ECL_HDRS = ecl-exp.h ecl.h ec2.h ecp.h ecl-priv.h
  ifdef NSS_ENABLE_ECC
  ECL_SRCS = ecl.c ecl_curve.c ecl_mult.c ecl_gf.c \
- 	ecp_aff.c ecp_jac.c ecp_mont.c \
- 	ec_naf.c ecp_jm.c
+     ecp_aff.c ecp_jac.c ecp_mont.c \
+     ec_naf.c ecp_jm.c
  ifdef NSS_ECC_MORE_THAN_SUITE_B
 diff --git a/gfx/2d/Makefile.in b/gfx/2d/Makefile.in
 --- a/gfx/2d/Makefile.in
 +++ b/gfx/2d/Makefile.in
-@@ -114,14 +114,11 @@
+@@ -109,25 +109,22 @@ endif
+ DEFINES += -DSK_A32_SHIFT=24 -DSK_R32_SHIFT=16 -DSK_G32_SHIFT=8 -DSK_B32_SHIFT=0
+ 
+ ifdef MOZ_DEBUG
+ DEFINES += -DGFX_LOG_DEBUG -DGFX_LOG_WARNING
+ endif
  
  # Are we targeting x86 or x64?  If so, build SSE2 files.
  ifneq (,$(INTEL_ARCHITECTURE))
@@ -1361,10 +1692,64 @@ diff --git a/gfx/2d/Makefile.in b/gfx/2d/Makefile.in
          BlurSSE2.cpp \
          $(NULL)
  DEFINES += -DUSE_SSE2
--endif
  endif
+-endif
  
  ifeq ($(MOZ_WIDGET_TOOLKIT),windows)
+ CPPSRCS    += \
+         DrawTargetD2D.cpp \
+         SourceSurfaceD2D.cpp \
+         SourceSurfaceD2DTarget.cpp \
+         PathD2D.cpp \
+         ScaledFontDWrite.cpp \
+diff --git a/gfx/2d/moz-d2d1-1.h b/gfx/2d/moz-d2d1-1.h
+--- a/gfx/2d/moz-d2d1-1.h
++++ b/gfx/2d/moz-d2d1-1.h
+@@ -7,16 +7,25 @@
+ //---------------------------------------------------------------------------
+ #pragma once
+ 
+ #ifndef _D2D1_1_H_
+ #ifndef _D2D1_H_
+ #include <d2d1.h>
+ #endif // #ifndef _D2D1_H_
+ 
++#if _MSC_VER == 1400
++#ifndef _In_
++#define _In_
++#endif
++#ifndef _In_opt_
++#define _In_opt_
++#endif
++#endif
++
+ //+-----------------------------------------------------------------------------
+ //
+ //  Flag:
+ //      D2D1_LAYER_OPTIONS1
+ //
+ //  Synopsis:
+ //      Specifies how the layer contents should be prepared.
+ //
+diff --git a/gfx/cairo/cairo/src/moz-d2d1-1.h b/gfx/cairo/cairo/src/moz-d2d1-1.h
+--- a/gfx/cairo/cairo/src/moz-d2d1-1.h
++++ b/gfx/cairo/cairo/src/moz-d2d1-1.h
+@@ -12,6 +12,15 @@
+ #include <d2d1.h>
+ #endif // #ifndef _D2D1_H_
+ 
+++#if _MSC_VER == 1400
+++#ifndef _In_
+++#define _In_
+++#endif
+++#ifndef _In_opt_
+++#define _In_opt_
+++#endif
+++#endif
++
+ //+-----------------------------------------------------------------------------
+ //
+ //  Flag:
 
 diff --git a/gfx/thebes/gfxContext.h b/gfx/thebes/gfxContext.h
 --- a/gfx/thebes/gfxContext.h
@@ -1395,7 +1780,7 @@ diff --git a/gfx/thebes/gfxContext.h b/gfx/thebes/gfxContext.h
 diff --git a/gfx/thebes/gfxUtils.cpp b/gfx/thebes/gfxUtils.cpp
 --- a/gfx/thebes/gfxUtils.cpp
 +++ b/gfx/thebes/gfxUtils.cpp
-@@ -457,18 +457,22 @@ gfxUtils::DrawPixelSnapped(gfxContext*  
+@@ -422,18 +422,22 @@ gfxUtils::DrawPixelSnapped(gfxContext*  
                             const gfxRect&   aSourceRect,
                             const gfxRect&   aImageRect,
                             const gfxRect&   aFill,
@@ -1420,43 +1805,49 @@ diff --git a/gfx/thebes/gfxUtils.cpp b/gfx/thebes/gfxUtils.cpp
      AutoCairoPixmanBugWorkaround workaround(aContext, deviceSpaceToImageSpace,
                                              aFill, currentTarget);
      if (!workaround.Succeeded())
-diff -r 42edc8f4c9c6 gfx/2d/ImageScalingSSE2.cpp
---- a/gfx/2d/ImageScalingSSE2.cpp	Sat Aug 25 11:51:05 2012 +0900
-+++ b/gfx/2d/ImageScalingSSE2.cpp	Sat Aug 25 17:48:42 2012 +0900
-@@ -8,6 +8,28 @@
+diff --git a/gfx/harfbuzz/src/hb-open-type-private.hh b/gfx/harfbuzz/src/hb-open-type-private.hh
+--- a/gfx/harfbuzz/src/hb-open-type-private.hh
++++ b/gfx/harfbuzz/src/hb-open-type-private.hh
+@@ -898,29 +898,31 @@ struct HeadlessArrayOf
+ };
  
- #include "SSEHelpers.h"
  
+ /* An array with sorted elements.  Supports binary searching. */
+ template <typename Type>
+ struct SortedArrayOf : ArrayOf<Type> {
+ 
+   template <typename SearchType>
++  struct Cmp {
++    static int cmp (const SearchType *a, const Type *b) { return b->cmp (*a); }
++  };
 +
-+/* VC8 doesn't support some SSE2 built-in functions, so we define them here. */
-+#if defined(_MSC_VER) && (_MSC_VER < 1500)
-+static __forceinline __m128
-+_mm_castsi128_ps(__m128i a)
-+{
-+    return *(__m128 *)&a;
-+}
-+
-+static __forceinline __m128i
-+_mm_castpd_si128(__m128d a)
-+{
-+    return *(__m128i *)&a;
-+}
-+
-+static __forceinline __m128i
-+_mm_castps_si128(__m128 a)
-+{
-+    return *(__m128i *)&a;
-+}
-+#endif
-+
- /* The functions below use the following system for averaging 4 pixels:
-  *
-  * The first observation is that a half-adder is implemented as follows:
-
++  template <typename SearchType>
+   inline int search (const SearchType &x) const {
+     unsigned int count = this->len;
+     /* Linear search is *much* faster for small counts. */
+     if (likely (count < 32)) {
+       for (unsigned int i = 0; i < count; i++)
+     if (this->array[i].cmp (x) == 0)
+       return i;
+       return -1;
+     } else {
+-      struct Cmp {
+-    static int cmp (const SearchType *a, const Type *b) { return b->cmp (*a); }
+-      };
+-      const Type *p = (const Type *) bsearch (&x, this->array, this->len, sizeof (this->array[0]), (hb_compare_func_t) Cmp::cmp);
++      const Type *p = (const Type *) bsearch (&x, this->array, this->len, sizeof (this->array[0]), (hb_compare_func_t) Cmp<SearchType>::cmp);
+       return p ? p - this->array : -1;
+     }
+   }
+ };
+ 
+ 
+ } // namespace OT
+ 
 diff --git a/image/src/imgFrame.cpp b/image/src/imgFrame.cpp
 --- a/image/src/imgFrame.cpp
 +++ b/image/src/imgFrame.cpp
-@@ -437,16 +437,19 @@ void imgFrame::Draw(gfxContext *aContext
+@@ -438,16 +438,19 @@ void imgFrame::Draw(gfxContext *aContext
                      const nsIntMargin &aPadding, const nsIntRect &aSubimage,
                      uint32_t aImageFlags)
  {
@@ -1476,7 +1867,7 @@ diff --git a/image/src/imgFrame.cpp b/image/src/imgFrame.cpp
      return;
    }
  
-@@ -455,24 +458,27 @@ void imgFrame::Draw(gfxContext *aContext
+@@ -456,24 +459,27 @@ void imgFrame::Draw(gfxContext *aContext
    gfxRect imageRect(0, 0, mSize.width + aPadding.LeftRight(),
                      mSize.height + aPadding.TopBottom());
    gfxRect subimage(aSubimage.x, aSubimage.y, aSubimage.width, aSubimage.height);
@@ -1509,38 +1900,47 @@ diff --git a/image/src/imgFrame.cpp b/image/src/imgFrame.cpp
 diff --git a/image/src/imgLoader.cpp b/image/src/imgLoader.cpp
 --- a/image/src/imgLoader.cpp
 +++ b/image/src/imgLoader.cpp
-@@ -1141,13 +1141,15 @@
-     NS_ASSERTION(entry, "imgLoader::CheckCacheLimits -- NULL entry pointer");
+@@ -754,23 +754,25 @@ imgCacheExpirationTracker::imgCacheExpir
+ 
+ void imgCacheExpirationTracker::NotifyExpired(imgCacheEntry *entry)
+ {
+   // Hold on to a reference to this entry, because the expiration tracker
+   // mechanism doesn't.
+   nsRefPtr<imgCacheEntry> kungFuDeathGrip(entry);
  
  #if defined(PR_LOGGING)
--    nsRefPtr<imgRequest> req(entry->GetRequest());
--    if (req) {
--      nsCOMPtr<nsIURI> uri;
--      req->GetURI(getter_AddRefs(uri));
--      nsAutoCString spec;
--      uri->GetSpec(spec);
--      LOG_STATIC_FUNC_WITH_PARAM(GetImgLog(), "imgLoader::CheckCacheLimits", "entry", spec.get());
-+    if (entry) {
-+      nsRefPtr<imgRequest> req(entry->GetRequest());
-+      if (req) {
-+        nsCOMPtr<nsIURI> uri;
-+        req->GetURI(getter_AddRefs(uri));
-+        nsAutoCString spec;
-+        uri->GetSpec(spec);
-+        LOG_STATIC_FUNC_WITH_PARAM(gImgLog, "imgLoader::CheckCacheLimits", "entry", spec.get());
-+      }
-     }
+-  nsRefPtr<imgRequest> req(entry->GetRequest());
+-  if (req) {
+-    nsCOMPtr<nsIURI> uri;
+-    req->GetURI(getter_AddRefs(uri));
+-    nsAutoCString spec;
+-    uri->GetSpec(spec);
+-    LOG_FUNC_WITH_PARAM(GetImgLog(), "imgCacheExpirationTracker::NotifyExpired", "entry", spec.get());
++  if (entry) {
++    nsRefPtr<imgRequest> req(entry->GetRequest());
++    if (req) {
++      nsCOMPtr<nsIURI> uri;
++      req->GetURI(getter_AddRefs(uri));
++      nsAutoCString spec;
++      uri->GetSpec(spec);
++      LOG_FUNC_WITH_PARAM(GetImgLog(), "imgCacheExpirationTracker::NotifyExpired", "entry", spec.get());
++    }
+   }
  #endif
  
-
+   // We can be called multiple times on the same entry. Don't do work multiple
+   // times.
+   if (!entry->Evicted())
+     entry->Loader()->RemoveFromCache(entry);
+ 
 diff --git a/ipc/ipdl/Makefile.in b/ipc/ipdl/Makefile.in
 --- a/ipc/ipdl/Makefile.in
 +++ b/ipc/ipdl/Makefile.in
 @@ -96,8 +96,13 @@ export:: $(ALL_IPDLSRCS)
- 	  --outheaders-dir=_ipdlheaders \
- 	  --outcpp-dir=. \
- 	  $(IPDLDIRS:%=-I$(topsrcdir)/%) \
- 	  $^
+       --outheaders-dir=_ipdlheaders \
+       --outcpp-dir=. \
+       $(IPDLDIRS:%=-I$(topsrcdir)/%) \
+       $^
  
  # We #include some things in the dom/plugins/ directory that rely on
  # toolkit libraries.
@@ -1585,14 +1985,14 @@ diff --git a/memory/mozjemalloc/jemalloc.c b/memory/mozjemalloc/jemalloc.c
  
  #pragma warning( disable: 4267 4996 4146 )
  
- #define	bool BOOL
- #define	false FALSE
- #define	true TRUE
- #define	inline __inline
- #define	SIZE_T_MAX SIZE_MAX
- #define	STDERR_FILENO 2
- #define	PATH_MAX MAX_PATH
- #define	vsnprintf _vsnprintf
+ #define    bool BOOL
+ #define    false FALSE
+ #define    true TRUE
+ #define    inline __inline
+ #define    SIZE_T_MAX SIZE_MAX
+ #define    STDERR_FILENO 2
+ #define    PATH_MAX MAX_PATH
+ #define    vsnprintf _vsnprintf
  
  #ifndef NO_TLS
  static unsigned long tlsIndex = 0xffffffff;
@@ -1608,46 +2008,46 @@ diff --git a/memory/mozjemalloc/jemalloc.c b/memory/mozjemalloc/jemalloc.c
 +  int EDX;
 +} CPU_INFO;
 +
- #define	__thread
- #define	_pthread_self() __threadid()
- #define	issetugid() 0
+ #define    __thread
+ #define    _pthread_self() __threadid()
+ #define    issetugid() 0
  
  /* use MSVC intrinsics */
  #pragma intrinsic(_BitScanForward)
  static __forceinline int
  ffs(int x)
-@@ -5661,16 +5691,30 @@ malloc_init_hard(void)
- 		malloc_mutex_unlock(&init_lock);
+@@ -5669,16 +5699,30 @@ malloc_init_hard(void)
+         malloc_mutex_unlock(&init_lock);
  #endif
- 		return (false);
- 	}
+         return (false);
+     }
  
  #ifdef MOZ_MEMORY_WINDOWS
- 	/* get a thread local storage index */
- 	tlsIndex = TlsAlloc();
+     /* get a thread local storage index */
+     tlsIndex = TlsAlloc();
 +
-+	{
-+		CPU_INFO CPUInfo;
++    {
++        CPU_INFO CPUInfo;
 +
-+		__cpuid((int*)&CPUInfo, 0);
-+		if (CPUInfo.EAX >= 1)
-+		{
-+			__cpuid((int*)&CPUInfo, 1);
-+			if (CPUInfo.ECX & (1 << 19))
-+			{
-+				sse4_1_supported = TRUE;
-+			}
-+		}
-+	}
++        __cpuid((int*)&CPUInfo, 0);
++        if (CPUInfo.EAX >= 1)
++        {
++            __cpuid((int*)&CPUInfo, 1);
++            if (CPUInfo.ECX & (1 << 19))
++            {
++                sse4_1_supported = TRUE;
++            }
++        }
++    }
  #endif
  
- 	/* Get page size and number of CPUs */
+     /* Get page size and number of CPUs */
  #ifdef MOZ_MEMORY_WINDOWS
- 	{
- 		SYSTEM_INFO info;
+     {
+         SYSTEM_INFO info;
  
- 		GetSystemInfo(&info);
-@@ -7216,8 +7260,81 @@ BOOL APIENTRY DllMain(HINSTANCE hModule,
+         GetSystemInfo(&info);
+@@ -7232,8 +7276,81 @@ BOOL APIENTRY DllMain(HINSTANCE hModule,
      case DLL_PROCESS_DETACH:
        break;
  
@@ -1734,7 +2134,7 @@ diff --git a/js/src/Makefile.in b/js/src/Makefile.in
 +++ b/js/src/Makefile.in
 @@ -945,8 +945,23 @@ endif
  TestMain$(HOST_BIN_SUFFIX): $(TESTMAIN_OBJS)
- 	$(CXX) -o TestMain$(HOST_BIN_SUFFIX) $(TESTMAIN_OBJS)
+     $(CXX) -o TestMain$(HOST_BIN_SUFFIX) $(TESTMAIN_OBJS)
  endif
  
  #
@@ -1759,7 +2159,7 @@ diff --git a/js/src/Makefile.in b/js/src/Makefile.in
 diff --git a/js/src/jsapi.cpp b/js/src/jsapi.cpp
 --- a/js/src/jsapi.cpp
 +++ b/js/src/jsapi.cpp
-@@ -2006,17 +2006,17 @@ JS_EnumerateStandardClasses(JSContext *c
+@@ -2015,17 +2015,17 @@ JS_EnumerateStandardClasses(JSContext *c
      assertSameCompartment(cx, obj);
  
      /*
@@ -1778,7 +2178,7 @@ diff --git a/js/src/jsapi.cpp b/js/src/jsapi.cpp
  
      /* Initialize any classes that have not been initialized yet. */
      for (unsigned i = 0; standard_class_atoms[i].init; i++) {
-@@ -2084,17 +2084,17 @@ AddNameToArray(JSContext *cx, PropertyNa
+@@ -2093,17 +2093,17 @@ AddNameToArray(JSContext *cx, PropertyNa
      *ip = i + 1;
      return ida;
  }
@@ -1797,7 +2197,7 @@ diff --git a/js/src/jsapi.cpp b/js/src/jsapi.cpp
  JS_PUBLIC_API(JSIdArray *)
  JS_EnumerateResolvedStandardClasses(JSContext *cx, JSObject *objArg, JSIdArray *ida)
  {
-@@ -3705,17 +3705,17 @@ JS_AlreadyHasOwnPropertyById(JSContext *
+@@ -3701,17 +3701,17 @@ JS_AlreadyHasOwnPropertyById(JSContext *
          if (!LookupPropertyById(cx, obj, id, JSRESOLVE_QUALIFIED | JSRESOLVE_DETECTING,
                                  &obj2, &prop)) {
              return JS_FALSE;
@@ -1922,7 +2322,7 @@ diff --git a/js/src/jsdhash.cpp b/js/src/jsdhash.cpp
 diff --git a/js/src/jsiter.cpp b/js/src/jsiter.cpp
 --- a/js/src/jsiter.cpp
 +++ b/js/src/jsiter.cpp
-@@ -344,17 +344,17 @@ size_t sCustomIteratorCount = 0;
+@@ -345,17 +345,17 @@ size_t sCustomIteratorCount = 0;
  
  static inline bool
  GetCustomIterator(JSContext *cx, HandleObject obj, unsigned flags, MutableHandleValue vp)
@@ -2172,7 +2572,12 @@ diff --git a/js/src/jsmath.cpp b/js/src/jsmath.cpp
 diff --git a/js/src/jsobj.cpp b/js/src/jsobj.cpp
 --- a/js/src/jsobj.cpp
 +++ b/js/src/jsobj.cpp
-@@ -4241,7 +4241,7 @@
+@@ -4236,17 +4236,17 @@ js_NativeGetInline(JSContext *cx, Handle
+     Rooted<Shape*> shapeRoot(cx, shape);
+     RootedObject pobjRoot(cx, pobj);
+     RootedValue nvp(cx, *vp);
+ 
+     if (!shape->get(cx, receiver, obj, pobj, &nvp))
          return false;
  
      /* Update slotful shapes according to the value produced by the getter. */
@@ -2181,16 +2586,11 @@ diff --git a/js/src/jsobj.cpp b/js/src/jsobj.cpp
          pobjRoot->nativeSetSlot(shapeRoot->slot(), nvp);
  
      *vp = nvp;
-@@ -4293,7 +4293,7 @@
-      */
-     if (shape->hasSlot() &&
-         (JS_LIKELY(cx->runtime->propertyRemovals == sample) ||
--         obj->nativeContains(cx, shape))) {
-+         obj->nativeContains(cx, (HandleShape)shapeRoot))) {
-         AddTypePropertyId(cx, obj, shape->propid(), *vp);
-         obj->setSlot(shape->slot(), nvp);
-     }
-
+     return true;
+ }
+ 
+ JSBool
+ js_NativeGet(JSContext *cx, Handle<JSObject*> obj, Handle<JSObject*> pobj, Shape *shape,
 diff --git a/js/src/jsobjinlines.h b/js/src/jsobjinlines.h
 --- a/js/src/jsobjinlines.h
 +++ b/js/src/jsobjinlines.h
@@ -2215,7 +2615,7 @@ diff --git a/js/src/jsobjinlines.h b/js/src/jsobjinlines.h
  #include "jsiter.h"
  #include "jslock.h"
  #include "jsnum.h"
-@@ -1374,17 +1378,35 @@ class AutoPropertyDescriptorRooter : pri
+@@ -1377,17 +1381,35 @@ class AutoPropertyDescriptorRooter : pri
      }
  
      friend void AutoGCRooter::trace(JSTracer *trc);
@@ -2254,7 +2654,7 @@ diff --git a/js/src/jsobjinlines.h b/js/src/jsobjinlines.h
 diff --git a/js/src/jsreflect.cpp b/js/src/jsreflect.cpp
 --- a/js/src/jsreflect.cpp
 +++ b/js/src/jsreflect.cpp
-@@ -323,77 +323,77 @@ class NodeBuilder
+@@ -325,77 +325,77 @@ class NodeBuilder
      }
  
      bool newArray(NodeVector &elts, MutableHandleValue dst);
@@ -2338,7 +2738,7 @@ diff --git a/js/src/jsreflect.cpp b/js/src/jsreflect.cpp
                 setResult(node, dst);
      }
  
-@@ -402,17 +402,17 @@ class NodeBuilder
+@@ -404,17 +404,17 @@ class NodeBuilder
                   const char *childName2, HandleValue child2,
                   const char *childName3, HandleValue child3,
                   const char *childName4, HandleValue child4,
@@ -2357,9 +2757,175 @@ diff --git a/js/src/jsreflect.cpp b/js/src/jsreflect.cpp
                 setProperty(node, childName6, child6) &&
                 setProperty(node, childName7, child7) &&
                 setResult(node, dst);
+diff --git a/js/src/jsxml.cpp b/js/src/jsxml.cpp
+--- a/js/src/jsxml.cpp
++++ b/js/src/jsxml.cpp
+@@ -3944,17 +3944,17 @@ PutProperty(JSContext *cx, HandleObject 
+                 nameobj = targetprop;
+                 if (nameobj->getClass() == &AttributeNameClass) {
+                     /*
+                      * 2(c)(iii)(1-3).
+                      * Note that rxml can't be null here, because target
+                      * and targetprop are non-null.
+                      */
+                     Rooted<JSObject*> robj(cx, rxml->object);
+-                    ok = GetProperty(cx, robj, id, &attrval);
++                    ok = GetProperty(cx, robj, (HandleId)id, &attrval);
+                     if (!ok)
+                         goto out;
+                     if (JSVAL_IS_PRIMITIVE(attrval))    /* no such attribute */
+                         goto out;
+                     attrobj = JSVAL_TO_OBJECT(attrval);
+                     attr = (JSXML *) attrobj->getPrivate();
+                     if (JSXML_LENGTH(attr) != 0)
+                         goto out;
+@@ -4052,17 +4052,17 @@ PutProperty(JSContext *cx, HandleObject 
+                 RootedObject parentobj(cx, js_GetXMLObject(cx, parent));
+                 if (!parentobj)
+                     goto bad;
+                 ok = PutProperty(cx, parentobj, id, strict, vp);
+                 if (!ok)
+                     goto out;
+ 
+                 /* 2(e)(ii). */
+-                ok = GetProperty(cx, parentobj, id, vp);
++                ok = GetProperty(cx, parentobj, (HandleId)id, vp);
+                 if (!ok)
+                     goto out;
+                 attr = (JSXML *) JSVAL_TO_OBJECT(vp)->getPrivate();
+ 
+                 /* 2(e)(iii) - the length check comes from the bug 375406. */
+                 if (attr->xml_kids.length != 0)
+                     xml->xml_kids.vector[i] = attr->xml_kids.vector[0];
+             }
+@@ -4511,29 +4511,29 @@ ResolveValue(JSContext *cx, JSXML *list,
+         *result = NULL;
+         return JS_TRUE;
+     }
+     if (!js_GetXMLObject(cx, base))
+         return JS_FALSE;
+ 
+     RootedId id(cx, OBJECT_TO_JSID(targetprop));
+     Rooted<JSObject*> baseObj(cx, base->object);
+-    if (!GetProperty(cx, baseObj, id, &tv))
++    if (!GetProperty(cx, baseObj, (HandleId)id, &tv))
+         return JS_FALSE;
+     target = (JSXML *) JSVAL_TO_OBJECT(tv)->getPrivate();
+ 
+     if (JSXML_LENGTH(target) == 0) {
+         if (base->xml_class == JSXML_CLASS_LIST && JSXML_LENGTH(base) > 1) {
+             *result = NULL;
+             return JS_TRUE;
+         }
+         tv = STRING_TO_JSVAL(cx->runtime->emptyString);
+         if (!PutProperty(cx, baseObj, id, false, &tv))
+             return JS_FALSE;
+-        if (!GetProperty(cx, baseObj, id, &tv))
++        if (!GetProperty(cx, baseObj, (HandleId)id, &tv))
+             return JS_FALSE;
+         target = (JSXML *) JSVAL_TO_OBJECT(tv)->getPrivate();
+     }
+ 
+     *result = target;
+     return JS_TRUE;
+ }
+ 
+@@ -5457,17 +5457,17 @@ xml_appendChild(JSContext *cx, unsigned 
+     if (!xml)
+         return JS_FALSE;
+ 
+     RootedId name(cx);
+     if (!js_GetAnyName(cx, name.address()))
+         return JS_FALSE;
+ 
+     RootedValue v(cx);
+-    if (!GetProperty(cx, obj, name, &v))
++    if (!GetProperty(cx, obj, (HandleId)name, &v))
+         return JS_FALSE;
+ 
+     JS_ASSERT(!JSVAL_IS_PRIMITIVE(v));
+     Rooted<JSObject*> vobj(cx, &v.toObject());
+     JS_ASSERT(vobj->isXML());
+     JSXML *vxml = (JSXML *) vobj->getPrivate();
+     JS_ASSERT(vxml->xml_class == JSXML_CLASS_LIST);
+ 
+@@ -5498,33 +5498,33 @@ xml_attribute(JSContext *cx, unsigned ar
+     if (!qn)
+         return JS_FALSE;
+     vp[2] = OBJECT_TO_JSVAL(qn);        /* local root */
+ 
+     RootedId id(cx, OBJECT_TO_JSID(qn));
+     RootedObject obj(cx, ToObject(cx, HandleValue::fromMarkedLocation(&vp[1])));
+     if (!obj)
+         return JS_FALSE;
+-    return GetProperty(cx, obj, id, MutableHandleValue::fromMarkedLocation(vp));
++    return GetProperty(cx, obj, (HandleId)id, MutableHandleValue::fromMarkedLocation(vp));
+ }
+ 
+ /* XML and XMLList */
+ static JSBool
+ xml_attributes(JSContext *cx, unsigned argc, jsval *vp)
+ {
+     jsval name = STRING_TO_JSVAL(cx->names().star);
+     JSObject *qn = ToAttributeName(cx, name);
+     if (!qn)
+         return JS_FALSE;
+ 
+     RootedId id(cx, OBJECT_TO_JSID(qn));
+     RootedObject obj(cx, ToObject(cx, HandleValue::fromMarkedLocation(&vp[1])));
+     if (!obj)
+         return JS_FALSE;
+-    return GetProperty(cx, obj, id, MutableHandleValue::fromMarkedLocation(vp));
++    return GetProperty(cx, obj, (HandleId)id, MutableHandleValue::fromMarkedLocation(vp));
+ }
+ 
+ static JSXML *
+ xml_list_helper(JSContext *cx, JSXML *xml, jsval *rval)
+ {
+     JSObject *listobj;
+     JSXML *list;
+ 
+@@ -5594,17 +5594,17 @@ xml_child_helper(JSContext *cx, JSObject
+         }
+         return JS_TRUE;
+     }
+ 
+     RootedId id(cx);
+     if (!ValueToIdForXML(cx, name, id.address()))
+         return JS_FALSE;
+ 
+-    return GetProperty(cx, obj, id, rval);
++    return GetProperty(cx, obj, (HandleId)id, rval);
+ }
+ 
+ /* XML and XMLList */
+ static JSBool
+ xml_child(JSContext *cx, unsigned argc, jsval *vp)
+ {
+     RootedValue v(cx);
+     JSXML *list, *vxml;
+@@ -5675,17 +5675,17 @@ xml_childIndex(JSContext *cx, unsigned a
+ /* XML and XMLList */
+ static JSBool
+ xml_children(JSContext *cx, unsigned argc, jsval *vp)
+ {
+     RootedObject obj(cx, ToObject(cx, HandleValue::fromMarkedLocation(&vp[1])));
+     if (!obj)
+         return false;
+     RootedId name(cx, NameToId(cx->names().star));
+-    return GetProperty(cx, obj, name, MutableHandleValue::fromMarkedLocation(vp));
++    return GetProperty(cx, obj, (HandleId)name, MutableHandleValue::fromMarkedLocation(vp));
+ }
+ 
+ /* XML and XMLList */
+ static JSBool
+ xml_comments_helper(JSContext *cx, JSObject *obj, JSXML *xml, jsval *vp)
+ {
+     JSXML *list, *kid, *vxml;
+     JSBool ok;
 diff -r 6a3897dad583 gfx/cairo/libpixman/src/Makefile.in
---- a/gfx/cairo/libpixman/src/Makefile.in	Sat Oct 06 15:30:41 2012 +0900
-+++ b/gfx/cairo/libpixman/src/Makefile.in	Sat Oct 06 15:47:11 2012 +0900
+--- a/gfx/cairo/libpixman/src/Makefile.in    Sat Oct 06 15:30:41 2012 +0900
++++ b/gfx/cairo/libpixman/src/Makefile.in    Sat Oct 06 15:47:11 2012 +0900
 @@ -21,17 +21,18 @@ DEFINES += -DPIXMAN_NO_TLS
  
  # Build MMX code either with VC or with gcc-on-x86
@@ -2412,15 +2978,44 @@ diff -r 6a3897dad583 gfx/cairo/libpixman/src/Makefile.in
 diff --git a/mozglue/build/mozglue.def.in b/mozglue/build/mozglue.def.in
 --- a/mozglue/build/mozglue.def.in
 +++ b/mozglue/build/mozglue.def.in
-@@ -33,4 +33,7 @@
+@@ -28,9 +28,11 @@ EXPORTS
+   strdup=wrap_strdup
+   _strdup=wrap_strdup
+   wcsdup=wrap_wcsdup
+   _wcsdup=wrap_wcsdup
+   jemalloc_stats
    jemalloc_free_dirty_pages
    ; A hack to work around the CRT (see giant comment in Makefile.in)
    frex=dumb_free_thunk
-+
 +  floor=floor_tt
 +  ceil=ceil_tt
  #endif
-
+diff --git a/media/webrtc/trunk/tools/gyp/pylib/gyp/generator/mozmake.py b/media/webrtc/trunk/tools/gyp/pylib/gyp/generator/mozmake.py
+--- a/media/webrtc/trunk/tools/gyp/pylib/gyp/generator/mozmake.py
++++ b/media/webrtc/trunk/tools/gyp/pylib/gyp/generator/mozmake.py
+@@ -39,16 +39,22 @@ VPATH           = %(srcdir)s
+ 
+ COMMON_FOOTER = """
+ # Skip rules that deal with regenerating Makefiles from Makefile.in files.
+ NO_MAKEFILE_RULE = 1
+ NO_SUBMAKEFILES_RULE = 1
+ 
+ include $(topsrcdir)/config/rules.mk
+ include $(DEPTH)/%(relative_path)s/common.mk
++
++ifeq (WINNT_1,$(OS_ARCH)_$(MOZ_PROFILE_GENERATE)$(MOZ_PROFILE_USE))
++# avoid the fatal error of compiler when applying PGO
++COMPILE_CXXFLAGS += -GL-
++COMPILE_CFLAGS += -GL-
++endif
+ """
+ 
+ COMMON_MK = """# This file was generated by mozmake.py. Do not edit it directly.
+ ifndef COMMON_MK_INCLUDED
+ COMMON_MK_INCLUDED := 1
+ 
+ ifdef MOZ_DEBUG
+ CFLAGS += $(CPPFLAGS_Debug) $(CFLAGS_Debug)
 diff --git a/netwerk/base/src/Makefile.in b/netwerk/base/src/Makefile.in
 --- a/netwerk/base/src/Makefile.in
 +++ b/netwerk/base/src/Makefile.in
@@ -2431,7 +3026,7 @@ diff --git a/netwerk/base/src/Makefile.in b/netwerk/base/src/Makefile.in
  DEFINES += -DIMPL_NS_NET
  
  ifdef MOZ_ENABLE_LIBCONIC
- 	OS_INCLUDES += $(GLIB_CFLAGS) $(LIBCONIC_CFLAGS)
+     OS_INCLUDES += $(GLIB_CFLAGS) $(LIBCONIC_CFLAGS)
  endif
 +
 +ifdef MOZ_THUNDERBIRD
@@ -2440,100 +3035,9 @@ diff --git a/netwerk/base/src/Makefile.in b/netwerk/base/src/Makefile.in
 +COMPILE_CXXFLAGS += -GL-
 +endif
 +endif
-diff --git a/content/media/nsAudioStream.cpp b/content/media/nsAudioStream.cpp
---- a/content/media/AudioStream.cpp
-+++ b/content/media/AudioStream.cpp
-@@ -10,6 +10,10 @@
- #include "nsXULAppAPI.h"
- using namespace mozilla::dom;
- 
-+#if (_M_IX86_FP >= 1) || defined(__SSE__)
-+#include <xmmintrin.h>
-+#include "mozilla/Util.h"
-+#endif
- #include <stdio.h>
- #include <math.h>
- #include "prlog.h"
-
-diff --git a/content/canvas/src/CanvasRenderingContext2D.cpp b/content/canvas/src/CanvasRenderingContext2D.cpp
---- a/content/canvas/src/CanvasRenderingContext2D.cpp
-+++ b/content/canvas/src/CanvasRenderingContext2D.cpp
-@@ -3485,29 +3485,8 @@
-   // inherited from Thebes canvas and is no longer true
-   uint8_t* dst = data + dstWriteRect.y * (aWidth * 4) + dstWriteRect.x * 4;
- 
--  for (int32_t j = 0; j < dstWriteRect.height; ++j) {
--    for (int32_t i = 0; i < dstWriteRect.width; ++i) {
--      // XXX Is there some useful swizzle MMX we can use here?
--#ifdef IS_LITTLE_ENDIAN
--      uint8_t b = *src++;
--      uint8_t g = *src++;
--      uint8_t r = *src++;
--      uint8_t a = *src++;
--#else
--      uint8_t a = *src++;
--      uint8_t r = *src++;
--      uint8_t g = *src++;
--      uint8_t b = *src++;
--#endif
--      // Convert to non-premultiplied color
--      *dst++ = gfxUtils::sUnpremultiplyTable[a * 256 + r];
--      *dst++ = gfxUtils::sUnpremultiplyTable[a * 256 + g];
--      *dst++ = gfxUtils::sUnpremultiplyTable[a * 256 + b];
--      *dst++ = a;
--    }
--    src += srcStride - (dstWriteRect.width * 4);
--    dst += (aWidth * 4) - (dstWriteRect.width * 4);
--  }
-+    GetImageData_component(src, dst, aWidth, aHeight,
-+      aWidth * 4, aWidth * 4, sUnpremultiplyTable);
- 
-   *aRetval = darray;
-   return NS_OK;
-@@ -3639,7 +3618,8 @@
-   }
- 
-   nsRefPtr<gfxImageSurface> imgsurf = new gfxImageSurface(gfxIntSize(w, h),
--                                                          gfxASurface::ImageFormatARGB32,
-+                                                          +                                                            gfxASurface::ImageFormatARGB32,
-+                                                            false);
-                                                           false);
-   if (!imgsurf || imgsurf->CairoStatus()) {
-     return NS_ERROR_FAILURE;
-@@ -3648,27 +3628,8 @@
-   uint8_t *src = aData;
-   uint8_t *dst = imgsurf->Data();
- 
--  for (uint32_t j = 0; j < h; j++) {
--    for (uint32_t i = 0; i < w; i++) {
--      uint8_t r = *src++;
--      uint8_t g = *src++;
--      uint8_t b = *src++;
--      uint8_t a = *src++;
--
--      // Convert to premultiplied color (losslessly if the input came from getImageData)
--#ifdef IS_LITTLE_ENDIAN
--      *dst++ = gfxUtils::sPremultiplyTable[a * 256 + b];
--      *dst++ = gfxUtils::sPremultiplyTable[a * 256 + g];
--      *dst++ = gfxUtils::sPremultiplyTable[a * 256 + r];
--      *dst++ = a;
--#else
--      *dst++ = a;
--      *dst++ = gfxUtils::sPremultiplyTable[a * 256 + r];
--      *dst++ = gfxUtils::sPremultiplyTable[a * 256 + g];
--      *dst++ = gfxUtils::sPremultiplyTable[a * 256 + b];
--#endif
--    }
--  }
-+    PutImageData_component(src, dst, w, h,
-+                           w * 4, w * 4, sPremultiplyTable);
- 
-   EnsureTarget();
-   if (!IsTargetValid()) {
-
 diff -r 284837bbf631 xpcom/string/public/nsCharTraits.h
---- a/xpcom/string/public/nsCharTraits.h	Sat Aug 25 07:23:12 2012 +0900
-+++ b/xpcom/string/public/nsCharTraits.h	Sat Aug 25 09:42:32 2012 +0900
+--- a/xpcom/string/public/nsCharTraits.h    Sat Aug 25 07:23:12 2012 +0900
++++ b/xpcom/string/public/nsCharTraits.h    Sat Aug 25 09:42:32 2012 +0900
 @@ -177,16 +177,20 @@ struct nsCharTraits<PRUnichar>
        {
          return static_cast<char_type*>(memmove(s1, s2, n * sizeof(char_type)));
@@ -2558,7 +3062,7 @@ diff -r 284837bbf631 xpcom/string/public/nsCharTraits.h
 diff --git a/layout/generic/nsContainerFrame.cpp b/layout/generic/nsContainerFrame.cpp
 --- a/layout/generic/nsContainerFrame.cpp
 +++ b/layout/generic/nsContainerFrame.cpp
-@@ -235,16 +235,20 @@ nsContainerFrame::DestroyFrom(nsIFrame* 
+@@ -246,16 +246,20 @@ nsContainerFrame::DestroyFrom(nsIFrame* 
  
    // Destroy the frame and remove the flow pointers
    nsSplittableFrame::DestroyFrom(aDestructRoot);
@@ -2579,7 +3083,7 @@ diff --git a/layout/generic/nsContainerFrame.cpp b/layout/generic/nsContainerFra
      case kPrincipalList:
        return mFrames;
      case kOverflowList: {
-@@ -261,16 +265,20 @@ nsContainerFrame::GetChildList(ChildList
+@@ -272,16 +276,20 @@ nsContainerFrame::GetChildList(ChildList
          GetPropTableFrames(PresContext(), ExcessOverflowContainersProperty());
        return list ? *list : nsFrameList::EmptyList();
      }
@@ -2603,7 +3107,7 @@ diff --git a/layout/generic/nsContainerFrame.cpp b/layout/generic/nsContainerFra
 diff --git a/content/base/src/nsContentUtils.cpp b/content/base/src/nsContentUtils.cpp
 --- a/content/base/src/nsContentUtils.cpp
 +++ b/content/base/src/nsContentUtils.cpp
-@@ -3300,29 +3300,37 @@ nsContentUtils::ReportToConsole(uint32_t
+@@ -3245,29 +3245,37 @@ nsContentUtils::ReportToConsoleNonLocali
                                       aLineNumber, aColumnNumber,
                                       aErrorFlags, aCategory,
                                       innerWindowID);
@@ -2641,7 +3145,7 @@ diff --git a/content/base/src/nsContentUtils.cpp b/content/base/src/nsContentUti
    nsCOMPtr<nsIDocShellTreeItem> sameTypeParent;
    if (docShellAsItem) {
      docShellAsItem->GetSameTypeParent(getter_AddRefs(sameTypeParent));
-@@ -3575,45 +3583,57 @@ nsContentUtils::DispatchChromeEvent(nsID
+@@ -3520,45 +3528,57 @@ nsContentUtils::DispatchChromeEvent(nsID
    rv = piTarget->DispatchDOMEvent(nullptr, event, nullptr, &status);
    if (aDefaultAction) {
      *aDefaultAction = (status != nsEventStatus_eConsumeNoDefault);
@@ -2747,7 +3251,7 @@ diff --git a/layout/style/nsCSSDataBlock.cpp b/layout/style/nsCSSDataBlock.cpp
 diff --git a/layout/style/nsCSSRuleProcessor.cpp b/layout/style/nsCSSRuleProcessor.cpp
 --- a/layout/style/nsCSSRuleProcessor.cpp
 +++ b/layout/style/nsCSSRuleProcessor.cpp
-@@ -1567,17 +1567,24 @@ MOZ_STATIC_ASSERT(NS_ARRAY_LENGTH(sPseud
+@@ -1569,17 +1569,24 @@ MOZ_STATIC_ASSERT(NS_ARRAY_LENGTH(sPseud
                    "ePseudoClass_NotPseudoClass is no longer at the end of"
                    "sPseudoClassStates");
  
@@ -2773,7 +3277,7 @@ diff --git a/layout/style/nsCSSRuleProcessor.cpp b/layout/style/nsCSSRuleProcess
  {
    NS_PRECONDITION(!aSelector->IsPseudoElement(),
                    "Pseudo-element snuck into SelectorMatches?");
-@@ -1597,16 +1604,29 @@ static bool SelectorMatches(Element* aEl
+@@ -1599,16 +1606,29 @@ static bool SelectorMatches(Element* aEl
      nsIAtom* selectorTag =
        (aTreeMatchContext.mIsHTMLDocument && aElement->IsHTML()) ?
          aSelector->mLowercaseTag : aSelector->mCasedTag;
@@ -2804,8 +3308,8 @@ diff --git a/layout/style/nsCSSRuleProcessor.cpp b/layout/style/nsCSSRuleProcess
          aTreeMatchContext.mCompatMode != eCompatibility_NavQuirks;
  
 diff -r 284837bbf631 xpcom/glue/nsDeque.cpp
---- a/xpcom/glue/nsDeque.cpp	Sat Aug 25 07:23:12 2012 +0900
-+++ b/xpcom/glue/nsDeque.cpp	Sat Aug 25 09:43:13 2012 +0900
+--- a/xpcom/glue/nsDeque.cpp    Sat Aug 25 07:23:12 2012 +0900
++++ b/xpcom/glue/nsDeque.cpp    Sat Aug 25 09:43:13 2012 +0900
 @@ -103,17 +103,32 @@ void nsDeque::SetDeallocator(nsDequeFunc
  
  /**
@@ -2842,7 +3346,12 @@ diff -r 284837bbf631 xpcom/glue/nsDeque.cpp
 diff --git a/layout/base/nsDisplayList.cpp b/layout/base/nsDisplayList.cpp
 --- a/layout/base/nsDisplayList.cpp
 +++ b/layout/base/nsDisplayList.cpp
-@@ -10,6 +10,11 @@
+@@ -5,16 +5,21 @@
+  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+  */
+ 
+ /*
+  * structures that represent things to be painted (ordered in z-order),
   * used during painting and hit testing
   */
  
@@ -2854,7 +3363,17 @@ diff --git a/layout/base/nsDisplayList.cpp b/layout/base/nsDisplayList.cpp
  // include PBrowserChild explicitly because TabChild won't include it
  // because we're in layout :(
  #include "mozilla/dom/PBrowserChild.h"
-@@ -710,13 +715,29 @@
+ #include "mozilla/dom/TabChild.h"
+ 
+ #include "mozilla/layers/PLayers.h"
+ 
+ #include "nsDisplayList.h"
+@@ -705,23 +710,39 @@ nsDisplayListBuilder::GetBackgroundPaint
+   if (mIsPaintingToWindow) {
+     flags |= nsCSSRendering::PAINTBG_TO_WINDOW;
+   }
+   return flags;
+ }
  
  static uint64_t RegionArea(const nsRegion& aRegion)
  {
@@ -2884,7 +3403,17 @@ diff --git a/layout/base/nsDisplayList.cpp b/layout/base/nsDisplayList.cpp
  }
  
  void
-@@ -736,6 +757,9 @@
+ nsDisplayListBuilder::SubtractFromVisibleRegion(nsRegion* aVisibleRegion,
+                                                 const nsRegion& aRegion)
+ {
+   if (aRegion.IsEmpty())
+     return;
+@@ -731,16 +752,19 @@ nsDisplayListBuilder::SubtractFromVisibl
+   // Don't let *aVisibleRegion get too complex, but don't let it fluff out
+   // to its bounds either, which can be very bad (see bug 516740).
+   // Do let aVisibleRegion get more complex if by doing so we reduce its
+   // area by at least half.
+   if (GetAccurateVisibleRegions() || tmp.GetNumRects() <= 15 ||
        RegionArea(tmp) <= RegionArea(*aVisibleRegion)/2) {
      *aVisibleRegion = tmp;
    }
@@ -2894,7 +3423,11 @@ diff --git a/layout/base/nsDisplayList.cpp b/layout/base/nsDisplayList.cpp
  }
  
  nsCaret *
-
+ nsDisplayListBuilder::GetCaret() {
+   nsRefPtr<nsCaret> caret = CurrentPresShellState()->mPresShell->GetCaret();
+   return caret;
+ }
+ 
 diff --git a/layout/generic/nsHTMLReflowState.cpp b/layout/generic/nsHTMLReflowState.cpp
 --- a/layout/generic/nsHTMLReflowState.cpp
 +++ b/layout/generic/nsHTMLReflowState.cpp
@@ -2916,7 +3449,7 @@ diff --git a/layout/generic/nsHTMLReflowState.cpp b/layout/generic/nsHTMLReflowS
  #endif
  
  using namespace mozilla;
-@@ -984,16 +985,17 @@ nsHTMLReflowState::CalculateHorizBorderP
+@@ -986,16 +987,17 @@ nsHTMLReflowState::CalculateHorizBorderP
    *aOutsideBoxSizing = outside;
    return;
  }
@@ -2935,8 +3468,8 @@ diff --git a/layout/generic/nsHTMLReflowState.cpp b/layout/generic/nsHTMLReflowS
    if (!aFrame->IsSelfEmpty()) {
      *aFound = false;
 diff -r 284837bbf631 image/decoders/icon/win/nsIconChannel.cpp
---- a/image/decoders/icon/win/nsIconChannel.cpp	Sat Aug 25 07:23:12 2012 +0900
-+++ b/image/decoders/icon/win/nsIconChannel.cpp	Sat Aug 25 11:13:45 2012 +0900
+--- a/image/decoders/icon/win/nsIconChannel.cpp    Sat Aug 25 07:23:12 2012 +0900
++++ b/image/decoders/icon/win/nsIconChannel.cpp    Sat Aug 25 11:13:45 2012 +0900
 @@ -445,16 +445,19 @@ static BITMAPINFO* CreateBitmapInfo(BITM
                                                   mozilla::fallible_t());
    if (bmi) {
@@ -2980,7 +3513,7 @@ diff -r 284837bbf631 image/decoders/icon/win/nsIconChannel.cpp
 diff --git a/layout/base/nsLayoutUtils.cpp b/layout/base/nsLayoutUtils.cpp
 --- a/layout/base/nsLayoutUtils.cpp
 +++ b/layout/base/nsLayoutUtils.cpp
-@@ -3724,17 +3724,18 @@ static nsresult
+@@ -3902,17 +3902,18 @@ static nsresult
  DrawImageInternal(nsRenderingContext* aRenderingContext,
                    imgIContainer*       aImage,
                    GraphicsFilter       aGraphicsFilter,
@@ -3000,7 +3533,7 @@ diff --git a/layout/base/nsLayoutUtils.cpp b/layout/base/nsLayoutUtils.cpp
    gfxContext* ctx = aRenderingContext->ThebesContext();
  
    SnappedImageDrawingParameters drawingParams =
-@@ -3744,16 +3745,20 @@ DrawImageInternal(nsRenderingContext* aR
+@@ -3922,16 +3923,20 @@ DrawImageInternal(nsRenderingContext* aR
    if (!drawingParams.mShouldDraw)
      return NS_OK;
  
@@ -3021,7 +3554,7 @@ diff --git a/layout/base/nsLayoutUtils.cpp b/layout/base/nsLayoutUtils.cpp
  
  /* static */ void
  nsLayoutUtils::DrawPixelSnapped(nsRenderingContext* aRenderingContext,
-@@ -3824,17 +3829,17 @@ nsLayoutUtils::DrawSingleUnscaledImage(n
+@@ -4002,17 +4007,17 @@ nsLayoutUtils::DrawSingleUnscaledImage(n
    nsRect dest(aDest - source.TopLeft(), size);
    nsRect fill(aDest, source.Size());
    // Ensure that only a single image tile is drawn. If aSourceArea extends
@@ -3040,7 +3573,7 @@ diff --git a/layout/base/nsLayoutUtils.cpp b/layout/base/nsLayoutUtils.cpp
                                 GraphicsFilter       aGraphicsFilter,
                                 const nsRect&        aDest,
                                 const nsRect&        aDirty,
-@@ -3863,17 +3868,17 @@ nsLayoutUtils::DrawSingleImage(nsRenderi
+@@ -4041,17 +4046,17 @@ nsLayoutUtils::DrawSingleImage(nsRenderi
    nsRect dest = nsLayoutUtils::GetWholeImageDestination(imageSize, source,
                                                          aDest);
    // Ensure that only a single image tile is drawn. If aSourceArea extends
@@ -3209,7 +3742,12 @@ diff --git a/dom/plugins/base/nsPluginNativeWindowWin.cpp b/dom/plugins/base/nsP
 diff --git a/gfx/src/nsRect.h b/gfx/src/nsRect.h
 --- a/gfx/src/nsRect.h
 +++ b/gfx/src/nsRect.h
-@@ -17,6 +17,63 @@
+@@ -12,16 +12,72 @@
+ #include "nsPoint.h"
+ #include "nsSize.h"
+ #include "nsMargin.h"
+ #include "gfxCore.h"
+ #include "nsTraceRefcnt.h"
  #include "mozilla/gfx/BaseRect.h"
  #include "mozilla/Likely.h"
  
@@ -3269,11 +3807,20 @@ diff --git a/gfx/src/nsRect.h b/gfx/src/nsRect.h
 +}
 +#endif
 +
-+
  struct nsIntRect;
  
  struct NS_GFX nsRect :
-@@ -43,6 +100,10 @@
+   public mozilla::gfx::BaseRect<nscoord, nsRect, nsPoint, nsSize, nsMargin> {
+   typedef mozilla::gfx::BaseRect<nscoord, nsRect, nsPoint, nsSize, nsMargin> Super;
+ 
+   static void VERIFY_COORD(nscoord aValue) { ::VERIFY_COORD(aValue); }
+ 
+@@ -38,16 +94,20 @@ struct NS_GFX nsRect :
+   {
+     MOZ_COUNT_CTOR(nsRect);
+   }
+   nsRect(nscoord aX, nscoord aY, nscoord aWidth, nscoord aHeight) :
+       Super(aX, aY, aWidth, aHeight)
    {
      MOZ_COUNT_CTOR(nsRect);
    }
@@ -3284,7 +3831,17 @@ diff --git a/gfx/src/nsRect.h b/gfx/src/nsRect.h
  
  #ifdef NS_BUILD_REFCNT_LOGGING
    ~nsRect() {
-@@ -226,6 +287,9 @@
+     MOZ_COUNT_DTOR(nsRect);
+   }
+ #endif
+ 
+   // A version of Inflate that caps the values to the nscoord range.
+@@ -221,16 +281,19 @@ struct NS_GFX nsIntRect :
+   }
+   nsIntRect(const nsIntPoint& aOrigin, const nsIntSize &aSize) : Super(aOrigin, aSize)
+   {
+   }
+   nsIntRect(int32_t aX, int32_t aY, int32_t aWidth, int32_t aHeight) :
        Super(aX, aY, aWidth, aHeight)
    {
    }
@@ -3294,7 +3851,17 @@ diff --git a/gfx/src/nsRect.h b/gfx/src/nsRect.h
  
    inline nsRect ToAppUnits(nscoord aAppUnitsPerPixel) const;
  
-@@ -283,11 +347,29 @@
+   // Returns a special nsIntRect that's used in some places to signify
+   // "all available space".
+   static const nsIntRect& GetMaxSizedIntRect() { return kMaxSizedIntRect; }
+ 
+   // This is here only to keep IPDL-generated code happy. DO NOT USE.
+@@ -278,76 +341,173 @@ nsRect::ConvertAppUnitsRoundIn(int32_t a
+   rect.x = NSToCoordCeil(NSCoordScale(x, aFromAPP, aToAPP));
+   rect.y = NSToCoordCeil(NSCoordScale(y, aFromAPP, aToAPP));
+   rect.width = (right - rect.x);
+   rect.height = (bottom - rect.y);
+ 
    return rect;
  }
  
@@ -3324,7 +3891,15 @@ diff --git a/gfx/src/nsRect.h b/gfx/src/nsRect.h
    nsIntRect rect;
    rect.x = NSToIntRoundUp(NSAppUnitsToDoublePixels(x, aAppUnitsPerPixel) * aXScale);
    rect.y = NSToIntRoundUp(NSAppUnitsToDoublePixels(y, aAppUnitsPerPixel) * aYScale);
-@@ -303,6 +385,23 @@
+   rect.width  = NSToIntRoundUp(NSAppUnitsToDoublePixels(XMost(),
+                                aAppUnitsPerPixel) * aXScale) - rect.x;
+   rect.height = NSToIntRoundUp(NSAppUnitsToDoublePixels(YMost(),
+                                aAppUnitsPerPixel) * aYScale) - rect.y;
+   return rect;
+ }
+ 
+ // scale the rect but round to smallest containing rect
+ inline nsIntRect
  nsRect::ScaleToOutsidePixels(float aXScale, float aYScale,
                               nscoord aAppUnitsPerPixel) const
  {
@@ -3348,7 +3923,15 @@ diff --git a/gfx/src/nsRect.h b/gfx/src/nsRect.h
    nsIntRect rect;
    rect.x = NSToIntFloor(NSAppUnitsToFloatPixels(x, float(aAppUnitsPerPixel)) * aXScale);
    rect.y = NSToIntFloor(NSAppUnitsToFloatPixels(y, float(aAppUnitsPerPixel)) * aYScale);
-@@ -318,6 +417,23 @@
+   rect.width  = NSToIntCeil(NSAppUnitsToFloatPixels(XMost(),
+                             float(aAppUnitsPerPixel)) * aXScale) - rect.x;
+   rect.height = NSToIntCeil(NSAppUnitsToFloatPixels(YMost(),
+                             float(aAppUnitsPerPixel)) * aYScale) - rect.y;
+   return rect;
+ }
+ 
+ // scale the rect but round to largest contained rect
+ inline nsIntRect
  nsRect::ScaleToInsidePixels(float aXScale, float aYScale,
                              nscoord aAppUnitsPerPixel) const
  {
@@ -3372,7 +3955,13 @@ diff --git a/gfx/src/nsRect.h b/gfx/src/nsRect.h
    nsIntRect rect;
    rect.x = NSToIntCeil(NSAppUnitsToFloatPixels(x, float(aAppUnitsPerPixel)) * aXScale);
    rect.y = NSToIntCeil(NSAppUnitsToFloatPixels(y, float(aAppUnitsPerPixel)) * aYScale);
-@@ -331,18 +447,63 @@
+   rect.width  = NSToIntFloor(NSAppUnitsToFloatPixels(XMost(),
+                              float(aAppUnitsPerPixel)) * aXScale) - rect.x;
+   rect.height = NSToIntFloor(NSAppUnitsToFloatPixels(YMost(),
+                              float(aAppUnitsPerPixel)) * aYScale) - rect.y;
+   return rect;
+ }
+ 
  inline nsIntRect
  nsRect::ToNearestPixels(nscoord aAppUnitsPerPixel) const
  {
@@ -3436,7 +4025,11 @@ diff --git a/gfx/src/nsRect.h b/gfx/src/nsRect.h
    return ScaleToInsidePixels(1.0f, 1.0f, aAppUnitsPerPixel);
  }
  
-
+ // app units are integer multiples of pixels, so no rounding needed
+ inline nsRect
+ nsIntRect::ToAppUnits(nscoord aAppUnitsPerPixel) const
+ {
+   return nsRect(NSIntPixelsToAppUnits(x, aAppUnitsPerPixel),
 diff --git a/content/svg/content/src/nsSVGFilters.cpp b/content/svg/content/src/nsSVGFilters.cpp
 --- a/content/svg/content/src/nsSVGFilters.cpp
 +++ b/content/svg/content/src/nsSVGFilters.cpp
@@ -3762,7 +4355,7 @@ diff --git a/content/svg/content/src/nsSVGFilters.cpp b/content/svg/content/src/
                      edgeMode, kernel, divisor, bias, preserveAlpha,
                      orderX, orderY, targetX, targetY);
      }
-@@ -5039,26 +5122,26 @@ nsSVGFELightingElement::Filter(nsSVGFilt
+@@ -5037,26 +5120,26 @@ nsSVGFELightingElement::Filter(nsSVGFilt
        break;
    }
  
@@ -3793,7 +4386,7 @@ diff --git a/content/svg/content/src/nsSVGFilters.cpp b/content/svg/content/src/
        (pointLight.get())->GetAnimatedNumberValues(lightPos,
                                                    lightPos + 1,
                                                    lightPos + 2,
-@@ -5091,21 +5174,31 @@ nsSVGFELightingElement::Filter(nsSVGFilt
+@@ -5089,21 +5172,31 @@ nsSVGFELightingElement::Filter(nsSVGFilt
  
    const nsIntRect& dataRect = info.mDataRect;
    int32_t stride = info.mSource->Stride();
@@ -3825,7 +4418,7 @@ diff --git a/content/svg/content/src/nsSVGFilters.cpp b/content/svg/content/src/
                  gfxPoint(x + instance->GetSurfaceRect().x,
                           y + instance->GetSurfaceRect().y));
          float Z = surfaceScale * sourceData[index + GFX_ARGB32_OFFSET_A] / 255;
-@@ -6010,16 +6103,25 @@ nsSVGFEDisplacementMapElement::Filter(ns
+@@ -5992,16 +6085,25 @@ nsSVGFEDisplacementMapElement::Filter(ns
                               GFX_ARGB32_OFFSET_B,
                               GFX_ARGB32_OFFSET_A };
    uint16_t xChannel = channelMap[mEnumAttributes[CHANNEL_X].GetAnimValue()];
@@ -3913,7 +4506,7 @@ diff --git a/layout/svg/nsSVGMaskFrame.cpp b/layout/svg/nsSVGMaskFrame.cpp
 diff --git a/xpcom/glue/nsThreadUtils.cpp b/xpcom/glue/nsThreadUtils.cpp
 --- a/xpcom/glue/nsThreadUtils.cpp
 +++ b/xpcom/glue/nsThreadUtils.cpp
-@@ -13,16 +13,27 @@
+@@ -14,16 +14,27 @@
  # include "nsXPCOMCIDInternal.h"
  # include "nsIThreadManager.h"
  # include "nsServiceManagerUtils.h"
@@ -3944,7 +4537,7 @@ diff --git a/xpcom/glue/nsThreadUtils.cpp b/xpcom/glue/nsThreadUtils.cpp
 diff --git a/widget/windows/nsWindow.cpp b/widget/windows/nsWindow.cpp
 --- a/widget/windows/nsWindow.cpp
 +++ b/widget/windows/nsWindow.cpp
-@@ -1951,17 +1951,28 @@ nsWindow::ResetLayout()
+@@ -1959,17 +1959,28 @@ nsWindow::ResetLayout()
  
    // Invalidate and update
    Invalidate();
@@ -4023,7 +4616,7 @@ diff --git a/js/src/vm/ObjectImpl.cpp b/js/src/vm/ObjectImpl.cpp
 diff --git a/js/src/vm/ObjectImpl.h b/js/src/vm/ObjectImpl.h
 --- a/js/src/vm/ObjectImpl.h
 +++ b/js/src/vm/ObjectImpl.h
-@@ -1374,24 +1374,24 @@ GetElement(JSContext *cx, Handle<ObjectI
+@@ -1375,24 +1375,24 @@ GetElement(JSContext *cx, Handle<ObjectI
  extern bool
  GetProperty(JSContext *cx, Handle<ObjectImpl*> obj, Handle<ObjectImpl*> receiver,
              Handle<PropertyId> pid, unsigned resolveFlags, MutableHandle<Value> vp);
@@ -4051,8 +4644,8 @@ diff --git a/js/src/vm/ObjectImpl.h b/js/src/vm/ObjectImpl.h
  /* Proposed default [[SetP]](Receiver, P, V) method. */
  extern bool
 diff -r 28eff799c22e gfx/cairo/libpixman/src/pixman-cpu.c
---- a/gfx/cairo/libpixman/src/pixman-cpu.c	Thu Sep 06 17:23:00 2012 +0900
-+++ b/gfx/cairo/libpixman/src/pixman-cpu.c	Sat Sep 29 14:24:53 2012 +0900
+--- a/gfx/cairo/libpixman/src/pixman-cpu.c    Thu Sep 06 17:23:00 2012 +0900
++++ b/gfx/cairo/libpixman/src/pixman-cpu.c    Sat Sep 29 14:24:53 2012 +0900
 @@ -26,16 +26,24 @@
  #include <string.h>
  #include <stdlib.h>
@@ -4079,9 +4672,9 @@ diff -r 28eff799c22e gfx/cairo/libpixman/src/pixman-cpu.c
  #ifdef USE_VMX
  
 @@ -742,21 +750,194 @@ disabled (const char *name)
- 	    env += len;
- 	}
- 	while (*env++);
+         env += len;
+     }
+     while (*env++);
      }
  
      return FALSE;
@@ -4268,14 +4861,14 @@ diff -r 28eff799c22e gfx/cairo/libpixman/src/pixman-cpu.c
      imp = _pixman_implementation_create_general();
  
      if (!disabled ("fast"))
- 	imp = _pixman_implementation_create_fast_path (imp);
+     imp = _pixman_implementation_create_fast_path (imp);
  
  #ifdef USE_X86_MMX
      if (!disabled ("mmx") && pixman_have_mmx ())
- 	imp = _pixman_implementation_create_mmx (imp);
+     imp = _pixman_implementation_create_mmx (imp);
 diff -r 130a6a134e0c gfx/cairo/libpixman/src/pixman-edge.c
---- a/gfx/cairo/libpixman/src/pixman-edge.c	Sat Jul 03 07:19:26 2010 +0900
-+++ b/gfx/cairo/libpixman/src/pixman-edge.c	Wed Jul 07 06:49:12 2010 +0900
+--- a/gfx/cairo/libpixman/src/pixman-edge.c    Sat Jul 03 07:19:26 2010 +0900
++++ b/gfx/cairo/libpixman/src/pixman-edge.c    Wed Jul 07 06:49:12 2010 +0900
 @@ -161,16 +161,18 @@ rasterize_edges_8 (pixman_image_t *image
  {
      pixman_fixed_t y = t;
@@ -4296,7 +4889,7 @@ diff -r 130a6a134e0c gfx/cairo/libpixman/src/pixman-edge.c
          pixman_fixed_t lx, rx;
          int lxi, rxi;
 @@ -192,22 +194,39 @@ rasterize_edges_8 (pixman_image_t *image
- 	}
+     }
  
          /* Skip empty (or backwards) sections */
          if (rx > lx)
@@ -4337,17 +4930,17 @@ diff -r 130a6a134e0c gfx/cairo/libpixman/src/pixman-edge.c
              if (lxi == rxi)
              {
                  WRITE (image, ap + lxi,
- 		       clip255 (READ (image, ap + lxi) + rxs - lxs));
- 	    }
+                clip255 (READ (image, ap + lxi) + rxs - lxs));
+         }
              else
 diff -r 6a3897dad583 gfx/cairo/libpixman/src/pixman-private.h
---- a/gfx/cairo/libpixman/src/pixman-private.h	Sat Oct 06 15:30:41 2012 +0900
-+++ b/gfx/cairo/libpixman/src/pixman-private.h	Sat Oct 06 15:47:32 2012 +0900
+--- a/gfx/cairo/libpixman/src/pixman-private.h    Sat Oct 06 15:30:41 2012 +0900
++++ b/gfx/cairo/libpixman/src/pixman-private.h    Sat Oct 06 15:47:32 2012 +0900
 @@ -991,9 +991,16 @@ void pixman_timer_register (pixman_timer
- 	begin ## tname = OIL_STAMP ();
+     begin ## tname = OIL_STAMP ();
  
  #define TIMER_END(tname)                                                \
-     timer ## tname.total += OIL_STAMP () - begin ## tname;		\
+     timer ## tname.total += OIL_STAMP () - begin ## tname;        \
      }
  
  #endif /* PIXMAN_TIMERS */
@@ -4361,8 +4954,8 @@ diff -r 6a3897dad583 gfx/cairo/libpixman/src/pixman-private.h
 +
  #endif /* PIXMAN_PRIVATE_H */
 diff -r 7f26aac55b28 gfx/cairo/libpixman/src/pixman-sse2.c
---- a/gfx/cairo/libpixman/src/pixman-sse2.c	Sat Jul 14 16:55:18 2012 +0900
-+++ b/gfx/cairo/libpixman/src/pixman-sse2.c	Sun Jul 15 20:18:12 2012 +0900
+--- a/gfx/cairo/libpixman/src/pixman-sse2.c    Sat Jul 14 16:55:18 2012 +0900
++++ b/gfx/cairo/libpixman/src/pixman-sse2.c    Sun Jul 15 20:18:12 2012 +0900
 @@ -349,16 +349,23 @@ load_128_unaligned (const __m128i* src)
   */
  static force_inline void
@@ -4389,9 +4982,9 @@ diff -r 7f26aac55b28 gfx/cairo/libpixman/src/pixman-sse2.c
  
 @@ -3227,28 +3234,36 @@ sse2_composite_over_n_8_8888 (pixman_imp
  
- 	    w--;
- 	    dst++;
- 	}
+         w--;
+         dst++;
+     }
      }
  
  }
@@ -4421,16 +5014,16 @@ diff -r 7f26aac55b28 gfx/cairo/libpixman/src/pixman-sse2.c
  
      if (bpp == 8)
      {
- 	uint8_t b;
- 	uint16_t w;
+     uint8_t b;
+     uint16_t w;
  
 @@ -3277,16 +3292,20 @@ pixman_fill_sse2 (uint32_t *bits,
- 	byte_width = 4 * width;
- 	stride *= 4;
+     byte_width = 4 * width;
+     stride *= 4;
      }
      else
      {
- 	return FALSE;
+     return FALSE;
      }
  
 +#ifdef TT_MEMUTIL
@@ -4441,116 +5034,116 @@ diff -r 7f26aac55b28 gfx/cairo/libpixman/src/pixman-sse2.c
  
      while (height--)
      {
- 	int w;
- 	uint8_t *d = byte_line;
- 	byte_line += stride;
- 	w = byte_width;
+     int w;
+     uint8_t *d = byte_line;
+     byte_line += stride;
+     w = byte_width;
 @@ -3300,16 +3319,81 @@ pixman_fill_sse2 (uint32_t *bits,
  
- 	while (w >= 2 && ((unsigned long)d & 3))
- 	{
- 	    *(uint16_t *)d = data;
- 	    w -= 2;
- 	    d += 2;
- 	}
+     while (w >= 2 && ((unsigned long)d & 3))
+     {
+         *(uint16_t *)d = data;
+         w -= 2;
+         d += 2;
+     }
  
 +#ifdef TT_MEMUTIL
 +if (use_nontemporal_fill)
 +{
-+	while (w >= 4 && ((unsigned long)d & 15))
-+	{
-+	    save_32_write_combining ((int*)d, (int)data);
++    while (w >= 4 && ((unsigned long)d & 15))
++    {
++        save_32_write_combining ((int*)d, (int)data);
 +
-+	    w -= 4;
-+	    d += 4;
-+	}
++        w -= 4;
++        d += 4;
++    }
 +
-+	while (w >= 128)
-+	{
-+	    save_128_write_combining ((__m128i*)(d),     xmm_def);
-+	    save_128_write_combining ((__m128i*)(d + 16),  xmm_def);
-+	    save_128_write_combining ((__m128i*)(d + 32),  xmm_def);
-+	    save_128_write_combining ((__m128i*)(d + 48),  xmm_def);
-+	    save_128_write_combining ((__m128i*)(d + 64),  xmm_def);
-+	    save_128_write_combining ((__m128i*)(d + 80),  xmm_def);
-+	    save_128_write_combining ((__m128i*)(d + 96),  xmm_def);
-+	    save_128_write_combining ((__m128i*)(d + 112), xmm_def);
++    while (w >= 128)
++    {
++        save_128_write_combining ((__m128i*)(d),     xmm_def);
++        save_128_write_combining ((__m128i*)(d + 16),  xmm_def);
++        save_128_write_combining ((__m128i*)(d + 32),  xmm_def);
++        save_128_write_combining ((__m128i*)(d + 48),  xmm_def);
++        save_128_write_combining ((__m128i*)(d + 64),  xmm_def);
++        save_128_write_combining ((__m128i*)(d + 80),  xmm_def);
++        save_128_write_combining ((__m128i*)(d + 96),  xmm_def);
++        save_128_write_combining ((__m128i*)(d + 112), xmm_def);
 +
-+	    d += 128;
-+	    w -= 128;
-+	}
++        d += 128;
++        w -= 128;
++    }
 +
-+	if (w >= 64)
-+	{
-+	    save_128_write_combining ((__m128i*)(d),     xmm_def);
-+	    save_128_write_combining ((__m128i*)(d + 16),  xmm_def);
-+	    save_128_write_combining ((__m128i*)(d + 32),  xmm_def);
-+	    save_128_write_combining ((__m128i*)(d + 48),  xmm_def);
++    if (w >= 64)
++    {
++        save_128_write_combining ((__m128i*)(d),     xmm_def);
++        save_128_write_combining ((__m128i*)(d + 16),  xmm_def);
++        save_128_write_combining ((__m128i*)(d + 32),  xmm_def);
++        save_128_write_combining ((__m128i*)(d + 48),  xmm_def);
 +
-+	    d += 64;
-+	    w -= 64;
-+	}
++        d += 64;
++        w -= 64;
++    }
 +
-+	if (w >= 32)
-+	{
-+	    save_128_write_combining ((__m128i*)(d),     xmm_def);
-+	    save_128_write_combining ((__m128i*)(d + 16),  xmm_def);
++    if (w >= 32)
++    {
++        save_128_write_combining ((__m128i*)(d),     xmm_def);
++        save_128_write_combining ((__m128i*)(d + 16),  xmm_def);
 +
-+	    d += 32;
-+	    w -= 32;
-+	}
++        d += 32;
++        w -= 32;
++    }
 +
-+	if (w >= 16)
-+	{
-+	    save_128_write_combining ((__m128i*)(d),     xmm_def);
++    if (w >= 16)
++    {
++        save_128_write_combining ((__m128i*)(d),     xmm_def);
 +
-+	    d += 16;
-+	    w -= 16;
-+	}
++        d += 16;
++        w -= 16;
++    }
 +
-+	while (w >= 4)
-+	{
-+	    save_32_write_combining ((int*)d, (int)data);
++    while (w >= 4)
++    {
++        save_32_write_combining ((int*)d, (int)data);
 +
-+	    w -= 4;
-+	    d += 4;
-+	}
++        w -= 4;
++        d += 4;
++    }
 +}
 +else
 +#endif
 +{
- 	while (w >= 4 && ((unsigned long)d & 15))
- 	{
- 	    *(uint32_t *)d = data;
+     while (w >= 4 && ((unsigned long)d & 15))
+     {
+         *(uint32_t *)d = data;
  
- 	    w -= 4;
- 	    d += 4;
- 	}
+         w -= 4;
+         d += 4;
+     }
  
 @@ -3358,32 +3442,40 @@ pixman_fill_sse2 (uint32_t *bits,
  
- 	while (w >= 4)
- 	{
- 	    *(uint32_t *)d = data;
+     while (w >= 4)
+     {
+         *(uint32_t *)d = data;
  
- 	    w -= 4;
- 	    d += 4;
- 	}
+         w -= 4;
+         d += 4;
+     }
 +}
  
- 	if (w >= 2)
- 	{
- 	    *(uint16_t *)d = data;
- 	    w -= 2;
- 	    d += 2;
- 	}
+     if (w >= 2)
+     {
+         *(uint16_t *)d = data;
+         w -= 2;
+         d += 2;
+     }
  
- 	if (w >= 1)
- 	{
- 	    *(uint8_t *)d = data;
- 	    w -= 1;
- 	    d += 1;
- 	}
+     if (w >= 1)
+     {
+         *(uint8_t *)d = data;
+         w -= 1;
+         d += 1;
+     }
      }
  
 +#ifdef TT_MEMUTIL
@@ -4582,19 +5175,19 @@ diff -r 7f26aac55b28 gfx/cairo/libpixman/src/pixman-sse2.c
 +#endif
  
      if (src_bpp != dst_bpp)
- 	return FALSE;
+     return FALSE;
  
      if (src_bpp == 16)
      {
- 	src_stride = src_stride * (int) sizeof (uint32_t) / 2;
- 	dst_stride = dst_stride * (int) sizeof (uint32_t) / 2;
+     src_stride = src_stride * (int) sizeof (uint32_t) / 2;
+     dst_stride = dst_stride * (int) sizeof (uint32_t) / 2;
 @@ -4486,16 +4581,20 @@ pixman_blt_sse2 (uint32_t *src_bits,
- 	src_stride *= 4;
- 	dst_stride *= 4;
+     src_stride *= 4;
+     dst_stride *= 4;
      }
      else
      {
- 	return FALSE;
+     return FALSE;
      }
  
 +#ifdef TT_MEMUTIL
@@ -4603,120 +5196,120 @@ diff -r 7f26aac55b28 gfx/cairo/libpixman/src/pixman-sse2.c
 +
      while (height--)
      {
- 	int w;
- 	uint8_t *s = src_bytes;
- 	uint8_t *d = dst_bytes;
- 	src_bytes += src_stride;
- 	dst_bytes += dst_stride;
- 	w = byte_width;
+     int w;
+     uint8_t *s = src_bytes;
+     uint8_t *d = dst_bytes;
+     src_bytes += src_stride;
+     dst_bytes += dst_stride;
+     w = byte_width;
 @@ -4503,34 +4602,88 @@ pixman_blt_sse2 (uint32_t *src_bits,
- 	while (w >= 2 && ((unsigned long)d & 3))
- 	{
- 	    *(uint16_t *)d = *(uint16_t *)s;
- 	    w -= 2;
- 	    s += 2;
- 	    d += 2;
- 	}
+     while (w >= 2 && ((unsigned long)d & 3))
+     {
+         *(uint16_t *)d = *(uint16_t *)s;
+         w -= 2;
+         s += 2;
+         d += 2;
+     }
  
 +#ifdef TT_MEMUTIL
 +if (use_nontemporal_copy)
 +{
- 	while (w >= 4 && ((unsigned long)d & 15))
- 	{
--	    *(uint32_t *)d = *(uint32_t *)s;
-+	    save_32_write_combining ((int*)d, *(int*)s);
+     while (w >= 4 && ((unsigned long)d & 15))
+     {
+-        *(uint32_t *)d = *(uint32_t *)s;
++        save_32_write_combining ((int*)d, *(int*)s);
  
- 	    w -= 4;
- 	    s += 4;
- 	    d += 4;
- 	}
+         w -= 4;
+         s += 4;
+         d += 4;
+     }
  
- 	while (w >= 64)
- 	{
- 	    __m128i xmm0, xmm1, xmm2, xmm3;
+     while (w >= 64)
+     {
+         __m128i xmm0, xmm1, xmm2, xmm3;
  
-+	    _mm_prefetch((char const *)s + (200*64/34+192), _MM_HINT_NTA);
++        _mm_prefetch((char const *)s + (200*64/34+192), _MM_HINT_NTA);
 +
- 	    xmm0 = load_128_unaligned ((__m128i*)(s));
- 	    xmm1 = load_128_unaligned ((__m128i*)(s + 16));
- 	    xmm2 = load_128_unaligned ((__m128i*)(s + 32));
- 	    xmm3 = load_128_unaligned ((__m128i*)(s + 48));
+         xmm0 = load_128_unaligned ((__m128i*)(s));
+         xmm1 = load_128_unaligned ((__m128i*)(s + 16));
+         xmm2 = load_128_unaligned ((__m128i*)(s + 32));
+         xmm3 = load_128_unaligned ((__m128i*)(s + 48));
  
-+	    save_128_write_combining ((__m128i*)(d),    xmm0);
-+	    save_128_write_combining ((__m128i*)(d + 16), xmm1);
-+	    save_128_write_combining ((__m128i*)(d + 32), xmm2);
-+	    save_128_write_combining ((__m128i*)(d + 48), xmm3);
++        save_128_write_combining ((__m128i*)(d),    xmm0);
++        save_128_write_combining ((__m128i*)(d + 16), xmm1);
++        save_128_write_combining ((__m128i*)(d + 32), xmm2);
++        save_128_write_combining ((__m128i*)(d + 48), xmm3);
 +
-+	    s += 64;
-+	    d += 64;
-+	    w -= 64;
-+	}
++        s += 64;
++        d += 64;
++        w -= 64;
++    }
 +
-+	while (w >= 16)
-+	{
-+	    save_128_write_combining ((__m128i*)d, load_128_unaligned ((__m128i*)s) );
++    while (w >= 16)
++    {
++        save_128_write_combining ((__m128i*)d, load_128_unaligned ((__m128i*)s) );
 +
-+	    w -= 16;
-+	    d += 16;
-+	    s += 16;
-+	}
++        w -= 16;
++        d += 16;
++        s += 16;
++    }
 +
-+	while (w >= 4)
-+	{
-+	    save_32_write_combining ((int*)d, *(int*)s);
++    while (w >= 4)
++    {
++        save_32_write_combining ((int*)d, *(int*)s);
 +
-+	    w -= 4;
-+	    s += 4;
-+	    d += 4;
-+	}
++        w -= 4;
++        s += 4;
++        d += 4;
++    }
 +}
 +else
 +#endif
 +{
-+	while (w >= 4 && ((unsigned long)d & 15))
-+	{
-+	    *(uint32_t *)d = *(uint32_t *)s;
++    while (w >= 4 && ((unsigned long)d & 15))
++    {
++        *(uint32_t *)d = *(uint32_t *)s;
 +
-+	    w -= 4;
-+	    s += 4;
-+	    d += 4;
-+	}
++        w -= 4;
++        s += 4;
++        d += 4;
++    }
 +
-+	while (w >= 64)
-+	{
-+	    __m128i xmm0, xmm1, xmm2, xmm3;
++    while (w >= 64)
++    {
++        __m128i xmm0, xmm1, xmm2, xmm3;
 +
-+	    xmm0 = load_128_unaligned ((__m128i*)(s));
-+	    xmm1 = load_128_unaligned ((__m128i*)(s + 16));
-+	    xmm2 = load_128_unaligned ((__m128i*)(s + 32));
-+	    xmm3 = load_128_unaligned ((__m128i*)(s + 48));
++        xmm0 = load_128_unaligned ((__m128i*)(s));
++        xmm1 = load_128_unaligned ((__m128i*)(s + 16));
++        xmm2 = load_128_unaligned ((__m128i*)(s + 32));
++        xmm3 = load_128_unaligned ((__m128i*)(s + 48));
 +
- 	    save_128_aligned ((__m128i*)(d),    xmm0);
- 	    save_128_aligned ((__m128i*)(d + 16), xmm1);
- 	    save_128_aligned ((__m128i*)(d + 32), xmm2);
- 	    save_128_aligned ((__m128i*)(d + 48), xmm3);
+         save_128_aligned ((__m128i*)(d),    xmm0);
+         save_128_aligned ((__m128i*)(d + 16), xmm1);
+         save_128_aligned ((__m128i*)(d + 32), xmm2);
+         save_128_aligned ((__m128i*)(d + 48), xmm3);
  
- 	    s += 64;
- 	    d += 64;
- 	    w -= 64;
+         s += 64;
+         d += 64;
+         w -= 64;
 @@ -4548,26 +4701,33 @@ pixman_blt_sse2 (uint32_t *src_bits,
- 	while (w >= 4)
- 	{
- 	    *(uint32_t *)d = *(uint32_t *)s;
+     while (w >= 4)
+     {
+         *(uint32_t *)d = *(uint32_t *)s;
  
- 	    w -= 4;
- 	    s += 4;
- 	    d += 4;
- 	}
+         w -= 4;
+         s += 4;
+         d += 4;
+     }
 +}
  
- 	if (w >= 2)
- 	{
- 	    *(uint16_t *)d = *(uint16_t *)s;
- 	    w -= 2;
- 	    s += 2;
- 	    d += 2;
- 	}
+     if (w >= 2)
+     {
+         *(uint16_t *)d = *(uint16_t *)s;
+         w -= 2;
+         s += 2;
+         d += 2;
+     }
      }
  
 +#ifdef TT_MEMUTIL
@@ -4734,8 +5327,8 @@ diff -r 7f26aac55b28 gfx/cairo/libpixman/src/pixman-sse2.c
                            pixman_composite_info_t *info)
  {
 diff -r 28eff799c22e gfx/cairo/libpixman/src/pixman-trap.c
---- a/gfx/cairo/libpixman/src/pixman-trap.c	Thu Sep 06 17:23:00 2012 +0900
-+++ b/gfx/cairo/libpixman/src/pixman-trap.c	Sat Sep 29 14:24:58 2012 +0900
+--- a/gfx/cairo/libpixman/src/pixman-trap.c    Thu Sep 06 17:23:00 2012 +0900
++++ b/gfx/cairo/libpixman/src/pixman-trap.c    Sat Sep 29 14:24:58 2012 +0900
 @@ -20,75 +20,123 @@
   * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
   * PERFORMANCE OF THIS SOFTWARE.
@@ -4768,37 +5361,37 @@ diff -r 28eff799c22e gfx/cairo/libpixman/src/pixman-trap.c
 +if (8 == n)
 +{
 +    f = DIV (f - Y_FRAC_FIRST (8) + (STEP_Y_SMALL (8) - pixman_fixed_e), STEP_Y_SMALL (8)) * STEP_Y_SMALL (8) +
-+	Y_FRAC_FIRST (8);
++    Y_FRAC_FIRST (8);
 +    
 +    if (f > Y_FRAC_LAST (8))
 +    {
-+	if (pixman_fixed_to_int (i) == 0x7fff)
-+	{
-+	    f = 0xffff; /* saturate */
-+	}
-+	else
-+	{
-+	    f = Y_FRAC_FIRST (8);
-+	    i += pixman_fixed_1;
-+	}
++    if (pixman_fixed_to_int (i) == 0x7fff)
++    {
++        f = 0xffff; /* saturate */
++    }
++    else
++    {
++        f = Y_FRAC_FIRST (8);
++        i += pixman_fixed_1;
++    }
 +    }
 +}
 +else
 +{
      f = DIV (f - Y_FRAC_FIRST (n) + (STEP_Y_SMALL (n) - pixman_fixed_e), STEP_Y_SMALL (n)) * STEP_Y_SMALL (n) +
- 	Y_FRAC_FIRST (n);
+     Y_FRAC_FIRST (n);
      
      if (f > Y_FRAC_LAST (n))
      {
- 	if (pixman_fixed_to_int (i) == 0x7fff)
- 	{
- 	    f = 0xffff; /* saturate */
- 	}
- 	else
- 	{
- 	    f = Y_FRAC_FIRST (n);
- 	    i += pixman_fixed_1;
- 	}
+     if (pixman_fixed_to_int (i) == 0x7fff)
+     {
+         f = 0xffff; /* saturate */
+     }
+     else
+     {
+         f = Y_FRAC_FIRST (n);
+         i += pixman_fixed_1;
+     }
      }
 +}
      return (i | f);
@@ -4818,37 +5411,37 @@ diff -r 28eff799c22e gfx/cairo/libpixman/src/pixman-trap.c
 +if (8 == n)
 +{
 +    f = DIV (f - pixman_fixed_e - Y_FRAC_FIRST (8), STEP_Y_SMALL (8)) * STEP_Y_SMALL (8) +
-+	Y_FRAC_FIRST (8);
++    Y_FRAC_FIRST (8);
 +
 +    if (f < Y_FRAC_FIRST (8))
 +    {
-+	if (pixman_fixed_to_int (i) == 0x8000)
-+	{
-+	    f = 0; /* saturate */
-+	}
-+	else
-+	{
-+	    f = Y_FRAC_LAST (8);
-+	    i -= pixman_fixed_1;
-+	}
++    if (pixman_fixed_to_int (i) == 0x8000)
++    {
++        f = 0; /* saturate */
++    }
++    else
++    {
++        f = Y_FRAC_LAST (8);
++        i -= pixman_fixed_1;
++    }
 +    }
 +}
 +else
 +{
      f = DIV (f - pixman_fixed_e - Y_FRAC_FIRST (n), STEP_Y_SMALL (n)) * STEP_Y_SMALL (n) +
- 	Y_FRAC_FIRST (n);
+     Y_FRAC_FIRST (n);
  
      if (f < Y_FRAC_FIRST (n))
      {
- 	if (pixman_fixed_to_int (i) == 0x8000)
- 	{
- 	    f = 0; /* saturate */
- 	}
- 	else
- 	{
- 	    f = Y_FRAC_LAST (n);
- 	    i -= pixman_fixed_1;
- 	}
+     if (pixman_fixed_to_int (i) == 0x8000)
+     {
+         f = 0; /* saturate */
+     }
+     else
+     {
+         f = Y_FRAC_LAST (n);
+         i -= pixman_fixed_1;
+     }
      }
 +}
 +
@@ -4861,29 +5454,29 @@ diff -r 28eff799c22e gfx/cairo/libpixman/src/pixman-trap.c
  PIXMAN_EXPORT void
  pixman_edge_step (pixman_edge_t *e,
 @@ -181,21 +229,32 @@ pixman_edge_init (pixman_edge_t *e,
- 	else
- 	{
- 	    e->signdx = -1;
- 	    e->stepx = -(-dx / dy);
- 	    e->dx = -dx % dy;
- 	    e->e = 0;
- 	}
+     else
+     {
+         e->signdx = -1;
+         e->stepx = -(-dx / dy);
+         e->dx = -dx % dy;
+         e->e = 0;
+     }
  
 +if (8 == n)
 +{
-+	_pixman_edge_multi_init (e, STEP_Y_SMALL (8),
-+				 &e->stepx_small, &e->dx_small);
++    _pixman_edge_multi_init (e, STEP_Y_SMALL (8),
++                 &e->stepx_small, &e->dx_small);
 +
-+	_pixman_edge_multi_init (e, STEP_Y_BIG (8),
-+				 &e->stepx_big, &e->dx_big);
++    _pixman_edge_multi_init (e, STEP_Y_BIG (8),
++                 &e->stepx_big, &e->dx_big);
 +}
 +else
 +{
- 	_pixman_edge_multi_init (e, STEP_Y_SMALL (n),
- 				 &e->stepx_small, &e->dx_small);
+     _pixman_edge_multi_init (e, STEP_Y_SMALL (n),
+                  &e->stepx_small, &e->dx_small);
  
- 	_pixman_edge_multi_init (e, STEP_Y_BIG (n),
- 				 &e->stepx_big, &e->dx_big);
+     _pixman_edge_multi_init (e, STEP_Y_BIG (n),
+                  &e->stepx_big, &e->dx_big);
 +}
      }
      pixman_edge_step (e, y_start - y_top);
@@ -4912,12 +5505,12 @@ diff -r 28eff799c22e gfx/cairo/libpixman/src/pixman-trap.c
 +shared(ntraps, traps, image, x_off, y_off)
 +    for (i = 0; i < ntraps; ++i)
 +    {
-+	const pixman_trapezoid_t *trap = &(traps[i]);
++    const pixman_trapezoid_t *trap = &(traps[i]);
 +
-+	if (pixman_trapezoid_valid (trap))
-+	{
-+		pixman_rasterize_trapezoid (image, trap, x_off, y_off);
-+	}
++    if (pixman_trapezoid_valid (trap))
++    {
++        pixman_rasterize_trapezoid (image, trap, x_off, y_off);
++    }
 +    }
 +}
 +else
@@ -4925,12 +5518,12 @@ diff -r 28eff799c22e gfx/cairo/libpixman/src/pixman-trap.c
 +{
      for (i = 0; i < ntraps; ++i)
      {
- 	const pixman_trapezoid_t *trap = &(traps[i]);
+     const pixman_trapezoid_t *trap = &(traps[i]);
  
- 	if (!pixman_trapezoid_valid (trap))
- 	    continue;
+     if (!pixman_trapezoid_valid (trap))
+         continue;
  
- 	pixman_rasterize_trapezoid (image, trap, x_off, y_off);
+     pixman_rasterize_trapezoid (image, trap, x_off, y_off);
      }
 +}
  
@@ -4964,7 +5557,7 @@ diff --git a/xpcom/glue/pldhash.cpp b/xpcom/glue/pldhash.cpp
  #include "mozilla/HashFunctions.h"
  #include "nsDebug.h"     /* for PR_ASSERT */
  #include "nsAlgorithm.h"
-@@ -124,23 +127,39 @@ PL_DHashMatchStringKey(PLDHashTable *tab
+@@ -125,23 +128,39 @@ PL_DHashMatchStringKey(PLDHashTable *tab
              strcmp((const char *) stub->key, (const char *) key) == 0);
  }
  
@@ -5004,7 +5597,7 @@ diff --git a/xpcom/glue/pldhash.cpp b/xpcom/glue/pldhash.cpp
      const PLDHashEntryStub *stub = (const PLDHashEntryStub *)entry;
  
      free((void *) stub->key);
-@@ -531,17 +550,39 @@ ChangeTable(PLDHashTable *table, int del
+@@ -532,17 +551,39 @@ ChangeTable(PLDHashTable *table, int del
  #ifdef DEBUG
      recursionLevel = RECURSION_LEVEL(table);
  #endif
@@ -5045,8 +5638,8 @@ diff --git a/xpcom/glue/pldhash.cpp b/xpcom/glue/pldhash.cpp
  
      /* Copy only live entries, leaving removed ones behind. */
 diff -r 284837bbf631 nsprpub/pr/src/io/prsocket.c
---- a/nsprpub/pr/src/io/prsocket.c	Sat Aug 25 07:23:12 2012 +0900
-+++ b/nsprpub/pr/src/io/prsocket.c	Sat Aug 25 09:43:59 2012 +0900
+--- a/nsprpub/pr/src/io/prsocket.c    Sat Aug 25 07:23:12 2012 +0900
++++ b/nsprpub/pr/src/io/prsocket.c    Sat Aug 25 09:43:59 2012 +0900
 @@ -283,24 +283,16 @@ static PRStatus PR_CALLBACK SocketConnec
      if (err != 0) {
          _PR_MD_MAP_CONNECT_ERROR(err);
@@ -5075,7 +5668,12 @@ diff -r 284837bbf631 nsprpub/pr/src/io/prsocket.c
 diff --git a/js/src/gc/Root.h b/js/src/gc/Root.h
 --- a/js/src/gc/Root.h
 +++ b/js/src/gc/Root.h
-@@ -114,8 +114,7 @@
+@@ -109,18 +109,17 @@ class MutableHandle;
+  * specialization, define a HandleBase<T> specialization containing them.
+  */
+ template <typename T>
+ class Handle : public js::HandleBase<T>
+ {
    public:
      /* Creates a handle from a handle of a type convertible to T. */
      template <typename S>
@@ -5085,7 +5683,17 @@ diff --git a/js/src/gc/Root.h b/js/src/gc/Root.h
      {
          ptr = reinterpret_cast<const T *>(handle.address());
      }
-@@ -150,14 +149,12 @@
+ 
+     /* Create a handle for a NULL pointer. */
+     Handle(NullPtr) {
+         typedef typename js::tl::StaticAssert<js::tl::IsPointerType<T>::result>::result _;
+         ptr = reinterpret_cast<const T *>(&NullPtr::constNullValue);
+@@ -145,24 +144,22 @@ class Handle : public js::HandleBase<T>
+     }
+ 
+     /*
+      * Construct a handle from an explicitly rooted location. This is the
+      * normal way to create a handle, and normally happens implicitly.
       */
      template <typename S>
      inline
@@ -5102,7 +5710,17 @@ diff --git a/js/src/gc/Root.h b/js/src/gc/Root.h
  
      const T *address() const { return ptr; }
      T get() const { return *ptr; }
-@@ -194,16 +191,14 @@
+ 
+     operator T () const { return get(); }
+     T operator ->() const { return get(); }
+ 
+   private:
+@@ -189,26 +186,24 @@ typedef Handle<Value>        HandleValue
+  * specialization, define a MutableHandleBase<T> specialization containing
+  * them.
+  */
+ template <typename T>
+ class MutableHandle : public js::MutableHandleBase<T>
  {
    public:
      template <typename S>
@@ -5121,7 +5739,17 @@ diff --git a/js/src/gc/Root.h b/js/src/gc/Root.h
  
      void set(T v)
      {
-@@ -752,24 +747,21 @@
+         JS_ASSERT(!js::RootMethods<T>::poisoned(v));
+         *ptr = v;
+     }
+ 
+     /*
+@@ -747,34 +742,31 @@ class SkipRoot
+ };
+ 
+ } /* namespace js */
+ 
+ namespace JS {
  
  template<typename T> template <typename S>
  inline
@@ -5149,11 +5777,15 @@ diff --git a/js/src/gc/Root.h b/js/src/gc/Root.h
  {
      ptr = root->address();
  }
-
+ 
+ /*
+  * The scoped guard object AutoAssertNoGC forces the GC to assert if a GC is
+  * attempted while the guard object is live.  If you have a GC-unsafe operation
+  * to perform, use this guard object to protect your operation.
 diff --git a/security/manager/ssl/src/Makefile.in b/security/manager/ssl/src/Makefile.in
 --- a/security/manager/ssl/src/Makefile.in
 +++ b/security/manager/ssl/src/Makefile.in
-@@ -95,8 +95,14 @@ DEFINES += \
+@@ -94,8 +94,14 @@ DEFINES += \
  EXPORTS += \
    CryptoTask.h \
    nsNSSShutDown.h \
@@ -5168,15 +5800,52 @@ diff --git a/security/manager/ssl/src/Makefile.in b/security/manager/ssl/src/Mak
 +COMPILE_CXXFLAGS += -GL-
 +endif
 +endif
+diff --git a/gfx/2d/SSEHelpers.h b/gfx/2d/SSEHelpers.h
+--- a/gfx/2d/SSEHelpers.h
++++ b/gfx/2d/SSEHelpers.h
+@@ -1,15 +1,33 @@
+ /* This Source Code Form is subject to the terms of the Mozilla Public
+  * License, v. 2.0. If a copy of the MPL was not distributed with this
+  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+ 
+ #include <xmmintrin.h>
+ #include <emmintrin.h>
+ 
++/* VC8 doesn't support some SSE2 built-in functions, so we define them here. */
++#if defined(_MSC_VER) && (_MSC_VER < 1500)
++MOZ_ALWAYS_INLINE __m128 _mm_castsi128_ps(__m128i a)
++{
++  return *(__m128 *)&a;
++}
++
++MOZ_ALWAYS_INLINE __m128i _mm_castpd_si128(__m128d a)
++{
++  return *(__m128i *)&a;
++}
++
++MOZ_ALWAYS_INLINE __m128i _mm_castps_si128(__m128 a)
++{
++  return *(__m128i *)&a;
++}
++#endif
++
+ /* Before Nehalem _mm_loadu_si128 could be very slow, this trick is a little
+  * faster. Once enough people are on architectures where _mm_loadu_si128 is
+  * fast we can migrate to it.
+  */
+ MOZ_ALWAYS_INLINE __m128i loadUnaligned128(const __m128i *aSource)
+ {
+   // Yes! We use uninitialized memory here, we'll overwrite it though!
+   __m128 res = _mm_loadl_pi(_mm_set1_ps(0), (const __m64*)aSource);
 diff --git a/layout/svg/Makefile.in b/layout/svg/Makefile.in
 --- a/layout/svg/Makefile.in
 +++ b/layout/svg/Makefile.in
-@@ -80,8 +80,21 @@ LOCAL_INCLUDES	= \
+@@ -80,8 +80,21 @@ LOCAL_INCLUDES    = \
  libs::
- 	$(INSTALL) $(srcdir)/svg.css $(DIST)/bin/res
+     $(INSTALL) $(srcdir)/svg.css $(DIST)/bin/res
  
  install::
- 	$(SYSINSTALL) $(IFLAGS1) $(srcdir)/svg.css $(DESTDIR)$(mozappdir)/res
+     $(SYSINSTALL) $(IFLAGS1) $(srcdir)/svg.css $(DESTDIR)$(mozappdir)/res
  
  
  DEFINES += -D_IMPL_NS_LAYOUT
@@ -5196,13 +5865,13 @@ diff --git a/layout/svg/Makefile.in b/layout/svg/Makefile.in
 diff --git a/content/svg/content/src/Makefile.in b/content/svg/content/src/Makefile.in
 --- a/content/svg/content/src/Makefile.in
 +++ b/content/svg/content/src/Makefile.in
-@@ -155,8 +155,21 @@ INCLUDES += 	\
- 		-I$(srcdir)/../../../../layout/style \
- 		-I$(srcdir)/../../../events/src \
- 		-I$(srcdir)/../../../html/content/src \
- 		-I$(topsrcdir)/content/xbl/src \
- 		-I$(srcdir)/../../../smil \
- 		$(NULL)
+@@ -155,8 +155,21 @@ INCLUDES +=     \
+         -I$(srcdir)/../../../../layout/style \
+         -I$(srcdir)/../../../events/src \
+         -I$(srcdir)/../../../html/content/src \
+         -I$(topsrcdir)/content/xbl/src \
+         -I$(srcdir)/../../../smil \
+         $(NULL)
  
  DEFINES += -D_IMPL_NS_LAYOUT
 +
@@ -5219,8 +5888,8 @@ diff --git a/content/svg/content/src/Makefile.in b/content/svg/content/src/Makef
 +endif
 +endif
 diff -r 6a3897dad583 mfbt/ThreadLocal.h
---- a/mfbt/ThreadLocal.h	Sat Oct 06 15:30:41 2012 +0900
-+++ b/mfbt/ThreadLocal.h	Sat Oct 06 15:40:43 2012 +0900
+--- a/mfbt/ThreadLocal.h    Sat Oct 06 15:30:41 2012 +0900
++++ b/mfbt/ThreadLocal.h    Sat Oct 06 15:40:43 2012 +0900
 @@ -12,17 +12,27 @@
  // This file will get included in any file that wants to add a profiler mark.
  // In order to not bring <windows.h> together we could include windef.h and
@@ -5300,795 +5969,30 @@ diff --git a/xpcom/ds/TimeStamp_windows.cpp b/xpcom/ds/TimeStamp_windows.cpp
      struct {
        int nIds;
        char cpuString[12];
-diff --git a/gfx/qcms/transform.c b/gfx/qcms/transform.c
---- a/gfx/qcms/transform.c
-+++ b/gfx/qcms/transform.c
-@@ -35,6 +35,65 @@
- #define X86
- #endif /* _M_IX86 || __i386__ || __i386 || _M_AMD64 || __x86_64__ || __x86_64 */
+diff -r 28eff799c22e js/public/Vector.h
+--- a/js/public/Vector.h    Thu Sep 06 17:23:00 2012 +0900
++++ b/js/public/Vector.h    Thu Sep 13 18:35:31 2012 +0900
+@@ -130,16 +130,20 @@ struct VectorImpl<T, N, AP, true>
+          * requiring T == U.
+          *
+          * memcpy(dst, srcbeg, sizeof(T) * (srcend - srcbeg));
+          */
+         for (const U *p = srcbeg; p != srcend; ++p, ++dst)
+             *dst = *p;
+     }
  
-+#ifdef X86
-+#if _MSC_VER == 1400
-+#include <emmintrin.h>
-+#else  /* _MSC_VER == 1400 */
-+#include <smmintrin.h>
-+#endif /* _MSC_VER == 1400 */
-+#include "mozilla/Attributes.h"
++    static inline void copyConstruct(wchar_t *dst, const wchar_t *srcbeg, const wchar_t *srcend) {
++        PodCopy(dst, srcbeg, srcend - srcbeg);
++    }
 +
-+#if defined(_M_IX86) && _MSC_VER == 1400
-+__declspec(naked) __declspec(noinline)
-+void __fastcall floor_ps_sse4_1(const __m128 * __restrict src, __m128i * __restrict dest) {
-+	__asm {
-+		/* roundps  xmm0, xmmword ptr [ecx], 1 */
-+		__asm _emit 0x66
-+		__asm _emit 0x0F
-+		__asm _emit 0x3A
-+		__asm _emit 0x08
-+		__asm _emit 0x01
-+		__asm _emit 0x01
-+		cvttps2dq   xmm0, xmm0
-+		movdqa      xmmword ptr [edx], xmm0
-+		ret
-+	}
-+}
-+
-+__declspec(naked) __declspec(noinline)
-+void __fastcall ceil_ps_sse4_1(const __m128 * __restrict src, __m128i * __restrict dest) {
-+	__asm {
-+		/* roundps  xmm0, xmmword ptr [ecx], 2 */
-+		__asm _emit 0x66
-+		__asm _emit 0x0F
-+		__asm _emit 0x3A
-+		__asm _emit 0x08
-+		__asm _emit 0x01
-+		__asm _emit 0x02
-+		cvttps2dq   xmm0, xmm0
-+		movdqa      xmmword ptr [edx], xmm0
-+		ret
-+	}
-+}
-+#endif
-+
-+int sse_version_available(void);
-+
-+static const ALIGN float ps255[4]  = { 255, 255, 255, 255 };
-+static const ALIGN float psZero[4] = {   0,   0,   0,   0 };
-+static const ALIGN float psHalf[4] = { 0.5, 0.5, 0.5, 0.5 };
-+
-+MOZ_ALWAYS_INLINE
-+void clamp_u8_sse2(const __m128 *src, __m128i *dest) {
-+	__m128 x = *src;
-+
-+	x = _mm_mul_ps(x, *(__m128 *)&ps255);
-+	x = _mm_min_ps(x, *(__m128 *)&ps255);
-+	x = _mm_max_ps(x, *(__m128 *)&psZero);
-+	*dest = _mm_cvttps_epi32(_mm_add_ps(x, *(__m128 *)&psHalf));
-+}
-+#endif /* X86 */
-+
- // Build a White point, primary chromas transfer matrix from RGB to CIE XYZ
- // This is just an approximation, I am not handling all the non-linear
- // aspects of the RGB to XYZ process, and assumming that the gamma correction
-@@ -234,6 +293,11 @@
- {
- 	int i;
- 	float (*mat)[4] = transform->matrix;
-+#ifdef X86
-+	int sse_ver = sse_version_available();
-+	__m128 xm;
-+	__m128i xi;
-+#endif
- 	for (i=0; i<length; i++) {
- 		unsigned char device_r = *src++;
- 		unsigned char device_g = *src++;
-@@ -251,9 +315,24 @@
- 		float out_device_g = pow(out_linear_g, transform->out_gamma_g);
- 		float out_device_b = pow(out_linear_b, transform->out_gamma_b);
+     template <class U>
+     static inline void moveConstruct(T *dst, const U *srcbeg, const U *srcend) {
+         copyConstruct(dst, srcbeg, srcend);
+     }
  
--		dest[OUTPUT_R_INDEX] = clamp_u8(255*out_device_r);
--		dest[OUTPUT_G_INDEX] = clamp_u8(255*out_device_g);
--		dest[OUTPUT_B_INDEX] = clamp_u8(255*out_device_b);
-+#ifdef X86
-+		if (sse_ver >= 2) {
-+			xm.m128_f32[0] = out_device_r;
-+			xm.m128_f32[1] = out_device_g;
-+			xm.m128_f32[2] = out_device_b;
-+			clamp_u8_sse2(&xm, &xi);
-+
-+			dest[OUTPUT_R_INDEX] = xi.m128i_u32[0];
-+			dest[OUTPUT_G_INDEX] = xi.m128i_u32[1];
-+			dest[OUTPUT_B_INDEX] = xi.m128i_u32[2];
-+		} else {
-+#endif
-+			dest[OUTPUT_R_INDEX] = clamp_u8(255*out_device_r);
-+			dest[OUTPUT_G_INDEX] = clamp_u8(255*out_device_g);
-+			dest[OUTPUT_B_INDEX] = clamp_u8(255*out_device_b);
-+#ifdef X86
-+		}
-+#endif
- 		dest += RGB_OUTPUT_COMPONENTS;
- 	}
- }
-@@ -262,6 +341,11 @@
- static void qcms_transform_data_gray_out_lut(qcms_transform *transform, unsigned char *src, unsigned char *dest, size_t length)
- {
- 	unsigned int i;
-+#ifdef X86
-+	int sse_ver = sse_version_available();
-+	__m128 xm;
-+	__m128i xi;
-+#endif
- 	for (i = 0; i < length; i++) {
- 		float out_device_r, out_device_g, out_device_b;
- 		unsigned char device = *src++;
-@@ -272,9 +356,24 @@
- 		out_device_g = lut_interp_linear(linear, transform->output_gamma_lut_g, transform->output_gamma_lut_g_length);
- 		out_device_b = lut_interp_linear(linear, transform->output_gamma_lut_b, transform->output_gamma_lut_b_length);
- 
--		dest[OUTPUT_R_INDEX] = clamp_u8(out_device_r*255);
--		dest[OUTPUT_G_INDEX] = clamp_u8(out_device_g*255);
--		dest[OUTPUT_B_INDEX] = clamp_u8(out_device_b*255);
-+#ifdef X86
-+		if (sse_ver >= 2) {
-+			xm.m128_f32[0] = out_device_r;
-+			xm.m128_f32[1] = out_device_g;
-+			xm.m128_f32[2] = out_device_b;
-+			clamp_u8_sse2(&xm, &xi);
-+
-+			dest[OUTPUT_R_INDEX] = xi.m128i_u32[0];
-+			dest[OUTPUT_G_INDEX] = xi.m128i_u32[1];
-+			dest[OUTPUT_B_INDEX] = xi.m128i_u32[2];
-+		} else {
-+#endif
-+			dest[OUTPUT_R_INDEX] = clamp_u8(out_device_r*255);
-+			dest[OUTPUT_G_INDEX] = clamp_u8(out_device_g*255);
-+			dest[OUTPUT_B_INDEX] = clamp_u8(out_device_b*255);
-+#ifdef X86
-+		}
-+#endif
- 		dest += RGB_OUTPUT_COMPONENTS;
- 	}
- }
-@@ -288,6 +387,11 @@
- static void qcms_transform_data_graya_out_lut(qcms_transform *transform, unsigned char *src, unsigned char *dest, size_t length)
- {
- 	unsigned int i;
-+#ifdef X86
-+	int sse_ver = sse_version_available();
-+	__m128 xm;
-+	__m128i xi;
-+#endif
- 	for (i = 0; i < length; i++) {
- 		float out_device_r, out_device_g, out_device_b;
- 		unsigned char device = *src++;
-@@ -299,9 +403,24 @@
- 		out_device_g = lut_interp_linear(linear, transform->output_gamma_lut_g, transform->output_gamma_lut_g_length);
- 		out_device_b = lut_interp_linear(linear, transform->output_gamma_lut_b, transform->output_gamma_lut_b_length);
- 
--		dest[OUTPUT_R_INDEX] = clamp_u8(out_device_r*255);
--		dest[OUTPUT_G_INDEX] = clamp_u8(out_device_g*255);
--		dest[OUTPUT_B_INDEX] = clamp_u8(out_device_b*255);
-+#ifdef X86
-+		if (sse_ver >= 2) {
-+			xm.m128_f32[0] = out_device_r;
-+			xm.m128_f32[1] = out_device_g;
-+			xm.m128_f32[2] = out_device_b;
-+			clamp_u8_sse2(&xm, &xi);
-+
-+			dest[OUTPUT_R_INDEX] = xi.m128i_u32[0];
-+			dest[OUTPUT_G_INDEX] = xi.m128i_u32[1];
-+			dest[OUTPUT_B_INDEX] = xi.m128i_u32[2];
-+		} else {
-+#endif
-+			dest[OUTPUT_R_INDEX] = clamp_u8(out_device_r*255);
-+			dest[OUTPUT_G_INDEX] = clamp_u8(out_device_g*255);
-+			dest[OUTPUT_B_INDEX] = clamp_u8(out_device_b*255);
-+#ifdef X86
-+		}
-+#endif
- 		dest[OUTPUT_A_INDEX] = alpha;
- 		dest += RGBA_OUTPUT_COMPONENTS;
- 	}
-@@ -419,7 +538,7 @@
- }
- 
- // Not used
--/* 
-+ 
- static void qcms_transform_data_clut(qcms_transform *transform, unsigned char *src, unsigned char *dest, size_t length) {
- 	unsigned int i;
- 	int xy_len = 1;
-@@ -428,12 +547,18 @@
- 	float* r_table = transform->r_clut;
- 	float* g_table = transform->g_clut;
- 	float* b_table = transform->b_clut;
-+	float rcp255 = 1.0f / 255.0f;
-+#ifdef X86
-+	int sse_ver = sse_version_available();
-+	__m128 xm;
-+	__m128i xi;
-+#endif
-   
- 	for (i = 0; i < length; i++) {
- 		unsigned char in_r = *src++;
- 		unsigned char in_g = *src++;
- 		unsigned char in_b = *src++;
--		float linear_r = in_r/255.0f, linear_g=in_g/255.0f, linear_b = in_b/255.0f;
-+				float linear_r = in_r*rcp255, linear_g=in_g*rcp255, linear_b = in_b*rcp255;
- 
- 		int x = floorf(linear_r * (transform->grid_size-1));
- 		int y = floorf(linear_g * (transform->grid_size-1));
-@@ -469,12 +594,27 @@
- 		float b_y2 = lerp(b_x3, b_x4, y_d);
- 		float clut_b = lerp(b_y1, b_y2, z_d);
- 
--		*dest++ = clamp_u8(clut_r*255.0f);
--		*dest++ = clamp_u8(clut_g*255.0f);
--		*dest++ = clamp_u8(clut_b*255.0f);
-+#ifdef X86
-+		if (sse_ver >= 2) {
-+			xm.m128_f32[0] = clut_r;
-+			xm.m128_f32[1] = clut_g;
-+			xm.m128_f32[2] = clut_b;
-+			clamp_u8_sse2(&xm, &xi);
-+
-+			*dest++ = xi.m128i_u32[0];
-+			*dest++ = xi.m128i_u32[1];
-+			*dest++ = xi.m128i_u32[2];
-+		} else {
-+#endif
-+			*dest++ = clamp_u8(clut_r*255.0f);
-+			*dest++ = clamp_u8(clut_g*255.0f);
-+			*dest++ = clamp_u8(clut_b*255.0f);
-+#ifdef X86
-+		}
-+#endif
- 	}	
- }
--*/
-+
- 
- static int int_div_ceil(int value, int div) {
- 	return ((value  + div - 1) / div);
-@@ -489,27 +629,81 @@
- 	float* r_table = transform->r_clut;
- 	float* g_table = transform->g_clut;
- 	float* b_table = transform->b_clut;
--	float c0_r, c1_r, c2_r, c3_r;
--	float c0_g, c1_g, c2_g, c3_g;
--	float c0_b, c1_b, c2_b, c3_b;
--	float clut_r, clut_g, clut_b;
-+	float rcp255 = 1.0f / 255.0f;
-+#ifdef X86
-+	int sse_ver = sse_version_available();
-+#endif
-+
- 	for (i = 0; i < length; i++) {
--		unsigned char in_r = *src++;
--		unsigned char in_g = *src++;
--		unsigned char in_b = *src++;
--		unsigned char in_a = *src++;
-+		float c0_r, c1_r, c2_r, c3_r;
-+		float c0_g, c1_g, c2_g, c3_g;
-+		float c0_b, c1_b, c2_b, c3_b;
-+		float clut_r, clut_g, clut_b;
-+		unsigned char in_r = src[i * 4 + 0];
-+		unsigned char in_g = src[i * 4 + 1];
-+		unsigned char in_b = src[i * 4 + 2];
-+		unsigned char in_a = src[i * 4 + 3];
-+		float linear_r = in_r*rcp255, linear_g=in_g*rcp255, linear_b = in_b*rcp255;
-+#ifdef X86
-+		__m128 xm;
-+		__m128i xi;
-+#endif
- 		float linear_r = in_r/255.0f, linear_g=in_g/255.0f, linear_b = in_b/255.0f;
- 
--		int x = in_r * (transform->grid_size-1) / 255;
--		int y = in_g * (transform->grid_size-1) / 255;
--		int z = in_b * (transform->grid_size-1) / 255;
--		int x_n = int_div_ceil(in_r * (transform->grid_size-1), 255);
--		int y_n = int_div_ceil(in_g * (transform->grid_size-1), 255);
--		int z_n = int_div_ceil(in_b * (transform->grid_size-1), 255);
--		float rx = linear_r * (transform->grid_size-1) - x; 
--		float ry = linear_g * (transform->grid_size-1) - y;
--		float rz = linear_b * (transform->grid_size-1) - z; 
-+		int x;
-+		int y;
-+		int z;
-+		int x_n;
-+		int y_n;
-+		int z_n;
-+		float rx;
-+		float ry;
-+		float rz;
-+		float lr = linear_r * (transform->grid_size-1);
-+		float lg = linear_g * (transform->grid_size-1);
-+		float lb = linear_b * (transform->grid_size-1);
-+
-+#if defined(X86) && !(defined(_M_AMD64) && _MSC_VER == 1400)
-+		if (sse_ver >= 4) {
-+			xm.m128_f32[0] = lr;
-+			xm.m128_f32[1] = lg;
-+			xm.m128_f32[2] = lb;
- 
-+#if _MSC_VER == 1400
-+			floor_ps_sse4_1(&xm, &xi);
-+#else
-+			xi = _mm_cvttps_epi32(_mm_floor_ps(xm));
-+#endif
-+			x = _mm_cvtsi128_si32(xi);
-+			y = _mm_cvtsi128_si32(xi = _mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
-+			z = _mm_cvtsi128_si32(_mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
-+
-+#if _MSC_VER == 1400
-+			ceil_ps_sse4_1(&xm, &xi);
-+#else
-+			xi = _mm_cvttps_epi32(_mm_ceil_ps(xm));
-+#endif
-+			x_n = _mm_cvtsi128_si32(xi);
-+			y_n = _mm_cvtsi128_si32(xi = _mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
-+			z_n = _mm_cvtsi128_si32(_mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
-+
-+			rx = lr - x; 
-+			ry = lg - y;
-+			rz = lb - z; 
-+		} else {
-+#endif /* defined(X86) && !(defined(_M_AMD64) && _MSC_VER == 1400) */
-+			x = floor(lr);
-+			y = floor(lg);
-+			z = floor(lb);
-+			x_n = ceil(lr);
-+			y_n = ceil(lg);
-+			z_n = ceil(lb);
-+			rx = lr - x; 
-+			ry = lg - y;
-+			rz = lb - z; 
-+#if defined(X86) && !(defined(_M_AMD64) && _MSC_VER == 1400)
-+		}
-+#endif
- 		c0_r = CLU(r_table, x, y, z);
- 		c0_g = CLU(g_table, x, y, z);
- 		c0_b = CLU(b_table, x, y, z);
-@@ -588,9 +782,24 @@
- 		clut_g = c0_g + c1_g*rx + c2_g*ry + c3_g*rz;
- 		clut_b = c0_b + c1_b*rx + c2_b*ry + c3_b*rz;
- 
--		dest[OUTPUT_R_INDEX] = clamp_u8(clut_r*255.0f);
--		dest[OUTPUT_G_INDEX] = clamp_u8(clut_g*255.0f);
--		dest[OUTPUT_B_INDEX] = clamp_u8(clut_b*255.0f);
-+#ifdef X86
-+		if (sse_ver >= 2) {
-+			xm.m128_f32[0] = clut_r;
-+			xm.m128_f32[1] = clut_g;
-+			xm.m128_f32[2] = clut_b;
-+			clamp_u8_sse2(&xm, &xi);
-+
-+			dest[OUTPUT_R_INDEX] = _mm_cvtsi128_si32(xi);
-+			dest[OUTPUT_G_INDEX] = _mm_cvtsi128_si32(xi = _mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
-+			dest[OUTPUT_B_INDEX] = _mm_cvtsi128_si32(_mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
-+		} else {
-+#endif
-+			dest[OUTPUT_R_INDEX] = clamp_u8(clut_r*255.0f);
-+			dest[OUTPUT_G_INDEX] = clamp_u8(clut_g*255.0f);
-+			dest[OUTPUT_B_INDEX] = clamp_u8(clut_b*255.0f);
-+#ifdef X86
-+		}
-+#endif
- 		dest[OUTPUT_A_INDEX] = in_a;
- 		dest += RGBA_OUTPUT_COMPONENTS;
- 	}	
-@@ -605,25 +814,79 @@
- 	float* r_table = transform->r_clut;
- 	float* g_table = transform->g_clut;
- 	float* b_table = transform->b_clut;
--	float c0_r, c1_r, c2_r, c3_r;
--	float c0_g, c1_g, c2_g, c3_g;
--	float c0_b, c1_b, c2_b, c3_b;
--	float clut_r, clut_g, clut_b;
-+	float rcp255 = 1.0f / 255.0f;
-+#ifdef X86
-+	int sse_ver = sse_version_available();
-+#endif
-+
- 	for (i = 0; i < length; i++) {
--		unsigned char in_r = *src++;
--		unsigned char in_g = *src++;
--		unsigned char in_b = *src++;
--		float linear_r = in_r/255.0f, linear_g=in_g/255.0f, linear_b = in_b/255.0f;
-+		float c0_r, c1_r, c2_r, c3_r;
-+		float c0_g, c1_g, c2_g, c3_g;
-+		float c0_b, c1_b, c2_b, c3_b;
-+		float clut_r, clut_g, clut_b;
-+		unsigned char in_r = src[i * 3 + 0];
-+		unsigned char in_g = src[i * 3 + 1];
-+		unsigned char in_b = src[i * 3 + 2];
-+		float linear_r = in_r*rcp255, linear_g=in_g*rcp255, linear_b = in_b*rcp255;
-+#ifdef X86
-+		__m128 xm;
-+		__m128i xi;
-+#endif linear_b = in_b/255.0f;
-+
-+		int x;
-+		int y;
-+		int z;
-+		int x_n;
-+		int y_n;
-+		int z_n;
-+		float rx;
-+		float ry;
-+		float rz;
-+		float lr = linear_r * (transform->grid_size-1);
-+		float lg = linear_g * (transform->grid_size-1);
-+		float lb = linear_b * (transform->grid_size-1);
-+
-+#if defined(X86) && !(defined(_M_AMD64) && _MSC_VER == 1400)
-+		if (sse_ver >= 4) {
-+			xm.m128_f32[0] = lr;
-+			xm.m128_f32[1] = lg;
-+			xm.m128_f32[2] = lb;
- 
--		int x = in_r * (transform->grid_size-1) / 255;
--		int y = in_g * (transform->grid_size-1) / 255;
--		int z = in_b * (transform->grid_size-1) / 255;
--		int x_n = int_div_ceil(in_r * (transform->grid_size-1), 255);
--		int y_n = int_div_ceil(in_g * (transform->grid_size-1), 255);
--		int z_n = int_div_ceil(in_b * (transform->grid_size-1), 255);
--		float rx = linear_r * (transform->grid_size-1) - x;
--		float ry = linear_g * (transform->grid_size-1) - y;
--		float rz = linear_b * (transform->grid_size-1) - z;
-+#if _MSC_VER == 1400
-+			floor_ps_sse4_1(&xm, &xi);
-+#else
-+			xi = _mm_cvttps_epi32(_mm_floor_ps(xm));
-+#endif
-+			x = _mm_cvtsi128_si32(xi);
-+			y = _mm_cvtsi128_si32(xi = _mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
-+			z = _mm_cvtsi128_si32(_mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
-+
-+#if _MSC_VER == 1400
-+			ceil_ps_sse4_1(&xm, &xi);
-+#else
-+			xi = _mm_cvttps_epi32(_mm_ceil_ps(xm));
-+#endif
-+			x_n = _mm_cvtsi128_si32(xi);
-+			y_n = _mm_cvtsi128_si32(xi = _mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
-+			z_n = _mm_cvtsi128_si32(_mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
-+
-+			rx = lr - x; 
-+			ry = lg - y;
-+			rz = lb - z; 
-+		} else {
-+#endif /* defined(X86) && !(defined(_M_AMD64) && _MSC_VER == 1400) */
-+			x = floor(lr);
-+			y = floor(lg);
-+			z = floor(lb);
-+			x_n = ceil(lr);
-+			y_n = ceil(lg);
-+			z_n = ceil(lb);
-+			rx = lr - x; 
-+			ry = lg - y;
-+			rz = lb - z; 
-+#if defined(X86) && !(defined(_M_AMD64) && _MSC_VER == 1400)
-+		}
-+#endif
- 
- 		c0_r = CLU(r_table, x, y, z);
- 		c0_g = CLU(g_table, x, y, z);
-@@ -703,9 +966,24 @@
- 		clut_g = c0_g + c1_g*rx + c2_g*ry + c3_g*rz;
- 		clut_b = c0_b + c1_b*rx + c2_b*ry + c3_b*rz;
- 
--		dest[OUTPUT_R_INDEX] = clamp_u8(clut_r*255.0f);
--		dest[OUTPUT_G_INDEX] = clamp_u8(clut_g*255.0f);
--		dest[OUTPUT_B_INDEX] = clamp_u8(clut_b*255.0f);
-+#ifdef X86
-+		if (sse_ver >= 2) {
-+			xm.m128_f32[0] = clut_r;
-+			xm.m128_f32[1] = clut_g;
-+			xm.m128_f32[2] = clut_b;
-+			clamp_u8_sse2(&xm, &xi);
-+
-+			dest[OUTPUT_R_INDEX] = _mm_cvtsi128_si32(xi);
-+			dest[OUTPUT_G_INDEX] = _mm_cvtsi128_si32(xi = _mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
-+			dest[OUTPUT_B_INDEX] = _mm_cvtsi128_si32(_mm_shuffle_epi32(xi, _MM_SHUFFLE(0, 3, 2, 1)));
-+		} else {
-+#endif
-+			dest[OUTPUT_R_INDEX] = clamp_u8(clut_r*255.0f);
-+			dest[OUTPUT_G_INDEX] = clamp_u8(clut_g*255.0f);
-+			dest[OUTPUT_B_INDEX] = clamp_u8(clut_b*255.0f);
-+#ifdef X86
-+		}
-+#endif
- 		dest += RGB_OUTPUT_COMPONENTS;
- 	}	
- }
-@@ -714,6 +992,11 @@
- {
- 	unsigned int i;
- 	float (*mat)[4] = transform->matrix;
-+#ifdef X86
-+	int sse_ver = sse_version_available();
-+	__m128 xm;
-+	__m128i xi;
-+#endif
- 	for (i = 0; i < length; i++) {
- 		unsigned char device_r = *src++;
- 		unsigned char device_g = *src++;
-@@ -739,9 +1022,24 @@
- 		out_device_b = lut_interp_linear(out_linear_b, 
- 				transform->output_gamma_lut_b, transform->output_gamma_lut_b_length);
- 
--		dest[OUTPUT_R_INDEX] = clamp_u8(out_device_r*255);
--		dest[OUTPUT_G_INDEX] = clamp_u8(out_device_g*255);
--		dest[OUTPUT_B_INDEX] = clamp_u8(out_device_b*255);
-+#ifdef X86
-+		if (sse_ver >= 2) {
-+			xm.m128_f32[0] = out_device_r;
-+			xm.m128_f32[1] = out_device_g;
-+			xm.m128_f32[2] = out_device_b;
-+			clamp_u8_sse2(&xm, &xi);
-+
-+			dest[OUTPUT_R_INDEX] = xi.m128i_u32[0];
-+			dest[OUTPUT_G_INDEX] = xi.m128i_u32[1];
-+			dest[OUTPUT_B_INDEX] = xi.m128i_u32[2];
-+		} else {
-+#endif
-+			dest[OUTPUT_R_INDEX] = clamp_u8(out_device_r*255);
-+			dest[OUTPUT_G_INDEX] = clamp_u8(out_device_g*255);
-+			dest[OUTPUT_B_INDEX] = clamp_u8(out_device_b*255);
-+#ifdef X86
-+		}
-+#endif
- 		dest += RGB_OUTPUT_COMPONENTS;
- 	}
- }
-@@ -750,6 +1048,11 @@
- {
- 	unsigned int i;
- 	float (*mat)[4] = transform->matrix;
-+#ifdef X86
-+	int sse_ver = sse_version_available();
-+	__m128 xm;
-+	__m128i xi;
-+#endif
- 	for (i = 0; i < length; i++) {
- 		unsigned char device_r = *src++;
- 		unsigned char device_g = *src++;
-@@ -776,9 +1079,24 @@
- 		out_device_b = lut_interp_linear(out_linear_b, 
- 				transform->output_gamma_lut_b, transform->output_gamma_lut_b_length);
- 
--		dest[OUTPUT_R_INDEX] = clamp_u8(out_device_r*255);
--		dest[OUTPUT_G_INDEX] = clamp_u8(out_device_g*255);
--		dest[OUTPUT_B_INDEX] = clamp_u8(out_device_b*255);
-+#ifdef X86
-+		if (sse_ver >= 2) {
-+			xm.m128_f32[0] = out_device_r;
-+			xm.m128_f32[1] = out_device_g;
-+			xm.m128_f32[2] = out_device_b;
-+			clamp_u8_sse2(&xm, &xi);
-+
-+			dest[OUTPUT_R_INDEX] = xi.m128i_u32[0];
-+			dest[OUTPUT_G_INDEX] = xi.m128i_u32[1];
-+			dest[OUTPUT_B_INDEX] = xi.m128i_u32[2];
-+		} else {
-+#endif
-+			dest[OUTPUT_R_INDEX] = clamp_u8(out_device_r*255);
-+			dest[OUTPUT_G_INDEX] = clamp_u8(out_device_g*255);
-+			dest[OUTPUT_B_INDEX] = clamp_u8(out_device_b*255);
-+#ifdef X86
-+		}
-+#endif
- 		dest[OUTPUT_A_INDEX] = alpha;
- 		dest += RGBA_OUTPUT_COMPONENTS;
- 	}
-@@ -789,6 +1107,11 @@
- {
- 	int i;
- 	float (*mat)[4] = transform->matrix;
-+#ifdef X86
-+	int sse_ver = sse_version_available();
-+	__m128 xm;
-+	__m128i xi;
-+#endif
- 	for (i = 0; i < length; i++) {
- 		unsigned char device_r = *src++;
- 		unsigned char device_g = *src++;
-@@ -802,9 +1125,24 @@
- 		float out_linear_g = mat[0][1]*linear_r + mat[1][1]*linear_g + mat[2][1]*linear_b;
- 		float out_linear_b = mat[0][2]*linear_r + mat[1][2]*linear_g + mat[2][2]*linear_b;
- 
--		*dest++ = clamp_u8(out_linear_r*255);
--		*dest++ = clamp_u8(out_linear_g*255);
--		*dest++ = clamp_u8(out_linear_b*255);
-+#ifdef X86
-+		if (sse_ver >= 2) {
-+			xm.m128_f32[0] = out_linear_r;
-+			xm.m128_f32[1] = out_linear_g;
-+			xm.m128_f32[2] = out_linear_b;
-+			clamp_u8_sse2(&xm, &xi);
-+
-+			*dest++ = xi.m128i_u32[0];
-+			*dest++ = xi.m128i_u32[1];
-+			*dest++ = xi.m128i_u32[2];
-+		} else {
-+#endif
-+			*dest++ = clamp_u8(out_linear_r*255);
-+			*dest++ = clamp_u8(out_linear_g*255);
-+			*dest++ = clamp_u8(out_linear_b*255);
-+#ifdef X86
-+		}
-+#endif
- 	}
- }
- #endif
-@@ -900,49 +1238,79 @@
- 	transform_free(t);
- }
- 
--#ifdef X86
--// Determine if we can build with SSE2 (this was partly copied from jmorecfg.h in
--// mozilla/jpeg)
-- // -------------------------------------------------------------------------
--#if defined(_M_IX86) && defined(_MSC_VER)
--#define HAS_CPUID
--/* Get us a CPUID function. Avoid clobbering EBX because sometimes it's the PIC
--   register - I'm not sure if that ever happens on windows, but cpuid isn't
--   on the critical path so we just preserve the register to be safe and to be
--   consistent with the non-windows version. */
--static void cpuid(uint32_t fxn, uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *d) {
--       uint32_t a_, b_, c_, d_;
--       __asm {
--              xchg   ebx, esi
--              mov    eax, fxn
--              cpuid
--              mov    a_, eax
--              mov    b_, ebx
--              mov    c_, ecx
--              mov    d_, edx
--              xchg   ebx, esi
--       }
--       *a = a_;
--       *b = b_;
--       *c = c_;
--       *d = d_;
--}
--#elif (defined(__GNUC__) || defined(__SUNPRO_C)) && (defined(__i386__) || defined(__i386))
--#define HAS_CPUID
--/* Get us a CPUID function. We can't use ebx because it's the PIC register on
--   some platforms, so we use ESI instead and save ebx to avoid clobbering it. */
--static void cpuid(uint32_t fxn, uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *d) {
--
--	uint32_t a_, b_, c_, d_;
--       __asm__ __volatile__ ("xchgl %%ebx, %%esi; cpuid; xchgl %%ebx, %%esi;" 
--                             : "=a" (a_), "=S" (b_), "=c" (c_), "=d" (d_) : "a" (fxn));
--	   *a = a_;
--	   *b = b_;
--	   *c = c_;
--	   *d = d_;
-+// -------------------------__cpuid Detection----------------------------------
-+
-+// The following code was largely taken from xpcom/glue/SSE.cpp and
-+// made a little simpler.
-+enum CPUIDRegister { eax = 0, ebx = 1, ecx = 2, edx = 3 };
-+
-+#ifdef HAVE_CPUID_H
-+
-+// cpuid.h is available on gcc 4.3 and higher on i386 and x86_64
-+#include <cpuid.h>
-+
-+static void
-+__cpuid(int CPUInfo[4], int InfoType)
-+{
-+  __get_cpuid(InfoType,
-+    (unsigned int*)&CPUInfo[0],
-+    (unsigned int*)&CPUInfo[1],
-+    (unsigned int*)&CPUInfo[2],
-+    (unsigned int*)&CPUInfo[3]);
-+}
-+#define HAVE_CPU_DETECTION
-+#else /* HAVE_CPUID_H */
-+
-+#if defined(_MSC_VER) && _MSC_VER >= 1400 && (defined(_M_IX86) || defined(_M_AMD64))
-+#include <intrin.h>
-+
-+#define HAVE_CPU_DETECTION
-+#elif defined(__SUNPRO_CC) && (defined(__i386) || defined(__x86_64__))
-+
-+// Define a function identical to MSVC function.
-+#ifdef __i386
-+static void
-+__cpuid(int CPUInfo[4], int InfoType)
-+{
-+  asm (
-+    "xchg %esi, %ebx\n"
-+    "cpuid\n"
-+    "movl %eax, (%edi)\n"
-+    "movl %ebx, 4(%edi)\n"
-+    "movl %ecx, 8(%edi)\n"
-+    "movl %edx, 12(%edi)\n"
-+    "xchg %esi, %ebx\n"
-+    :
-+    : "a"(InfoType), // %eax
-+      "D"(CPUInfo) // %edi
-+    : "%ecx", "%edx", "%esi"
-+  );
- }
-+#else
-+static void
-+__cpuid(int CPUInfo[4], int InfoType)
-+{
-+  asm (
-+    "xchg %rsi, %rbx\n"
-+    "cpuid\n"
-+    "movl %eax, (%rdi)\n"
-+    "movl %ebx, 4(%rdi)\n"
-+    "movl %ecx, 8(%rdi)\n"
-+    "movl %edx, 12(%rdi)\n"
-+    "xchg %rsi, %rbx\n"
-+    :
-+    : "a"(InfoType), // %eax
-+      "D"(CPUInfo) // %rdi
-+    : "%ecx", "%edx", "%rsi"
-+  );
-+}
-+
-+#define HAVE_CPU_DETECTION
-+#endif
- #endif
- 
-+#endif /* HAVE_CPUID_H */
-+
- // -------------------------Runtime SSEx Detection-----------------------------
- 
- /* MMX is always supported per
-@@ -950,36 +1318,31 @@
- #define SSE1_EDX_MASK (1UL << 25)
- #define SSE2_EDX_MASK (1UL << 26)
- #define SSE3_ECX_MASK (1UL <<  0)
-+#define SSE4_ECX_MASK (1UL << 19)
- 
- static int sse_version_available(void)
- {
--#if defined(__x86_64__) || defined(__x86_64) || defined(_M_AMD64)
--	/* we know at build time that 64-bit CPUs always have SSE2
--	 * this tells the compiler that non-SSE2 branches will never be
--	 * taken (i.e. OK to optimze away the SSE1 and non-SIMD code */
--	return 2;
--#elif defined(HAS_CPUID)
-+#if defined(HAVE_CPU_DETECTION)
- 	static int sse_version = -1;
--	uint32_t a, b, c, d;
--	uint32_t function = 0x00000001;
- 
- 	if (sse_version == -1) {
-+		volatile int regs[4];
- 		sse_version = 0;
--		cpuid(function, &a, &b, &c, &d);
--		if (c & SSE3_ECX_MASK)
-+		__cpuid((int *)regs, 1);
-+		if (regs[2] & SSE4_ECX_MASK)
-+			sse_version = 4;
-+		else if (regs[2] & SSE3_ECX_MASK)
- 			sse_version = 3;
--		else if (d & SSE2_EDX_MASK)
-+		else if (regs[3] & SSE2_EDX_MASK)
- 			sse_version = 2;
--		else if (d & SSE1_EDX_MASK)
-+		else if (regs[3] & SSE1_EDX_MASK)
- 			sse_version = 1;
- 	}
--
- 	return sse_version;
- #else
- 	return 0;
- #endif
- }
--#endif
- 
- static const struct matrix bradford_matrix = {{	{ 0.8951f, 0.2664f,-0.1614f},
- 						{-0.7502f, 1.7135f, 0.0367f},
-
+     static inline void copyConstructN(T *dst, size_t n, const T &t) {
+         for (T *p = dst, *end = dst + n; p != end; ++p)
+             *p = t;
 diff --git a/widget/windows/WinUtils.cpp b/widget/windows/WinUtils.cpp
 --- a/widget/windows/WinUtils.cpp
 +++ b/widget/windows/WinUtils.cpp
@@ -6136,10 +6040,10 @@ diff --git a/widget/windows/WinUtils.cpp b/widget/windows/WinUtils.cpp
  {
    if (!aWindow) {
      ::RemovePropW(aWnd, GetNSWindowPropName());
-diff -r aa0ca203d703 js/src/yarr/YarrInterpreter.cpp
---- a/js/src/yarr/YarrInterpreter.cpp	Fri Jun 15 21:22:41 2012 +0900
-+++ b/js/src/yarr/YarrInterpreter.cpp	Sun Jun 17 12:59:56 2012 +0900
-@@ -1848,17 +1848,23 @@ public:
+diff --git a/js/src/yarr/YarrInterpreter.cpp b/js/src/yarr/YarrInterpreter.cpp
+--- a/js/src/yarr/YarrInterpreter.cpp
++++ b/js/src/yarr/YarrInterpreter.cpp
+@@ -1922,17 +1922,23 @@ public:
      }
  
  private:
@@ -6161,5 +6065,6 @@ diff -r aa0ca203d703 js/src/yarr/YarrInterpreter.cpp
      return ByteCompiler(pattern).compile(allocator);
  }
  
- int interpret(BytecodePattern* bytecode, const UChar* input, unsigned start, unsigned length, int* output)
+ unsigned interpret(BytecodePattern* bytecode, const String& input, unsigned start, unsigned* output)
  {
+
