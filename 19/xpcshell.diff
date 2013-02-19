@@ -1,0 +1,14 @@
+diff -r eb421f1dd8ef js/xpconnect/shell/Makefile.in
+--- a/js/xpconnect/shell/Makefile.in	Thu Jul 12 14:19:16 2012 -0700
++++ b/js/xpconnect/shell/Makefile.in	Tue Jul 17 22:12:46 2012 +0900
+@@ -14,6 +14,10 @@
+ PROGRAM		= xpcshell$(BIN_SUFFIX)
+ SDK_BINARY	= $(PROGRAM)
+ 
++ifeq ($(OS_ARCH),WINNT)
++NO_PROFILE_GUIDED_OPTIMIZE = 1
++endif
++
+ CPPSRCS		= xpcshell.cpp
+ 
+ LOCAL_INCLUDES += \
