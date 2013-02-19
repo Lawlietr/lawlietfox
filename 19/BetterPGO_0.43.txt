@@ -1,0 +1,69 @@
+PGO List v0.43
+
+0. Octane Benchmark
+https://octane-benchmark.googlecode.com/svn/latest/index.html
+
+1. V8
+http://v8.googlecode.com/svn/data/benchmarks/v5/run.html
+http://v8.googlecode.com/svn/data/benchmarks/v6/run.html
+http://v8.googlecode.com/svn/data/benchmarks/v7/run.html
+
+2. Sunspider
+http://www.google.com.tw/url?sa=t&rct=j&q=sunspider&source=web&cd=2&ved=0CDUQFjAB&url=http%3A%2F%2Fwww.webkit.org%2Fperf%2Fsunspider-0.9.1%2Fsunspider-0.9.1%2Fdriver.html&ei=o5_XTpO_M8zumAXtguzHCw&usg=AFQjCNHcsEglfymFOprQylxdkNAiuOM4Bg&sig2=Dm410EEWMWNL5B32I5inwg
+
+2-1. animation
+
+
+2-2. blueprint
+
+
+2-3. dhtml
+
+
+2-4. flyingimages
+
+
+2-5. javascript
+
+
+2-6. law
+
+2-7. icc
+
+3. Kraken JavaScript Benchmark (version 1.1)
+https://krakenbenchmark.mozilla.org/kraken-1.1/driver.html
+
+4.Maze Solver CSS3 Layout Performance Test
+https://ie.microsoft.com/testdrive/performance/mazesolver/
+
+5. Community Website
+https://www.facebook.com/
+https://www.facebook.com/ayachen0416
+https://twitter.com/#
+https://plus.google.com/u/0/
+http://www.plurk.com/Lawlietr
+
+6. Google App
+https://mail.google.com/mail/?hl=zh-TW&shva=1#inbox
+http://www.google.com/reader/view/user/-/state/com.google/reading-list#stream/user%2F03230416029304216358%2Fstate%2Fcom.google%2Freading-list
+http://www.google.com.tw/ig
+
+7. 
+http://www.ruten.com.tw/
+http://tw.bid.yahoo.com/
+http://tw.yahoo.com/
+
+8 . WebGL
+https://ie.microsoft.com/testdrive/Performance/FlyingImages/
+https://ie.microsoft.com/testdrive/Performance/FishIETank/
+http://webglsamples.googlecode.com/hg/persistence/persistence.html
+http://webglsamples.googlecode.com/hg/dynamic-cubemap/dynamic-cubemap.html
+
+9. YouTube
+http://youtu.be/4oPw63oVqpA
+
+10. Peacekeeper
+http://peacekeeper.futuremark.com/run.action
+
+11. Dromaeo JavaScript Performance Test Suite
+http://dromaeo.com/?recommended
