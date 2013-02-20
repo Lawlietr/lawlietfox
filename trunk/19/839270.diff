@@ -1,0 +1,12 @@
+diff -r 23f455023faf layout/style/nsStyleContext.cpp
+--- a/layout/style/nsStyleContext.cpp	Tue Feb 12 23:39:28 2013 +1300
++++ b/layout/style/nsStyleContext.cpp	Wed Feb 13 23:21:21 2013 +0900
+@@ -107,7 +107,7 @@
+                aChild->mNextSibling == aChild,
+                "child already in a child list");
+ 
+-#if defined(_WIN32) && defined(_MSC_VER)
++#if defined(_M_IX86) && defined(_MSC_VER)
+ #define NOPS_8 __asm nop __asm nop __asm nop __asm nop __asm nop __asm nop __asm nop __asm nop
+ #define NOPS_64 NOPS_8 NOPS_8 NOPS_8 NOPS_8 NOPS_8 NOPS_8 NOPS_8 NOPS_8
+   __asm jmp AddChildSuperHack
