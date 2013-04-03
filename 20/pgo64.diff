@@ -1,0 +1,225 @@
+diff -r 90a169d6ac07 content/media/AudioStream.cpp
+--- a/content/media/AudioStream.cpp	Wed Jan 16 11:49:01 2013 +0200
++++ b/content/media/AudioStream.cpp	Wed Jan 16 22:34:51 2013 +0900
+@@ -879,18 +879,11 @@
+   return mAudioClock.GetPosition();
+ }
+ 
+-// This function is miscompiled by PGO with MSVC 2010.  See bug 768333.
+-#ifdef _MSC_VER
+-#pragma optimize("", off)
+-#endif
+ int64_t
+ BufferedAudioStream::GetPositionInFrames()
+ {
+   return mAudioClock.GetPositionInFrames();
+ }
+-#ifdef _MSC_VER
+-#pragma optimize("", on)
+-#endif
+ 
+ int64_t
+ BufferedAudioStream::GetPositionInFramesInternal()
+diff -r 90a169d6ac07 gfx/skia/src/core/SkBitmapProcState_matrixProcs.cpp
+--- a/gfx/skia/src/core/SkBitmapProcState_matrixProcs.cpp	Wed Jan 16 11:49:01 2013 +0200
++++ b/gfx/skia/src/core/SkBitmapProcState_matrixProcs.cpp	Wed Jan 16 22:34:51 2013 +0900
+@@ -134,12 +134,6 @@
+     return x & 0xFFFF;
+ }
+ 
+-// Visual Studio 2010 (MSC_VER=1600) optimizes bit-shift code incorrectly.
+-// See http://code.google.com/p/skia/issues/detail?id=472
+-#if defined(_MSC_VER) && (_MSC_VER >= 1600)
+-#pragma optimize("", off)
+-#endif
+-
+ static inline U16CPU fixed_mirror(SkFixed x)
+ {
+     SkFixed s = x << 15 >> 31;
+@@ -147,10 +141,6 @@
+     return (x ^ s) & 0xFFFF;
+ }
+ 
+-#if defined(_MSC_VER) && (_MSC_VER >= 1600)
+-#pragma optimize("", on)
+-#endif
+-
+ static SkBitmapProcState::FixedTileProc choose_tile_proc(unsigned m)
+ {
+     if (SkShader::kClamp_TileMode == m)
+diff -r 90a169d6ac07 gfx/skia/src/effects/gradients/SkGradientTileProc.cpp
+--- a/gfx/skia/src/effects/gradients/SkGradientTileProc.cpp	Wed Jan 16 11:49:01 2013 +0200
++++ b/gfx/skia/src/effects/gradients/SkGradientTileProc.cpp	Wed Jan 16 22:34:51 2013 +0900
+@@ -21,18 +21,8 @@
+ 
+ // Mirror
+ 
+-// Visual Studio 2010 (MSC_VER=1600) optimizes bit-shift code incorrectly.
+-// See http://code.google.com/p/skia/issues/detail?id=472
+-#if defined(_MSC_VER) && (_MSC_VER >= 1600)
+-#pragma optimize("", off)
+-#endif
+-
+ SkFixed mirror_tileproc(SkFixed x) {
+     int s = x << 15 >> 31;
+     return (x ^ s) & 0xFFFF;
+ }
+ 
+-#if defined(_MSC_VER) && (_MSC_VER >= 1600)
+-#pragma optimize("", on)
+-#endif
+-
+diff -r 90a169d6ac07 gfx/skia/src/effects/gradients/SkLinearGradient.cpp
+--- a/gfx/skia/src/effects/gradients/SkLinearGradient.cpp	Wed Jan 16 11:49:01 2013 +0200
++++ b/gfx/skia/src/effects/gradients/SkLinearGradient.cpp	Wed Jan 16 22:34:51 2013 +0900
+@@ -16,12 +16,6 @@
+     return x & 0xFF;
+ }
+ 
+-// Visual Studio 2010 (MSC_VER=1600) optimizes bit-shift code incorrectly.
+-// See http://code.google.com/p/skia/issues/detail?id=472
+-#if defined(_MSC_VER) && (_MSC_VER >= 1600)
+-#pragma optimize("", off)
+-#endif
+-
+ static inline int mirror_bits(int x, const int bits) {
+ #ifdef SK_CPU_HAS_CONDITIONAL_INSTR
+     if (x & (1 << bits))
+@@ -45,10 +39,6 @@
+ #endif
+ }
+ 
+-#if defined(_MSC_VER) && (_MSC_VER >= 1600)
+-#pragma optimize("", on)
+-#endif
+-
+ static void pts_to_unit_matrix(const SkPoint pts[2], SkMatrix* matrix) {
+     SkVector    vec = pts[1] - pts[0];
+     SkScalar    mag = vec.length();
+diff -r 90a169d6ac07 js/src/jsmath.cpp
+--- a/js/src/jsmath.cpp	Wed Jan 16 11:49:01 2013 +0200
++++ b/js/src/jsmath.cpp	Wed Jan 16 22:34:51 2013 +0900
+@@ -411,10 +411,6 @@
+     return true;
+ }
+ 
+-// Disable PGO for Math.pow() and related functions (see bug 791214).
+-#if defined(_MSC_VER)
+-# pragma optimize("g", off)
+-#endif
+ double
+ js::powi(double x, int y)
+ {
+@@ -442,14 +438,7 @@
+         m *= m;
+     }
+ }
+-#if defined(_MSC_VER)
+-# pragma optimize("", on)
+-#endif
+ 
+-// Disable PGO for Math.pow() and related functions (see bug 791214).
+-#if defined(_MSC_VER)
+-# pragma optimize("g", off)
+-#endif
+ double
+ js::ecmaPow(double x, double y)
+ {
+@@ -461,14 +450,7 @@
+         return js_NaN;
+     return pow(x, y);
+ }
+-#if defined(_MSC_VER)
+-# pragma optimize("", on)
+-#endif
+ 
+-// Disable PGO for Math.pow() and related functions (see bug 791214).
+-#if defined(_MSC_VER)
+-# pragma optimize("g", off)
+-#endif
+ JSBool
+ js_math_pow(JSContext *cx, unsigned argc, Value *vp)
+ {
+@@ -513,9 +495,6 @@
+     vp->setNumber(z);
+     return JS_TRUE;
+ }
+-#if defined(_MSC_VER)
+-# pragma optimize("", on)
+-#endif
+ 
+ static const int64_t RNG_MULTIPLIER = 0x5DEECE66DLL;
+ static const int64_t RNG_ADDEND = 0xBLL;
+diff -r 90a169d6ac07 js/src/jsnum.cpp
+--- a/js/src/jsnum.cpp	Wed Jan 16 11:49:01 2013 +0200
++++ b/js/src/jsnum.cpp	Wed Jan 16 22:34:51 2013 +0900
+@@ -1329,9 +1329,6 @@
+     return sb.appendInflated(cstr, cstrlen);
+ }
+ 
+-#if defined(_MSC_VER)
+-# pragma optimize("g", off)
+-#endif
+ JS_PUBLIC_API(bool)
+ js::ToNumberSlow(JSContext *cx, Value v, double *out)
+ {
+@@ -1390,9 +1387,6 @@
+     *out = js_NaN;
+     return true;
+ }
+-#if defined(_MSC_VER)
+-# pragma optimize("", on)
+-#endif
+ 
+ /*
+  * Convert a value to an int64_t, according to the WebIDL rules for long long
+diff -r 90a169d6ac07 js/src/methodjit/MonoIC.cpp
+--- a/js/src/methodjit/MonoIC.cpp	Wed Jan 16 11:49:01 2013 +0200
++++ b/js/src/methodjit/MonoIC.cpp	Wed Jan 16 22:34:51 2013 +0900
+@@ -384,11 +384,6 @@
+     return ic->stub(f);
+ }
+ 
+-// Disable PGO as a precaution (see bug 791214).
+-#if defined(_MSC_VER)
+-# pragma optimize("g", off)
+-#endif
+-
+ static void * JS_FASTCALL
+ SlowCallFromIC(VMFrame &f, ic::CallICInfo *ic)
+ {
+@@ -1433,10 +1428,6 @@
+     return true;
+ }
+ 
+-#if defined(_MSC_VER)
+-# pragma optimize("", on)
+-#endif
+-
+ void
+ ic::GenerateArgumentCheckStub(VMFrame &f)
+ {
+diff -r 90a169d6ac07 layout/style/nsCSSParser.cpp
+--- a/layout/style/nsCSSParser.cpp	Wed Jan 16 11:49:01 2013 +0200
++++ b/layout/style/nsCSSParser.cpp	Wed Jan 16 22:34:51 2013 +0900
+@@ -1137,10 +1137,6 @@
+   return NS_OK;
+ }
+ 
+-// See Bug 723197
+-#ifdef _MSC_VER
+-#pragma optimize( "", off )
+-#endif
+ nsresult
+ CSSParserImpl::ParseProperty(const nsCSSProperty aPropID,
+                              const nsAString& aPropValue,
+@@ -1215,9 +1211,6 @@
+   ReleaseScanner();
+   return NS_OK;
+ }
+-#ifdef _MSC_VER
+-#pragma optimize( "", on )
+-#endif
+ 
+ nsresult
+ CSSParserImpl::ParseMediaList(const nsSubstring& aBuffer,
