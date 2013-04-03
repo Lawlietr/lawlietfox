@@ -1,0 +1,55 @@
+. $topsrcdir/browser/config/mozconfig
+
+ac_add_options --enable-application=browser
+ac_add_options --with-branding=browser/branding/unofficial
+#mk_add_options MOZ_OPTIMIZE_LDFLAGS="/MACHINE:X86 /OPT:REF,ICF /LARGEADDRESSAWARE /C/libmmt.lib /C/libircmt.lib"
+#mk_add_options MOZ_OPTIMIZE_LDFLAGS="/MACHINE:X86 /OPT:REF,ICF /LARGEADDRESSAWARE /D/intel_libm/intel64/libmmt.lib /D/intel_libm/intel64/libircmt.lib"
+mk_add_options MOZ_OPTIMIZE_LDFLAGS="/MACHINE:X86 /OPT:REF,ICF /LARGEADDRESSAWARE"
+ac_add_options --with-app-name=lawlietfox
+
+ac_add_options --disable-auto-deps
+ac_add_options --disable-tests
+ac_add_options --disable-ipdl-tests
+ac_add_options --enable-installer
+ac_add_options --enable-extensions=default
+ac_add_options --enable-strip
+ac_add_options --enable-install-strip
+ac_add_options --disable-updater
+ac_add_options --disable-update-channel
+ac_add_options --disable-update-packaging
+ac_add_options --disable-crashreporter
+ac_add_options --enable-jemalloc
+ac_add_options --enable-shared-js
+#ac_add_options --enable-debugger-info-modules=yes
+#ac_add_options --enable-debugger-info-modules
+ac_add_options --disable-debug-symbols
+ac_add_options --disable-debug
+ac_add_options --disable-maintenance-service
+ac_add_options --disable-parental-controls
+ac_add_options --disable-windows-mobile-components
+ac_add_options --disable-logging
+ac_add_options --disable-necko-wifi
+ac_add_options --disable-activex
+ac_add_options --disable-activex-scripting
+ac_add_options --enable-crypto
+ac_add_options --enable-image-decoders=icon,png,gif,jpeg,bmp
+
+#ac_add_options --enable-optimize="-O2 -GL -arch:SSE2"
+#ac_add_options --enable-optimize="-O2 -Ot -Oi -Ob2 -Oy -GT -Gy -GF -GR- -arch:SSE2 -fp:fast -GL"
+ac_add_options --enable-optimzie="-O2 -Ot -Oi -Ob2 -Oy -GT -Gy -GF -fp:precise -Qfast_transcendentals -arch:SSE2"
+
+# for auto pgo build
+mk_add_options MOZ_MAKE_FLAGS="-j4"
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/ff-pgo
+#mk_add_options PROFILE_GEN_SCRIPT='$(PYTHON) $(MOZ_OBJDIR)/_profile/pgo/profileserver.py'
+mk_add_options PROFILE_GEN_SCRIPT='cscript E:/SystemTools/win32_Firefox/PgoMsg.vbs'
+
+
+# windows version
+ac_add_options --with-windows-version=601
+
+# crt dir
+WIN32_REDIST_DIR=$VCINSTALLDIR/redist/x86/Microsoft.VC100.CRT
+#
+# crt dir vc11
+#WIN32_REDIST_DIR=$VCINSTALLDIR/redist/x86/Microsoft.VC110.CRT
