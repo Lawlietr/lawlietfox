@@ -1,0 +1,35 @@
+//BetterPGO list  v0.43, by Lawliet
+
+
+0. Octane Benchmark
+https://octane-benchmark.googlecode.com/svn/latest/index.html
+
+2-1. animation
+
+
+2-2. blueprint
+
+
+2-3. dhtml
+
+
+2-4. flyingimages
+
+
+2-5. javascript
+
+
+2-6. law
+
+
+2-7. icc
+
+
+3. Kraken JavaScript Benchmark (version 1.1)
+https://krakenbenchmark.mozilla.org/kraken-1.1/driver.html
+
+10. Peacekeeper
+http://peacekeeper.futuremark.com/run.action
+
+11. Dromaeo JavaScript Performance Test Suite
+http://dromaeo.com/?recommended
