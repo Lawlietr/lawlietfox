@@ -1,0 +1,36 @@
+diff -r 269946c84e11 config/config.mk
+--- a/config/config.mk	Wed Nov 28 17:18:12 2012 +0800
++++ b/config/config.mk	Wed Dec 05 00:38:59 2012 +0900
+@@ -124,8 +124,14 @@
+ MOZ_WIDGET_SUPPORT_LIBS    = $(DIST)/lib/$(LIB_PREFIX)widgetsupport_s.$(LIB_SUFFIX)
+ 
+ ifdef _MSC_VER
++ifdef .PYMAKE
++PYCOMMANDPATH += $(topsrcdir)/build
++CC_WRAPPER ?= %cl InvokeClWithDependencyGeneration
++CXX_WRAPPER ?= %cl InvokeClWithDependencyGeneration
++else
+ CC_WRAPPER ?= $(PYTHON) -O $(topsrcdir)/build/cl.py
+ CXX_WRAPPER ?= $(PYTHON) -O $(topsrcdir)/build/cl.py
++endif # .PYMAKE
+ endif # _MSC_VER
+ 
+ CC := $(CC_WRAPPER) $(CC)
+diff -r 269946c84e11 js/src/config/config.mk
+--- a/js/src/config/config.mk	Wed Nov 28 17:18:12 2012 +0800
++++ b/js/src/config/config.mk	Wed Dec 05 00:38:59 2012 +0900
+@@ -124,8 +124,14 @@
+ MOZ_WIDGET_SUPPORT_LIBS    = $(DIST)/lib/$(LIB_PREFIX)widgetsupport_s.$(LIB_SUFFIX)
+ 
+ ifdef _MSC_VER
++ifdef .PYMAKE
++PYCOMMANDPATH += $(topsrcdir)/build
++CC_WRAPPER ?= %cl InvokeClWithDependencyGeneration
++CXX_WRAPPER ?= %cl InvokeClWithDependencyGeneration
++else
+ CC_WRAPPER ?= $(PYTHON) -O $(topsrcdir)/build/cl.py
+ CXX_WRAPPER ?= $(PYTHON) -O $(topsrcdir)/build/cl.py
++endif # .PYMAKE
+ endif # _MSC_VER
+ 
+ CC := $(CC_WRAPPER) $(CC)
