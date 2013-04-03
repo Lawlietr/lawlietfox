@@ -1,0 +1,129 @@
+diff -r e5b2b8b59eb5 editor/libeditor/html/nsHTMLEditRules.cpp
+--- a/editor/libeditor/html/nsHTMLEditRules.cpp	Tue Feb 05 08:28:18 2013 -0600
++++ b/editor/libeditor/html/nsHTMLEditRules.cpp	Thu Feb 07 03:30:17 2013 +0900
+@@ -6269,6 +6269,10 @@
+     NS_ENSURE_SUCCESS(res, res);
+     if (!sibling || !nsTextEditUtils::IsBreak(sibling))
+     {
++      res = ClearCachedStyles();
++      NS_ENSURE_SUCCESS(res, res);
++      mHTMLEditor->mTypeInState->ClearAllProps();
++
+       // create a paragraph
+       NS_NAMED_LITERAL_STRING(pType, "p");
+       nsCOMPtr<nsIDOMNode> pNode;
+@@ -6515,6 +6519,10 @@
+       res = mHTMLEditor->DeleteNode(aListItem);
+       NS_ENSURE_SUCCESS(res, res);
+       
++      res = ClearCachedStyles();
++      NS_ENSURE_SUCCESS(res, res);
++      mHTMLEditor->mTypeInState->ClearAllProps();
++
+       // time to insert a paragraph
+       NS_NAMED_LITERAL_STRING(pType, "p");
+       nsCOMPtr<nsIDOMNode> pNode;
+diff -r e5b2b8b59eb5 editor/libeditor/html/tests/Makefile.in
+--- a/editor/libeditor/html/tests/Makefile.in	Tue Feb 05 08:28:18 2013 -0600
++++ b/editor/libeditor/html/tests/Makefile.in	Thu Feb 07 03:30:17 2013 +0900
+@@ -83,6 +83,8 @@
+ 		test_bug787432.html \
+ 		test_bug790475.html \
+ 		test_bug796839.html \
++		test_bug832025.html \
++		test_bug832025_2.html \
+ 		test_spellcheck_pref.html \
+ 		$(NULL)
+ 
+diff -r e5b2b8b59eb5 editor/libeditor/html/tests/test_bug832025.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/editor/libeditor/html/tests/test_bug832025.html	Thu Feb 07 03:30:17 2013 +0900
+@@ -0,0 +1,42 @@
++<!DOCTYPE HTML>
++<html>
++<!--
++https://bugzilla.mozilla.org/show_bug.cgi?id=832025
++-->
++<head>
++  <title>Test for Bug 832025</title>
++  <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
++  <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
++  <script type="text/javascript" src="/tests/SimpleTest/EventUtils.js"></script>
++</head>
++<body>
++<a target="_blank" href="https://bugzilla.mozilla.org/show_bug.cgi?id=832025">Mozilla Bug 832025</a>
++<div id="test" contenteditable="true">header1</div>
++<script type="application/javascript">
++
++/**
++ * Test for Bug 832025
++ *
++ */
++
++document.execCommand("stylewithcss", false, "true");
++var test = document.getElementById("test");
++test.focus();
++
++// place caret at end of editable area
++var sel = getSelection();
++sel.collapse(test, test.childNodes.length);
++
++// make it a H1
++document.execCommand("heading", false, "H1");
++// simulate a CR key
++sendKey("return");
++// insert some text
++document.execCommand("insertText", false, "abc");
++
++is(test.innerHTML == '<h1>header1</h1><p>abc<br></p>',
++   true, "A paragraph automatically created after a CR at the end of an H1 should not be bold");
++
++</script>
++</body>
++</html>
+diff -r e5b2b8b59eb5 editor/libeditor/html/tests/test_bug832025_2.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/editor/libeditor/html/tests/test_bug832025_2.html	Thu Feb 07 03:30:17 2013 +0900
+@@ -0,0 +1,42 @@
++<!DOCTYPE HTML>
++<html>
++<!--
++https://bugzilla.mozilla.org/show_bug.cgi?id=832025
++-->
++<head>
++  <title>Test for Bug 832025</title>
++  <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
++  <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
++  <script type="text/javascript" src="/tests/SimpleTest/EventUtils.js"></script>
++</head>
++<body>
++<a target="_blank" href="https://bugzilla.mozilla.org/show_bug.cgi?id=832025">Mozilla Bug 832025</a>
++<div id="test" contenteditable="true"><ul><li>listitem <strong id="s">strong</strong></li></ul></div>
++<script type="application/javascript">
++
++/**
++ * Second Test for Bug 832025
++ *
++ */
++
++document.execCommand("stylewithcss", false, "true");
++var test = document.getElementById("test");
++var s = document.getElementById("s");
++test.focus();
++
++// place caret at end of editable area
++var sel = getSelection();
++sel.collapse(s, s.childNodes.length);
++
++// simulate two CR keys
++sendKey("return");
++sendKey("return");
++// insert some text
++document.execCommand("insertText", false, "abc");
++
++is(test.innerHTML == '<ul><li>listitem <strong id="s">strong</strong></li></ul><p>abc<br></p>',
++   true, "A paragraph automatically created after two CRs at the end of a bold listitem should not be bold");
++
++</script>
++</body>
++</html>
