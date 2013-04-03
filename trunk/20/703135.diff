@@ -1,0 +1,113 @@
+
+# HG changeset patch
+# User Chris Pearce <cpearce@mozilla.com>
+# Date 1359918711 -46800
+# Node ID f24905861be56991d6572a9cf3bbf703724aa416
+# Parent  ec019c0fc63a3ea83c3d9f37daa4e564c4491dfd
+Bug 703135 - Disable optimizations in oc_huff_tree_collapse when building with MSVC2012 and later to avoid crash due to compiler bug. r=derf
+
+diff --git a/media/libtheora/bug703135.patch b/media/libtheora/bug703135.patch
+new file mode 100644
+--- /dev/null
++++ b/media/libtheora/bug703135.patch
+@@ -0,0 +1,43 @@
++diff --git a/media/libtheora/lib/huffdec.c b/media/libtheora/lib/huffdec.c
++--- a/media/libtheora/lib/huffdec.c
+++++ b/media/libtheora/lib/huffdec.c
++@@ -320,16 +320,19 @@ static size_t oc_huff_node_size(int _nbi
++ /*Produces a collapsed-tree representation of the given token list.
++   _tree: The storage for the collapsed Huffman tree.
++          This may be NULL to compute the required storage size instead of
++           constructing the tree.
++   _tokens:  A list of internal tokens, in the order they are found in the
++              codebook, and the lengths of their corresponding codewords.
++   _ntokens: The number of tokens corresponding to this tree node.
++   Return: The number of words required to store the tree.*/
+++#if defined(_MSC_VER) && _MSC_VER >= 1700
+++#pragma optimize( "", off )
+++#endif
++ static size_t oc_huff_tree_collapse(ogg_int16_t *_tree,
++  unsigned char _tokens[][2],int _ntokens){
++   ogg_int16_t   node[34];
++   unsigned char depth[34];
++   unsigned char last[34];
++   size_t        ntree;
++   int           ti;
++   int           l;
++@@ -367,16 +370,19 @@ static size_t oc_huff_tree_collapse(ogg_
++       /*Pop back up a level of recursion.*/
++       else if(l-->0)nbits=depth[l+1]-depth[l];
++     }
++     while(l>=0);
++   }
++   while(l>=0);
++   return ntree;
++ }
+++#if defined(_MSC_VER) && _MSC_VER >= 1700
+++#pragma optimize( "", on )
+++#endif
++ 
++ /*Unpacks a set of Huffman trees, and reduces them to a collapsed
++    representation.
++   _opb:   The buffer to unpack the trees from.
++   _nodes: The table to fill with the Huffman trees.
++   Return: 0 on success, or a negative value on error.
++           The caller is responsible for cleaning up any partially initialized
++            _nodes on failure.*/
+diff --git a/media/libtheora/lib/huffdec.c b/media/libtheora/lib/huffdec.c
+--- a/media/libtheora/lib/huffdec.c
++++ b/media/libtheora/lib/huffdec.c
+@@ -320,16 +320,19 @@ static size_t oc_huff_node_size(int _nbi
+ /*Produces a collapsed-tree representation of the given token list.
+   _tree: The storage for the collapsed Huffman tree.
+          This may be NULL to compute the required storage size instead of
+           constructing the tree.
+   _tokens:  A list of internal tokens, in the order they are found in the
+              codebook, and the lengths of their corresponding codewords.
+   _ntokens: The number of tokens corresponding to this tree node.
+   Return: The number of words required to store the tree.*/
++#if defined(_MSC_VER) && _MSC_VER >= 1700
++#pragma optimize( "", off )
++#endif
+ static size_t oc_huff_tree_collapse(ogg_int16_t *_tree,
+  unsigned char _tokens[][2],int _ntokens){
+   ogg_int16_t   node[34];
+   unsigned char depth[34];
+   unsigned char last[34];
+   size_t        ntree;
+   int           ti;
+   int           l;
+@@ -367,16 +370,19 @@ static size_t oc_huff_tree_collapse(ogg_
+       /*Pop back up a level of recursion.*/
+       else if(l-->0)nbits=depth[l+1]-depth[l];
+     }
+     while(l>=0);
+   }
+   while(l>=0);
+   return ntree;
+ }
++#if defined(_MSC_VER) && _MSC_VER >= 1700
++#pragma optimize( "", on )
++#endif
+ 
+ /*Unpacks a set of Huffman trees, and reduces them to a collapsed
+    representation.
+   _opb:   The buffer to unpack the trees from.
+   _nodes: The table to fill with the Huffman trees.
+   Return: 0 on success, or a negative value on error.
+           The caller is responsible for cleaning up any partially initialized
+            _nodes on failure.*/
+diff --git a/media/libtheora/update.sh b/media/libtheora/update.sh
+--- a/media/libtheora/update.sh
++++ b/media/libtheora/update.sh
+@@ -77,8 +77,9 @@ cp $1/lib/x86_vc/x86state.c ./lib/x86_vc
+ cp $1/include/theora/theora.h ./include/theora/theora.h
+ cp $1/include/theora/theoradec.h ./include/theora/theoradec.h
+ cp $1/include/theora/theoraenc.h ./include/theora/theoraenc.h
+ cp $1/include/theora/codec.h ./include/theora/codec.h
+ patch -p3 < ./bug625773-r17780.patch
+ patch -p3 < ./bug468275-r18219.patch
+ patch -p3 < ./bug752139-r18031.patch
+ patch -p3 < ./bug752668-r18268.patch
++patch -p3 < ./bug703135.patch
+
