@@ -1,0 +1,3864 @@
+diff -r 63f07a9ed826 content/base/public/Element.h
+--- a/content/base/public/Element.h	Tue Mar 19 16:13:09 2013 -0700
++++ b/content/base/public/Element.h	Wed Mar 20 12:39:53 2013 +0900
+@@ -864,6 +864,29 @@
+    */
+   nsIEditor* GetEditorInternal();
+ 
++  /**
++   * Helper method for NS_IMPL_BOOL_ATTR macro.
++   * Gets value of boolean attribute. Only works for attributes in null
++   * namespace.
++   *
++   * @param aAttr    name of attribute.
++   * @param aValue   Boolean value of attribute.
++   */
++  NS_HIDDEN_(bool) GetBoolAttr(nsIAtom* aAttr) const
++  {
++    return HasAttr(kNameSpaceID_None, aAttr);
++  }
++
++  /**
++   * Helper method for NS_IMPL_BOOL_ATTR macro.
++   * Sets value of boolean attribute by removing attribute or setting it to
++   * the empty string. Only works for attributes in null namespace.
++   *
++   * @param aAttr    name of attribute.
++   * @param aValue   Boolean value of attribute.
++   */
++  NS_HIDDEN_(nsresult) SetBoolAttr(nsIAtom* aAttr, bool aValue);
++
+ protected:
+   /*
+    * Named-bools for use with SetAttrAndNotify to make call sites easier to
+@@ -1206,6 +1229,24 @@
+     return SetAttr(kNameSpaceID_None, nsGkAtoms::_atom, nullptr, aValue, true); \
+   }
+ 
++/**
++ * A macro to implement the getter and setter for a given boolean
++ * valued content property. The method uses the GetBoolAttr and
++ * SetBoolAttr methods.
++ */
++#define NS_IMPL_BOOL_ATTR(_class, _method, _atom)                     \
++  NS_IMETHODIMP                                                       \
++  _class::Get##_method(bool* aValue)                                  \
++  {                                                                   \
++    *aValue = GetBoolAttr(nsGkAtoms::_atom);                          \
++    return NS_OK;                                                     \
++  }                                                                   \
++  NS_IMETHODIMP                                                       \
++  _class::Set##_method(bool aValue)                                   \
++  {                                                                   \
++    return SetBoolAttr(nsGkAtoms::_atom, aValue);                     \
++  }
++
+ #define NS_FORWARD_NSIDOMELEMENT_TO_GENERIC                                   \
+ typedef mozilla::dom::Element Element;                                        \
+ NS_IMETHOD GetTagName(nsAString& aTagName) MOZ_FINAL                          \
+diff -r 63f07a9ed826 content/base/public/nsINode.h
+--- a/content/base/public/nsINode.h	Tue Mar 19 16:13:09 2013 -0700
++++ b/content/base/public/nsINode.h	Wed Mar 20 12:39:53 2013 +0900
+@@ -1306,6 +1306,11 @@
+     ElementHasAnimations,
+     // Set if node has a dir attribute with a valid value (ltr, or rtl)
+     NodeHasValidDirAttribute,
++    // Set if the element is in the scope of a scoped style sheet; this flag is
++    // only accurate for elements bounds to a document
++    ElementIsInStyleScope,
++    // Set if the element is a scoped style sheet root
++    ElementIsScopedStyleRoot,
+     // Guard value
+     BooleanFlagCount
+   };
+@@ -1376,6 +1381,24 @@
+   void SetHasValidDir() { SetBoolFlag(NodeHasValidDirAttribute); }
+   void ClearHasValidDir() { ClearBoolFlag(NodeHasValidDirAttribute); }
+   bool HasValidDir() const { return GetBoolFlag(NodeHasValidDirAttribute); }
++
++  void SetIsElementInStyleScope(bool aValue) {
++    MOZ_ASSERT(IsElement(), "SetIsInStyleScope on a non-Element node");
++    SetBoolFlag(ElementIsInStyleScope, aValue);
++  }
++  void SetIsElementInStyleScope() {
++    MOZ_ASSERT(IsElement(), "SetIsInStyleScope on a non-Element node");
++    SetBoolFlag(ElementIsInStyleScope);
++  }
++  void ClearIsElementInStyleScope() {
++    MOZ_ASSERT(IsElement(), "ClearIsInStyleScope on a non-Element node");
++    ClearBoolFlag(ElementIsInStyleScope);
++  }
++  bool IsElementInStyleScope() const { return GetBoolFlag(ElementIsInStyleScope); }
++
++  void SetIsScopedStyleRoot() { SetBoolFlag(ElementIsScopedStyleRoot); }
++  void ClearIsScopedStyleRoot() { ClearBoolFlag(ElementIsScopedStyleRoot); }
++  bool IsScopedStyleRoot() { return GetBoolFlag(ElementIsScopedStyleRoot); }
+ protected:
+   void SetParentIsContent(bool aValue) { SetBoolFlag(ParentIsContent, aValue); }
+   void SetInDocument() { SetBoolFlag(IsInDocument); }
+@@ -1396,7 +1419,7 @@
+   bool HasLockedStyleStates() const
+     { return GetBoolFlag(ElementHasLockedStyleStates); }
+ 
+-    void SetSubtreeRootPointer(nsINode* aSubtreeRoot)
++  void SetSubtreeRootPointer(nsINode* aSubtreeRoot)
+   {
+     NS_ASSERTION(aSubtreeRoot, "aSubtreeRoot can never be null!");
+     NS_ASSERTION(!(IsNodeOfType(eCONTENT) && IsInDoc()), "Shouldn't be here!");
+diff -r 63f07a9ed826 content/base/src/Element.cpp
+--- a/content/base/src/Element.cpp	Tue Mar 19 16:13:09 2013 -0700
++++ b/content/base/src/Element.cpp	Wed Mar 20 12:39:53 2013 +0900
+@@ -1155,6 +1155,9 @@
+                NODE_NEEDS_FRAME | NODE_DESCENDANTS_NEED_FRAMES |
+                // And the restyle bits
+                ELEMENT_ALL_RESTYLE_FLAGS);
++
++    // Propagate scoped style sheet tracking bit.
++    SetIsElementInStyleScope(mParent->IsElementInStyleScope());
+   } else {
+     // If we're not in the doc, update our subtree pointer.
+     SetSubtreeRootPointer(aParent->SubtreeRoot());
+@@ -3575,3 +3578,13 @@
+   nsCOMPtr<nsITextControlElement> textCtrl = do_QueryInterface(this);
+   return textCtrl ? textCtrl->GetTextEditor() : nullptr;
+ }
++
++nsresult
++Element::SetBoolAttr(nsIAtom* aAttr, bool aValue)
++{
++  if (aValue) {
++    return SetAttr(kNameSpaceID_None, aAttr, EmptyString(), true);
++  }
++
++  return UnsetAttr(kNameSpaceID_None, aAttr, true);
++}
+diff -r 63f07a9ed826 content/base/src/nsDocument.cpp
+--- a/content/base/src/nsDocument.cpp	Tue Mar 19 16:13:09 2013 -0700
++++ b/content/base/src/nsDocument.cpp	Wed Mar 20 12:39:53 2013 +0900
+@@ -2046,6 +2046,25 @@
+ }
+ 
+ void
++nsDocument::RemoveDocStyleSheetsFromStyleSets()
++{
++  // The stylesheets should forget us
++  int32_t indx = mStyleSheets.Count();
++  while (--indx >= 0) {
++    nsIStyleSheet* sheet = mStyleSheets[indx];
++    sheet->SetOwningDocument(nullptr);
++
++    if (sheet->IsApplicable()) {
++      nsCOMPtr<nsIPresShell> shell = GetShell();
++      if (shell) {
++        shell->StyleSet()->RemoveDocStyleSheet(sheet);
++      }
++    }
++    // XXX Tell observers?
++  }
++}
++
++void
+ nsDocument::RemoveStyleSheetsFromStyleSets(nsCOMArray<nsIStyleSheet>& aSheets, nsStyleSet::sheetType aType)
+ {
+   // The stylesheets should forget us
+@@ -2072,7 +2091,7 @@
+   NS_PRECONDITION(aURI, "Null URI passed to ResetStylesheetsToURI");
+ 
+   mozAutoDocUpdate upd(this, UPDATE_STYLE, true);
+-  RemoveStyleSheetsFromStyleSets(mStyleSheets, nsStyleSet::eDocSheet);
++  RemoveDocStyleSheetsFromStyleSets();
+   RemoveStyleSheetsFromStyleSets(mCatalogSheets, nsStyleSet::eAgentSheet);
+   RemoveStyleSheetsFromStyleSets(mAdditionalSheets[eAgentSheet], nsStyleSet::eAgentSheet);
+   RemoveStyleSheetsFromStyleSets(mAdditionalSheets[eUserSheet], nsStyleSet::eUserSheet);
+@@ -3524,7 +3543,7 @@
+ {
+   nsCOMPtr<nsIPresShell> shell = GetShell();
+   if (shell) {
+-    shell->StyleSet()->RemoveStyleSheet(nsStyleSet::eDocSheet, aSheet);
++    shell->StyleSet()->RemoveDocStyleSheet(aSheet);
+   }
+ }
+ 
+diff -r 63f07a9ed826 content/base/src/nsDocument.h
+--- a/content/base/src/nsDocument.h	Tue Mar 19 16:13:09 2013 -0700
++++ b/content/base/src/nsDocument.h	Wed Mar 20 12:39:53 2013 +0900
+@@ -1095,6 +1095,7 @@
+                          nsCompatibility aCompatMode,
+                          nsIPresShell** aInstancePtrResult);
+ 
++  void RemoveDocStyleSheetsFromStyleSets();
+   void RemoveStyleSheetsFromStyleSets(nsCOMArray<nsIStyleSheet>& aSheets, 
+                                       nsStyleSet::sheetType aType);
+   nsresult ResetStylesheetsToURI(nsIURI* aURI);
+diff -r 63f07a9ed826 content/base/src/nsStyleLinkElement.cpp
+--- a/content/base/src/nsStyleLinkElement.cpp	Tue Mar 19 16:13:09 2013 -0700
++++ b/content/base/src/nsStyleLinkElement.cpp	Wed Mar 20 12:39:53 2013 +0900
+@@ -12,9 +12,10 @@
+ 
+ #include "nsStyleLinkElement.h"
+ 
++#include "mozilla/css/Loader.h"
++#include "mozilla/dom/Element.h"
++#include "nsCSSStyleSheet.h"
+ #include "nsIContent.h"
+-#include "mozilla/css/Loader.h"
+-#include "nsCSSStyleSheet.h"
+ #include "nsIDocument.h"
+ #include "nsIDOMComment.h"
+ #include "nsIDOMNode.h"
+@@ -26,6 +27,9 @@
+ #include "nsUnicharInputStream.h"
+ #include "nsContentUtils.h"
+ 
++using namespace mozilla;
++using namespace mozilla::dom;
++
+ nsStyleLinkElement::nsStyleLinkElement()
+   : mDontLoadStyle(false)
+   , mUpdatesEnabled(true)
+@@ -203,6 +207,87 @@
+                             aForceUpdate);
+ }
+ 
++static bool
++IsScopedStyleElement(nsIContent* aContent)
++{
++  // This is quicker than, say, QIing aContent to nsStyleLinkElement
++  // and then calling its virtual GetStyleSheetInfo method to find out
++  // if it is scoped.
++  return aContent->IsHTML(nsGkAtoms::style) &&
++         aContent->HasAttr(kNameSpaceID_None, nsGkAtoms::scoped);
++}
++
++static void
++SetIsElementInStyleScopeFlagOnSubtree(Element* aElement)
++{
++  if (aElement->IsElementInStyleScope()) {
++    return;
++  }
++
++  aElement->SetIsElementInStyleScope();
++
++  nsIContent* n = aElement->GetNextNode(aElement);
++  while (n) {
++    if (n->IsElementInStyleScope()) {
++      n = n->GetNextNonChildNode(aElement);
++    } else {
++      if (n->IsElement()) {
++        n->SetIsElementInStyleScope();
++      }
++      n = n->GetNextNode(aElement);
++    }
++  }
++}
++
++static bool
++HasScopedStyleSheetChild(nsIContent* aContent)
++{
++  for (nsIContent* n = aContent->GetFirstChild(); n; n = n->GetNextSibling()) {
++    if (IsScopedStyleElement(n)) {
++      return true;
++    }
++  }
++  return false;
++}
++
++// Called when aElement has had a <style scoped> child removed.
++static void
++UpdateIsElementInStyleScopeFlagOnSubtree(Element* aElement)
++{
++  NS_ASSERTION(aElement->IsElementInStyleScope(),
++               "only call UpdateIsElementInStyleScopeFlagOnSubtree on a "
++               "subtree that has IsElementInStyleScope boolean flag set");
++
++  if (HasScopedStyleSheetChild(aElement)) {
++    return;
++  }
++
++  aElement->ClearIsElementInStyleScope();
++
++  nsIContent* n = aElement->GetNextNode(aElement);
++  while (n) {
++    if (HasScopedStyleSheetChild(n)) {
++      n = n->GetNextNonChildNode(aElement);
++    } else {
++      if (n->IsElement()) {
++        n->ClearIsElementInStyleScope();
++      }
++      n = n->GetNextNode(aElement);
++    }
++  }
++}
++
++static Element*
++GetScopeElement(nsIStyleSheet* aSheet)
++{
++  nsRefPtr<nsCSSStyleSheet> cssStyleSheet = do_QueryObject(aSheet);
++  if (!cssStyleSheet) {
++    return nullptr;
++  }
++
++  return cssStyleSheet->GetScopeElement();
++}
++
+ nsresult
+ nsStyleLinkElement::DoUpdateStyleSheet(nsIDocument *aOldDocument,
+                                        nsICSSLoaderObserver* aObserver,
+@@ -212,6 +297,11 @@
+ {
+   *aWillNotify = false;
+ 
++  nsCOMPtr<nsIContent> thisContent;
++  CallQueryInterface(this, getter_AddRefs(thisContent));
++
++  Element* oldScopeElement = GetScopeElement(mStyleSheet);
++
+   if (mStyleSheet && aOldDocument) {
+     // We're removing the link element from the document, unload the
+     // stylesheet.  We want to do this even if updates are disabled, since
+@@ -221,11 +311,11 @@
+     aOldDocument->RemoveStyleSheet(mStyleSheet);
+     aOldDocument->EndUpdate(UPDATE_STYLE);
+     nsStyleLinkElement::SetStyleSheet(nullptr);
++    if (oldScopeElement) {
++      UpdateIsElementInStyleScopeFlagOnSubtree(oldScopeElement);
++    }
+   }
+ 
+-  nsCOMPtr<nsIContent> thisContent;
+-  QueryInterface(NS_GET_IID(nsIContent), getter_AddRefs(thisContent));
+-
+   NS_ENSURE_TRUE(thisContent, NS_ERROR_FAILURE);
+ 
+   // When static documents are created, stylesheets are cloned manually.
+@@ -266,14 +356,21 @@
+   }
+ 
+   nsAutoString title, type, media;
++  bool isScoped;
+   bool isAlternate;
+ 
+-  GetStyleSheetInfo(title, type, media, &isAlternate);
++  GetStyleSheetInfo(title, type, media, &isScoped, &isAlternate);
+ 
+   if (!type.LowerCaseEqualsLiteral("text/css")) {
+     return NS_OK;
+   }
+ 
++  Element* scopeElement = isScoped ? thisContent->GetParentElement() : nullptr;
++  if (scopeElement) {
++    NS_ASSERTION(isInline, "non-inline style must not have scope element");
++    SetIsElementInStyleScopeFlagOnSubtree(scopeElement);
++  }
++
+   bool doneLoading = false;
+   nsresult rv = NS_OK;
+   if (isInline) {
+@@ -283,7 +380,7 @@
+     // Parse the style sheet.
+     rv = doc->CSSLoader()->
+       LoadInlineStyle(thisContent, text, mLineNumber, title, media,
+-                      aObserver, &doneLoading, &isAlternate);
++                      scopeElement, aObserver, &doneLoading, &isAlternate);
+   }
+   else {
+     // XXXbz clone the URI here to work around content policies modifying URIs.
+@@ -310,3 +407,44 @@
+ 
+   return NS_OK;
+ }
++
++void
++nsStyleLinkElement::UpdateStyleSheetScopedness(bool aIsNowScoped)
++{
++  if (!mStyleSheet) {
++    return;
++  }
++
++  nsRefPtr<nsCSSStyleSheet> cssStyleSheet = do_QueryObject(mStyleSheet);
++  NS_ASSERTION(cssStyleSheet, "should only call UpdateStyleSheetScope for "
++                              "an nsCSSStyleSheet");
++
++  nsCOMPtr<nsIContent> thisContent;
++  CallQueryInterface(this, getter_AddRefs(thisContent));
++
++  Element* oldScopeElement = cssStyleSheet->GetScopeElement();
++  Element* newScopeElement = aIsNowScoped ?
++                               thisContent->GetParentElement() :
++                               nullptr;
++
++  if (oldScopeElement == newScopeElement) {
++    return;
++  }
++
++  nsIDocument* document = thisContent->GetOwnerDocument();
++
++  document->BeginUpdate(UPDATE_STYLE);
++  document->RemoveStyleSheet(mStyleSheet);
++
++  cssStyleSheet->SetScopeElement(newScopeElement);
++
++  document->AddStyleSheet(mStyleSheet);
++  document->EndUpdate(UPDATE_STYLE);
++
++  if (oldScopeElement) {
++    UpdateIsElementInStyleScopeFlagOnSubtree(oldScopeElement);
++  }
++  if (newScopeElement) {
++    SetIsElementInStyleScopeFlagOnSubtree(newScopeElement);
++  }
++}
+diff -r 63f07a9ed826 content/base/src/nsStyleLinkElement.h
+--- a/content/base/src/nsStyleLinkElement.h	Tue Mar 19 16:13:09 2013 -0700
++++ b/content/base/src/nsStyleLinkElement.h	Wed Mar 20 12:39:53 2013 +0900
+@@ -69,10 +69,13 @@
+   nsresult UpdateStyleSheetInternal(nsIDocument *aOldDocument,
+                                     bool aForceUpdate = false);
+ 
++  void UpdateStyleSheetScopedness(bool aIsNowScoped);
++
+   virtual already_AddRefed<nsIURI> GetStyleSheetURL(bool* aIsInline) = 0;
+   virtual void GetStyleSheetInfo(nsAString& aTitle,
+                                  nsAString& aType,
+                                  nsAString& aMedia,
++                                 bool* aIsScoped,
+                                  bool* aIsAlternate) = 0;
+ 
+   nsIStyleSheet* GetStyleSheet() { return mStyleSheet; }
+diff -r 63f07a9ed826 content/html/content/src/nsGenericHTMLElement.cpp
+--- a/content/html/content/src/nsGenericHTMLElement.cpp	Tue Mar 19 16:13:09 2013 -0700
++++ b/content/html/content/src/nsGenericHTMLElement.cpp	Wed Mar 20 12:39:53 2013 +0900
+@@ -1839,16 +1839,6 @@
+   return SetAttr(kNameSpaceID_None, aAttr, aValue, true);
+ }
+ 
+-nsresult
+-nsGenericHTMLElement::SetBoolAttr(nsIAtom* aAttr, bool aValue)
+-{
+-  if (aValue) {
+-    return SetAttr(kNameSpaceID_None, aAttr, EmptyString(), true);
+-  }
+-
+-  return UnsetAttr(kNameSpaceID_None, aAttr, true);
+-}
+-
+ int32_t
+ nsGenericHTMLElement::GetIntAttr(nsIAtom* aAttr, int32_t aDefault) const
+ {
+diff -r 63f07a9ed826 content/html/content/src/nsGenericHTMLElement.h
+--- a/content/html/content/src/nsGenericHTMLElement.h	Tue Mar 19 16:13:09 2013 -0700
++++ b/content/html/content/src/nsGenericHTMLElement.h	Wed Mar 20 12:39:53 2013 +0900
+@@ -848,29 +848,6 @@
+   NS_HIDDEN_(nsresult) SetAttrHelper(nsIAtom* aAttr, const nsAString& aValue);
+ 
+   /**
+-   * Helper method for NS_IMPL_BOOL_ATTR macro.
+-   * Gets value of boolean attribute. Only works for attributes in null
+-   * namespace.
+-   *
+-   * @param aAttr    name of attribute.
+-   * @param aValue   Boolean value of attribute.
+-   */
+-  NS_HIDDEN_(bool) GetBoolAttr(nsIAtom* aAttr) const
+-  {
+-    return HasAttr(kNameSpaceID_None, aAttr);
+-  }
+-
+-  /**
+-   * Helper method for NS_IMPL_BOOL_ATTR macro.
+-   * Sets value of boolean attribute by removing attribute or setting it to
+-   * the empty string. Only works for attributes in null namespace.
+-   *
+-   * @param aAttr    name of attribute.
+-   * @param aValue   Boolean value of attribute.
+-   */
+-  NS_HIDDEN_(nsresult) SetBoolAttr(nsIAtom* aAttr, bool aValue);
+-
+-  /**
+    * Helper method for NS_IMPL_INT_ATTR macro.
+    * Gets the integer-value of an attribute, returns specified default value
+    * if the attribute isn't set or isn't set to an integer. Only works for
+@@ -1235,24 +1212,6 @@
+   }
+ 
+ /**
+- * A macro to implement the getter and setter for a given boolean
+- * valued content property. The method uses the generic GetAttr and
+- * SetAttr methods.
+- */
+-#define NS_IMPL_BOOL_ATTR(_class, _method, _atom)                     \
+-  NS_IMETHODIMP                                                       \
+-  _class::Get##_method(bool* aValue)                                \
+-  {                                                                   \
+-    *aValue = GetBoolAttr(nsGkAtoms::_atom);                          \
+-    return NS_OK;                                                     \
+-  }                                                                   \
+-  NS_IMETHODIMP                                                       \
+-  _class::Set##_method(bool aValue)                                 \
+-  {                                                                   \
+-    return SetBoolAttr(nsGkAtoms::_atom, aValue);                   \
+-  }
+-
+-/**
+  * A macro to implement the getter and setter for a given integer
+  * valued content property. The method uses the generic GetAttr and
+  * SetAttr methods.
+diff -r 63f07a9ed826 content/html/content/src/nsHTMLLinkElement.cpp
+--- a/content/html/content/src/nsHTMLLinkElement.cpp	Tue Mar 19 16:13:09 2013 -0700
++++ b/content/html/content/src/nsHTMLLinkElement.cpp	Wed Mar 20 12:39:53 2013 +0900
+@@ -103,6 +103,7 @@
+   virtual void GetStyleSheetInfo(nsAString& aTitle,
+                                  nsAString& aType,
+                                  nsAString& aMedia,
++                                 bool* aIsScoped,
+                                  bool* aIsAlternate);
+   virtual CORSMode GetCORSMode() const;
+ protected:
+@@ -431,11 +432,13 @@
+ nsHTMLLinkElement::GetStyleSheetInfo(nsAString& aTitle,
+                                      nsAString& aType,
+                                      nsAString& aMedia,
++                                     bool* aIsScoped,
+                                      bool* aIsAlternate)
+ {
+   aTitle.Truncate();
+   aType.Truncate();
+   aMedia.Truncate();
++  *aIsScoped = false;
+   *aIsAlternate = false;
+ 
+   nsAutoString rel;
+diff -r 63f07a9ed826 content/html/content/src/nsHTMLStyleElement.cpp
+--- a/content/html/content/src/nsHTMLStyleElement.cpp	Tue Mar 19 16:13:09 2013 -0700
++++ b/content/html/content/src/nsHTMLStyleElement.cpp	Wed Mar 20 12:39:53 2013 +0900
+@@ -86,6 +86,7 @@
+   void GetStyleSheetInfo(nsAString& aTitle,
+                          nsAString& aType,
+                          nsAString& aMedia,
++                         bool* aIsScoped,
+                          bool* aIsAlternate);
+   /**
+    * Common method to call from the various mutation observer methods.
+@@ -164,6 +165,7 @@
+ }
+ 
+ NS_IMPL_STRING_ATTR(nsHTMLStyleElement, Media, media)
++NS_IMPL_BOOL_ATTR(nsHTMLStyleElement, Scoped, scoped)
+ NS_IMPL_STRING_ATTR(nsHTMLStyleElement, Type, type)
+ 
+ void
+@@ -242,11 +244,14 @@
+ {
+   nsresult rv = nsGenericHTMLElement::SetAttr(aNameSpaceID, aName, aPrefix,
+                                               aValue, aNotify);
+-  if (NS_SUCCEEDED(rv) && aNameSpaceID == kNameSpaceID_None &&
+-      (aName == nsGkAtoms::title ||
+-       aName == nsGkAtoms::media ||
+-       aName == nsGkAtoms::type)) {
+-    UpdateStyleSheetInternal(nullptr, true);
++  if (NS_SUCCEEDED(rv) && aNameSpaceID == kNameSpaceID_None) {
++    if (aName == nsGkAtoms::title ||
++        aName == nsGkAtoms::media ||
++        aName == nsGkAtoms::type) {
++      UpdateStyleSheetInternal(nullptr, true);
++    } else if (aName == nsGkAtoms::scoped) {
++      UpdateStyleSheetScopedness(true);
++    }
+   }
+ 
+   return rv;
+@@ -258,11 +263,14 @@
+ {
+   nsresult rv = nsGenericHTMLElement::UnsetAttr(aNameSpaceID, aAttribute,
+                                                 aNotify);
+-  if (NS_SUCCEEDED(rv) && aNameSpaceID == kNameSpaceID_None &&
+-      (aAttribute == nsGkAtoms::title ||
+-       aAttribute == nsGkAtoms::media ||
+-       aAttribute == nsGkAtoms::type)) {
+-    UpdateStyleSheetInternal(nullptr, true);
++  if (NS_SUCCEEDED(rv) && aNameSpaceID == kNameSpaceID_None) {
++    if (aAttribute == nsGkAtoms::title ||
++        aAttribute == nsGkAtoms::media ||
++        aAttribute == nsGkAtoms::type) {
++      UpdateStyleSheetInternal(nullptr, true);
++    } else if (aAttribute == nsGkAtoms::scoped) {
++      UpdateStyleSheetScopedness(false);
++    }
+   }
+ 
+   return rv;
+@@ -298,6 +306,7 @@
+ nsHTMLStyleElement::GetStyleSheetInfo(nsAString& aTitle,
+                                       nsAString& aType,
+                                       nsAString& aMedia,
++                                      bool* aIsScoped,
+                                       bool* aIsAlternate)
+ {
+   aTitle.Truncate();
+@@ -317,6 +326,8 @@
+ 
+   GetAttr(kNameSpaceID_None, nsGkAtoms::type, aType);
+ 
++  *aIsScoped = HasAttr(kNameSpaceID_None, nsGkAtoms::scoped);
++
+   nsAutoString mimeType;
+   nsAutoString notUsed;
+   nsContentUtils::SplitMimeType(aType, mimeType, notUsed);
+diff -r 63f07a9ed826 content/html/content/test/Makefile.in
+--- a/content/html/content/test/Makefile.in	Tue Mar 19 16:13:09 2013 -0700
++++ b/content/html/content/test/Makefile.in	Wed Mar 20 12:39:53 2013 +0900
+@@ -339,6 +339,7 @@
+ 		test_formelements.html \
+ 		test_rowscollection.html \
+ 		test_mozaudiochannel.html \
++		test_style_attributes_reflection.html \
+ 		$(NULL)
+ 
+ 
+diff -r 63f07a9ed826 content/html/content/test/reflect.js
+--- a/content/html/content/test/reflect.js	Tue Mar 19 16:13:09 2013 -0700
++++ b/content/html/content/test/reflect.js	Wed Mar 20 12:39:53 2013 +0900
+@@ -62,6 +62,7 @@
+     link: [ "crossOrigin" ],
+     source: [ "media" ],
+     textarea: [ "name", "placeholder" ],
++    style: [ "media", "type" ]
+   };
+   if (!(element.localName in todoAttrs) || todoAttrs[element.localName].indexOf(idlAttr) == -1) {
+     is(element.getAttribute(contentAttr), "null",
+diff -r 63f07a9ed826 content/html/content/test/test_style_attributes_reflection.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/content/html/content/test/test_style_attributes_reflection.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,41 @@
++<!DOCTYPE html>
++<html>
++<head>
++  <title>Test for HTMLStyleElement attributes reflection</title>
++  <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
++  <script type="application/javascript" src="reflect.js"></script>
++  <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
++</head>
++<body>
++<p id="display"></p>
++<div id="content" style="display: none">
++</div>
++<pre id="test">
++<script type="application/javascript">
++
++/** Test for HTMLStyleElement attributes reflection **/
++
++var e = document.createElement("style");
++
++// .media
++reflectString({
++  element: e,
++  attribute: "media"
++});
++
++// .type
++reflectString({
++  element: e,
++  attribute: "type"
++});
++
++// .scoped
++reflectBoolean({
++  element: e,
++  attribute: "scoped"
++});
++
++</script>
++</pre>
++</body>
++</html>
+diff -r 63f07a9ed826 content/svg/content/src/SVGStyleElement.cpp
+--- a/content/svg/content/src/SVGStyleElement.cpp	Tue Mar 19 16:13:09 2013 -0700
++++ b/content/svg/content/src/SVGStyleElement.cpp	Wed Mar 20 12:39:53 2013 +0900
+@@ -3,6 +3,7 @@
+  * License, v. 2.0. If a copy of the MPL was not distributed with this
+  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+ 
++#include "mozilla/dom/Element.h"
+ #include "mozilla/dom/SVGStyleElement.h"
+ #include "nsContentUtils.h"
+ #include "nsStubMutationObserver.h"
+@@ -98,12 +99,14 @@
+ {
+   nsresult rv = SVGStyleElementBase::SetAttr(aNameSpaceID, aName, aPrefix,
+                                              aValue, aNotify);
+-  if (NS_SUCCEEDED(rv)) {
+-    UpdateStyleSheetInternal(nullptr,
+-                             aNameSpaceID == kNameSpaceID_None &&
+-                             (aName == nsGkAtoms::title ||
+-                              aName == nsGkAtoms::media ||
+-                              aName == nsGkAtoms::type));
++  if (NS_SUCCEEDED(rv) && aNameSpaceID == kNameSpaceID_None) {
++    if (aName == nsGkAtoms::title ||
++        aName == nsGkAtoms::media ||
++        aName == nsGkAtoms::type) {
++      UpdateStyleSheetInternal(nullptr, true);
++    } else if (aName == nsGkAtoms::scoped) {
++      UpdateStyleSheetScopedness(true);
++    }
+   }
+ 
+   return rv;
+@@ -115,12 +118,14 @@
+ {
+   nsresult rv = SVGStyleElementBase::UnsetAttr(aNameSpaceID, aAttribute,
+                                                aNotify);
+-  if (NS_SUCCEEDED(rv)) {
+-    UpdateStyleSheetInternal(nullptr,
+-                             aNameSpaceID == kNameSpaceID_None &&
+-                             (aAttribute == nsGkAtoms::title ||
+-                              aAttribute == nsGkAtoms::media ||
+-                              aAttribute == nsGkAtoms::type));
++  if (NS_SUCCEEDED(rv) && aNameSpaceID == kNameSpaceID_None) {
++    if (aAttribute == nsGkAtoms::title ||
++        aAttribute == nsGkAtoms::media ||
++        aAttribute == nsGkAtoms::type) {
++      UpdateStyleSheetInternal(nullptr, true);
++    } else if (aAttribute == nsGkAtoms::scoped) {
++      UpdateStyleSheetScopedness(false);
++    }
+   }
+ 
+   return rv;
+@@ -209,53 +214,39 @@
+   rv = SetAttr(kNameSpaceID_XML, nsGkAtoms::space, aXmlspace, true);
+ }
+ 
+-/* attribute DOMString type; */
+-NS_IMETHODIMP SVGStyleElement::GetType(nsAString & aType)
++/* attribute DOMString media; */
++NS_IMPL_STRING_ATTR(SVGStyleElement, Media, media)
++void
++SVGStyleElement::SetMedia(const nsAString& aMedia, ErrorResult& rv)
+ {
+-  GetAttr(kNameSpaceID_None, nsGkAtoms::type, aType);
++  rv = SetAttr(kNameSpaceID_None, nsGkAtoms::media, aMedia, true);
++}
+ 
+-  return NS_OK;
+-}
+-NS_IMETHODIMP SVGStyleElement::SetType(const nsAString & aType)
++/* attribute boolean scoped; */
++NS_IMPL_BOOL_ATTR(SVGStyleElement, Scoped, scoped)
++bool
++SVGStyleElement::Scoped() const
+ {
+-  return SetAttr(kNameSpaceID_None, nsGkAtoms::type, aType, true);
++  return GetBoolAttr(nsGkAtoms::scoped);
+ }
+ void
+-SVGStyleElement::SetType(const nsAString & aType, ErrorResult& rv)
++SVGStyleElement::SetScoped(bool aScoped, ErrorResult& rv)
++{
++  rv = SetBoolAttr(nsGkAtoms::scoped, aScoped);
++}
++
++/* attribute DOMString type; */
++NS_IMPL_STRING_ATTR(SVGStyleElement, Type, type)
++void
++SVGStyleElement::SetType(const nsAString& aType, ErrorResult& rv)
+ {
+   rv = SetAttr(kNameSpaceID_None, nsGkAtoms::type, aType, true);
+ }
+ 
+-/* attribute DOMString media; */
+-NS_IMETHODIMP SVGStyleElement::GetMedia(nsAString & aMedia)
+-{
+-  GetAttr(kNameSpaceID_None, nsGkAtoms::media, aMedia);
+-
+-  return NS_OK;
+-}
+-NS_IMETHODIMP SVGStyleElement::SetMedia(const nsAString & aMedia)
+-{
+-  return SetAttr(kNameSpaceID_None, nsGkAtoms::media, aMedia, true);
+-}
++/* attribute DOMString title; */
++NS_IMPL_STRING_ATTR(SVGStyleElement, Title, title)
+ void
+-SVGStyleElement::SetMedia(const nsAString & aMedia, ErrorResult& rv)
+-{
+-  rv = SetAttr(kNameSpaceID_None, nsGkAtoms::media, aMedia, true);
+-}
+-
+-/* attribute DOMString title; */
+-NS_IMETHODIMP SVGStyleElement::GetTitle(nsAString & aTitle)
+-{
+-  GetAttr(kNameSpaceID_None, nsGkAtoms::title, aTitle);
+-
+-  return NS_OK;
+-}
+-NS_IMETHODIMP SVGStyleElement::SetTitle(const nsAString & aTitle)
+-{
+-  return SetAttr(kNameSpaceID_None, nsGkAtoms::title, aTitle, true);
+-}
+-void
+-SVGStyleElement::SetTitle(const nsAString & aTitle, ErrorResult& rv)
++SVGStyleElement::SetTitle(const nsAString& aTitle, ErrorResult& rv)
+ {
+   rv = SetAttr(kNameSpaceID_None, nsGkAtoms::title, aTitle, true);
+ }
+@@ -274,6 +265,7 @@
+ SVGStyleElement::GetStyleSheetInfo(nsAString& aTitle,
+                                    nsAString& aType,
+                                    nsAString& aMedia,
++                                   bool* aIsScoped,
+                                    bool* aIsAlternate)
+ {
+   *aIsAlternate = false;
+@@ -293,6 +285,8 @@
+     aType.AssignLiteral("text/css");
+   }
+ 
++  *aIsScoped = HasAttr(kNameSpaceID_None, nsGkAtoms::scoped);
++
+   return;
+ }
+ 
+diff -r 63f07a9ed826 content/svg/content/src/SVGStyleElement.h
+--- a/content/svg/content/src/SVGStyleElement.h	Tue Mar 19 16:13:09 2013 -0700
++++ b/content/svg/content/src/SVGStyleElement.h	Wed Mar 20 12:39:53 2013 +0900
+@@ -81,6 +81,8 @@
+   void SetType(const nsAString & aType, ErrorResult& rv);
+   void SetMedia(const nsAString & aMedia, ErrorResult& rv);
+   void SetTitle(const nsAString & aTitle, ErrorResult& rv);
++  bool Scoped() const;
++  void SetScoped(bool aScoped, ErrorResult& rv);
+ 
+ protected:
+   // Dummy init method to make the NS_IMPL_NS_NEW_SVG_ELEMENT and
+@@ -97,6 +99,7 @@
+   void GetStyleSheetInfo(nsAString& aTitle,
+                          nsAString& aType,
+                          nsAString& aMedia,
++                         bool* aIsScoped,
+                          bool* aIsAlternate);
+   virtual CORSMode GetCORSMode() const;
+ 
+diff -r 63f07a9ed826 content/xbl/src/nsXBLPrototypeResources.cpp
+--- a/content/xbl/src/nsXBLPrototypeResources.cpp	Tue Mar 19 16:13:09 2013 -0700
++++ b/content/xbl/src/nsXBLPrototypeResources.cpp	Wed Mar 20 12:39:53 2013 +0900
+@@ -101,7 +101,8 @@
+     mStyleSheetList.AppendElement(newSheet);
+   }
+   mRuleProcessor = new nsCSSRuleProcessor(mStyleSheetList, 
+-                                          nsStyleSet::eDocSheet);
++                                          nsStyleSet::eDocSheet,
++                                          nullptr);
+ 
+   return NS_OK;
+ }
+diff -r 63f07a9ed826 content/xbl/src/nsXBLResourceLoader.cpp
+--- a/content/xbl/src/nsXBLResourceLoader.cpp	Tue Mar 19 16:13:09 2013 -0700
++++ b/content/xbl/src/nsXBLResourceLoader.cpp	Wed Mar 20 12:39:53 2013 +0900
+@@ -167,7 +167,8 @@
+     // All stylesheets are loaded.  
+     mResources->mRuleProcessor =
+       new nsCSSRuleProcessor(mResources->mStyleSheetList, 
+-                             nsStyleSet::eDocSheet);
++                             nsStyleSet::eDocSheet,
++                             nullptr);
+ 
+     // XXX Check for mPendingScripts when scripts also come online.
+     if (!mInLoadResourcesFunc)
+diff -r 63f07a9ed826 content/xml/content/src/nsXMLStylesheetPI.cpp
+--- a/content/xml/content/src/nsXMLStylesheetPI.cpp	Tue Mar 19 16:13:09 2013 -0700
++++ b/content/xml/content/src/nsXMLStylesheetPI.cpp	Wed Mar 20 12:39:53 2013 +0900
+@@ -3,6 +3,7 @@
+  * License, v. 2.0. If a copy of the MPL was not distributed with this
+  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+ 
++#include "mozilla/dom/Element.h"
+ #include "nsIDOMLinkStyle.h"
+ #include "nsIDOMStyleSheet.h"
+ #include "nsIDocument.h"
+@@ -58,6 +59,7 @@
+   void GetStyleSheetInfo(nsAString& aTitle,
+                          nsAString& aType,
+                          nsAString& aMedia,
++                         bool* aIsScoped,
+                          bool* aIsAlternate);
+   virtual nsGenericDOMDataNode* CloneDataNode(nsINodeInfo *aNodeInfo,
+                                               bool aCloneText) const;
+@@ -178,11 +180,13 @@
+ nsXMLStylesheetPI::GetStyleSheetInfo(nsAString& aTitle,
+                                      nsAString& aType,
+                                      nsAString& aMedia,
++                                     bool* aIsScoped,
+                                      bool* aIsAlternate)
+ {
+   aTitle.Truncate();
+   aType.Truncate();
+   aMedia.Truncate();
++  *aIsScoped = false;
+   *aIsAlternate = false;
+ 
+   // xml-stylesheet PI is special only in prolog
+diff -r 63f07a9ed826 dom/interfaces/html/nsIDOMHTMLStyleElement.idl
+--- a/dom/interfaces/html/nsIDOMHTMLStyleElement.idl	Tue Mar 19 16:13:09 2013 -0700
++++ b/dom/interfaces/html/nsIDOMHTMLStyleElement.idl	Wed Mar 20 12:39:53 2013 +0900
+@@ -16,10 +16,11 @@
+  * http://www.whatwg.org/specs/web-apps/current-work/
+  */
+ 
+-[scriptable, uuid(830D9170-F8EB-4749-B721-16D60D6B0F1B)]
++[scriptable, uuid(f9db1001-faae-46e1-b85f-0a0afb80c5b2)]
+ interface nsIDOMHTMLStyleElement : nsIDOMHTMLElement
+ {
+            attribute boolean          disabled;
+            attribute DOMString        media;
+            attribute DOMString        type;
++           attribute boolean          scoped;
+ };
+diff -r 63f07a9ed826 dom/interfaces/svg/nsIDOMSVGStyleElement.idl
+--- a/dom/interfaces/svg/nsIDOMSVGStyleElement.idl	Tue Mar 19 16:13:09 2013 -0700
++++ b/dom/interfaces/svg/nsIDOMSVGStyleElement.idl	Wed Mar 20 12:39:53 2013 +0900
+@@ -5,7 +5,7 @@
+ 
+ #include "nsIDOMSVGElement.idl"
+ 
+-[scriptable, uuid(53DA8F96-E2F0-45AC-B8AE-3CACC5981383)]
++[scriptable, uuid(2fecabb2-4671-4553-9e99-1b8167e3c131)]
+ interface nsIDOMSVGStyleElement
+   : nsIDOMSVGElement
+ {
+@@ -17,4 +17,5 @@
+                        // raises DOMException on setting
+   attribute DOMString         title;
+                        // raises DOMException on setting
++  attribute boolean           scoped;
+ };
+diff -r 63f07a9ed826 dom/webidl/SVGStyleElement.webidl
+--- a/dom/webidl/SVGStyleElement.webidl	Tue Mar 19 16:13:09 2013 -0700
++++ b/dom/webidl/SVGStyleElement.webidl	Wed Mar 20 12:39:53 2013 +0900
+@@ -19,5 +19,7 @@
+   attribute DOMString media;
+   [SetterThrows]
+   attribute DOMString title;
++  [SetterThrows]
++  attribute boolean scoped;
+ };
+ 
+diff -r 63f07a9ed826 layout/base/nsCSSFrameConstructor.cpp
+--- a/layout/base/nsCSSFrameConstructor.cpp	Tue Mar 19 16:13:09 2013 -0700
++++ b/layout/base/nsCSSFrameConstructor.cpp	Wed Mar 20 12:39:53 2013 +0900
+@@ -2324,7 +2324,7 @@
+                                 nullptr, aFrameState);
+   // Initialize the ancestor filter with null for now; we'll push
+   // aDocElement once we finish resolving style for it.
+-  state.mTreeMatchContext.mAncestorFilter.Init(nullptr);
++  state.mTreeMatchContext.InitAncestors(nullptr);
+ 
+   // XXXbz why, exactly?
+   if (!mTempFrameTreeState)
+@@ -2391,8 +2391,8 @@
+     return NS_OK;
+   }
+ 
+-  AncestorFilter::AutoAncestorPusher
+-    ancestorPusher(true, state.mTreeMatchContext.mAncestorFilter, aDocElement);
++  TreeMatchContext::AutoAncestorPusher
++    ancestorPusher(true, state.mTreeMatchContext, aDocElement);
+ 
+   // Make sure to start any background image loads for the root element now.
+   styleContext->StartBackgroundImageLoads();
+@@ -3601,9 +3601,9 @@
+   // frames constructed), this is the best place to bottleneck the
+   // pushing of the content instead of having to do it in multiple
+   // places.
+-  AncestorFilter::AutoAncestorPusher
++  TreeMatchContext::AutoAncestorPusher
+     ancestorPusher(aState.mTreeMatchContext.mAncestorFilter.HasFilter(),
+-                   aState.mTreeMatchContext.mAncestorFilter,
++                   aState.mTreeMatchContext,
+                    content->IsElement() ? content->AsElement() : nullptr);
+ 
+   nsIFrame* newFrame;
+@@ -3837,9 +3837,9 @@
+ 
+   nsFrameConstructorState::PendingBindingAutoPusher pusher(aState,
+                                                            aPendingBinding);
+-  AncestorFilter::AutoAncestorPusher
++  TreeMatchContext::AutoAncestorPusher
+     ancestorPusher(aState.mTreeMatchContext.mAncestorFilter.HasFilter(),
+-                   aState.mTreeMatchContext.mAncestorFilter,
++                   aState.mTreeMatchContext,
+                    aParent->AsElement());
+ 
+   nsIAnonymousContentCreator* creator = do_QueryFrame(aParentFrame);
+@@ -6646,7 +6646,7 @@
+                                 GetAbsoluteContainingBlock(parentFrame, FIXED_POS),
+                                 GetAbsoluteContainingBlock(parentFrame, ABS_POS),
+                                 GetFloatContainingBlock(parentFrame));
+-  state.mTreeMatchContext.mAncestorFilter.Init(aContainer->AsElement());
++  state.mTreeMatchContext.InitAncestors(aContainer->AsElement());
+ 
+   // See if the containing block has :first-letter style applied.
+   bool haveFirstLetterStyle = false, haveFirstLineStyle = false;
+@@ -7083,9 +7083,9 @@
+                                 GetAbsoluteContainingBlock(parentFrame, ABS_POS),
+                                 GetFloatContainingBlock(parentFrame),
+                                 aFrameState);
+-  state.mTreeMatchContext.mAncestorFilter.Init(aContainer ?
+-                                                 aContainer->AsElement() :
+-                                                 nullptr);
++  state.mTreeMatchContext.InitAncestors(aContainer ?
++                                          aContainer->AsElement() :
++                                          nullptr);
+ 
+   // Recover state for the containing block - we need to know if
+   // it has :first-letter or :first-line style applied to it. The
+@@ -11320,9 +11320,9 @@
+   nsStyleContext* const parentStyleContext = aParentItem.mStyleContext;
+   nsIContent* const parentContent = aParentItem.mContent;
+ 
+-  AncestorFilter::AutoAncestorPusher
++  TreeMatchContext::AutoAncestorPusher
+     ancestorPusher(aState.mTreeMatchContext.mAncestorFilter.HasFilter(),
+-                   aState.mTreeMatchContext.mAncestorFilter,
++                   aState.mTreeMatchContext,
+                    parentContent->AsElement());
+   
+   CreateGeneratedContentItem(aState, nullptr, parentContent, parentStyleContext,
+diff -r 63f07a9ed826 layout/base/nsFrameManager.cpp
+--- a/layout/base/nsFrameManager.cpp	Tue Mar 19 16:13:09 2013 -0700
++++ b/layout/base/nsFrameManager.cpp	Wed Mar 20 12:39:53 2013 +0900
+@@ -1379,8 +1379,8 @@
+     if (checkUndisplayed && mUndisplayedMap) {
+       UndisplayedNode* undisplayed =
+         mUndisplayedMap->GetFirstNode(undisplayedParent);
+-      for (AncestorFilter::AutoAncestorPusher
+-             pushAncestor(undisplayed, aTreeMatchContext.mAncestorFilter,
++      for (TreeMatchContext::AutoAncestorPusher
++             pushAncestor(undisplayed, aTreeMatchContext,
+                           undisplayedParent ? undisplayedParent->AsElement()
+                                             : nullptr);
+            undisplayed; undisplayed = undisplayed->mNext) {
+@@ -1536,9 +1536,9 @@
+ 
+       // now do children
+       nsIFrame::ChildListIterator lists(aFrame);
+-      for (AncestorFilter::AutoAncestorPusher
++      for (TreeMatchContext::AutoAncestorPusher
+              pushAncestor(!lists.IsDone(),
+-                          aTreeMatchContext.mAncestorFilter,
++                          aTreeMatchContext,
+                           content && content->IsElement() ? content->AsElement()
+                                                           : nullptr);
+            !lists.IsDone(); lists.Next()) {
+@@ -1680,7 +1680,7 @@
+   nsIContent *parent = content ? content->GetParent() : nullptr;
+   Element *parentElement =
+     parent && parent->IsElement() ? parent->AsElement() : nullptr;
+-  treeMatchContext.mAncestorFilter.Init(parentElement);
++  treeMatchContext.InitAncestors(parentElement);
+   nsTArray<nsIContent*> visibleKidsOfHiddenElement;
+   do {
+     // Outer loop over special siblings
+diff -r 63f07a9ed826 layout/base/nsIPresShell.h
+--- a/layout/base/nsIPresShell.h	Tue Mar 19 16:13:09 2013 -0700
++++ b/layout/base/nsIPresShell.h	Wed Mar 20 12:39:53 2013 +0900
+@@ -1424,6 +1424,9 @@
+   // re-use old pixels.
+   RenderFlags               mRenderFlags;
+ 
++  // Indicates that the whole document must be restyled.  Changes to scoped
++  // style sheets are recorded in mChangedScopeStyleRoots rather than here
++  // in mStylesHaveChanged.
+   bool                      mStylesHaveChanged : 1;
+   bool                      mDidInitialize : 1;
+   bool                      mIsDestroying : 1;
+@@ -1447,6 +1450,15 @@
+   bool                      mSuppressInterruptibleReflows : 1;
+   bool                      mScrollPositionClampingScrollPortSizeSet : 1;
+ 
++  // List of subtrees rooted at style scope roots that need to be restyled.
++  // When a change to a scoped style sheet is made, we add the style scope
++  // root to this array rather than setting mStylesHaveChanged = true, since
++  // we know we don't need to restyle the whole document.  However, if in the
++  // same update block we have already had other changes that require
++  // the whole document to be restyled (i.e., mStylesHaveChanged is already
++  // true), then we don't bother adding the scope root here.
++  nsAutoTArray<nsRefPtr<mozilla::dom::Element>,1> mChangedScopeStyleRoots;
++
+   static nsIContent*        gKeyDownTarget;
+ 
+   // Cached font inflation values. This is done to prevent changing of font
+diff -r 63f07a9ed826 layout/base/nsPresShell.cpp
+--- a/layout/base/nsPresShell.cpp	Tue Mar 19 16:13:09 2013 -0700
++++ b/layout/base/nsPresShell.cpp	Wed Mar 20 12:39:53 2013 +0900
+@@ -33,7 +33,7 @@
+ #include "mozilla/dom/Element.h"
+ #include "nsIDocument.h"
+ #include "nsIDOMXULDocument.h"
+-#include "nsCSSStyleSheet.h" // XXX for UA sheet loading hack, can this go away please?
++#include "nsCSSStyleSheet.h"
+ #include "nsIDOMCSSStyleSheet.h"  // for Pref-related rule management (bugs 22963,20760,31816)
+ #include "nsAnimationManager.h"
+ #include "nsINameSpaceManager.h"  // for Pref-related rule management (bugs 22963,20760,31816)
+@@ -2419,7 +2419,7 @@
+ 
+   if (aUpdateType & UPDATE_STYLE) {
+     mStyleSet->EndUpdate();
+-    if (mStylesHaveChanged)
++    if (mStylesHaveChanged || !mChangedScopeStyleRoots.IsEmpty())
+       ReconstructStyleData();
+   }
+ 
+@@ -4169,6 +4169,15 @@
+ void
+ nsIPresShell::ReconstructStyleDataInternal()
+ {
++  nsAutoTArray<nsRefPtr<mozilla::dom::Element>,1> scopeRoots;
++  mChangedScopeStyleRoots.SwapElements(scopeRoots);
++
++  if (mStylesHaveChanged) {
++    // If we need to restyle everything, no need to restyle individual
++    // scoped style roots.
++    scopeRoots.Clear();
++  }
++
+   mStylesHaveChanged = false;
+ 
+   if (mIsDestroying) {
+@@ -4192,7 +4201,19 @@
+     return;
+   }
+   
+-  mFrameConstructor->PostRestyleEvent(root, eRestyle_Subtree, NS_STYLE_HINT_NONE);
++  if (scopeRoots.IsEmpty()) {
++    // If scopeRoots is empty, we know that mStylesHaveChanged was true at
++    // the beginning of this function, and that we need to restyle the whole
++    // document.
++    mFrameConstructor->PostRestyleEvent(root, eRestyle_Subtree,
++                                        NS_STYLE_HINT_NONE);
++  } else {
++    for (uint32_t i = 0; i < scopeRoots.Length(); i++) {
++      Element* scopeRoot = scopeRoots[i];
++      mFrameConstructor->PostRestyleEvent(scopeRoot, eRestyle_Subtree,
++                                          NS_STYLE_HINT_NONE);
++    }
++  }
+ }
+ 
+ void
+@@ -4202,6 +4223,24 @@
+ }
+ 
+ void
++PresShell::RecordStyleSheetChange(nsIStyleSheet* aStyleSheet)
++{
++  if (mStylesHaveChanged)
++    return;
++
++  nsRefPtr<nsCSSStyleSheet> cssStyleSheet = do_QueryObject(aStyleSheet);
++  if (cssStyleSheet) {
++    Element* scopeElement = cssStyleSheet->GetScopeElement();
++    if (scopeElement) {
++      mChangedScopeStyleRoots.AppendElement(scopeElement);
++      return;
++    }
++  }
++
++  mStylesHaveChanged = true;
++}
++
++void
+ PresShell::StyleSheetAdded(nsIDocument *aDocument,
+                            nsIStyleSheet* aStyleSheet,
+                            bool aDocumentSheet)
+@@ -4210,7 +4249,7 @@
+   NS_PRECONDITION(aStyleSheet, "Must have a style sheet!");
+ 
+   if (aStyleSheet->IsApplicable() && aStyleSheet->HasRules()) {
+-    mStylesHaveChanged = true;
++    RecordStyleSheetChange(aStyleSheet);
+   }
+ }
+ 
+@@ -4223,7 +4262,7 @@
+   NS_PRECONDITION(aStyleSheet, "Must have a style sheet!");
+ 
+   if (aStyleSheet->IsApplicable() && aStyleSheet->HasRules()) {
+-    mStylesHaveChanged = true;
++    RecordStyleSheetChange(aStyleSheet);
+   }
+ }
+ 
+@@ -4233,7 +4272,7 @@
+                                             bool aApplicable)
+ {
+   if (aStyleSheet->HasRules()) {
+-    mStylesHaveChanged = true;
++    RecordStyleSheetChange(aStyleSheet);
+   }
+ }
+ 
+@@ -4243,7 +4282,7 @@
+                             nsIStyleRule* aOldStyleRule,
+                             nsIStyleRule* aNewStyleRule)
+ {
+-  mStylesHaveChanged = true;
++  RecordStyleSheetChange(aStyleSheet);
+ }
+ 
+ void
+@@ -4251,7 +4290,7 @@
+                           nsIStyleSheet* aStyleSheet,
+                           nsIStyleRule* aStyleRule) 
+ {
+-  mStylesHaveChanged = true;
++  RecordStyleSheetChange(aStyleSheet);
+ }
+ 
+ void
+@@ -4259,7 +4298,7 @@
+                             nsIStyleSheet* aStyleSheet,
+                             nsIStyleRule* aStyleRule) 
+ {
+-  mStylesHaveChanged = true;
++  RecordStyleSheetChange(aStyleSheet);
+ }
+ 
+ nsIFrame*
+diff -r 63f07a9ed826 layout/base/nsPresShell.h
+--- a/layout/base/nsPresShell.h	Tue Mar 19 16:13:09 2013 -0700
++++ b/layout/base/nsPresShell.h	Wed Mar 20 12:39:53 2013 +0900
+@@ -440,6 +440,8 @@
+   void ShowEventTargetDebug();
+ #endif
+ 
++  void RecordStyleSheetChange(nsIStyleSheet* aStyleSheet);
++
+     /**
+     * methods that manage rules that are used to implement the associated preferences
+     *  - initially created for bugs 31816, 20760, 22963
+diff -r 63f07a9ed826 layout/reftests/reftest.list
+--- a/layout/reftests/reftest.list	Tue Mar 19 16:13:09 2013 -0700
++++ b/layout/reftests/reftest.list	Wed Mar 20 12:39:53 2013 +0900
+@@ -238,6 +238,9 @@
+ skip-if(B2G) include printing/reftest.list
+ skip-if(B2G) include pagination/reftest.list
+ 
++# <style scoped>
++include scoped-style/reftest.list
++
+ # scrolling
+ include scrolling/reftest.list
+ 
+diff -r 63f07a9ed826 layout/reftests/scoped-style/reftest.list
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/reftest.list	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,51 @@
++== scoped-style-001.html scoped-style-001-ref.html
++== scoped-style-002.html scoped-style-002-ref.html
++== scoped-style-003.html scoped-style-003-ref.html
++== scoped-style-004.html scoped-style-004-ref.html
++== scoped-style-005.html scoped-style-005-ref.html
++== scoped-style-006.html scoped-style-006-ref.html
++== scoped-style-007.html scoped-style-007-ref.html
++== scoped-style-008.html scoped-style-008-ref.html
++== scoped-style-009.html scoped-style-009-ref.html
++== scoped-style-010.html scoped-style-010-ref.html
++== scoped-style-011.html scoped-style-011-ref.html
++== scoped-style-012.html scoped-style-012-ref.html
++== scoped-style-013.html scoped-style-013-ref.html
++== scoped-style-014.html scoped-style-014-ref.html
++== scoped-style-015.html scoped-style-015-ref.html
++== scoped-style-016.html scoped-style-016-ref.html
++== scoped-style-017.html scoped-style-017-ref.html
++== scoped-style-018.html scoped-style-018-ref.html
++== scoped-style-019.svg scoped-style-019-ref.svg
++== scoped-style-020.html scoped-style-020-ref.html
++== scoped-style-021.html scoped-style-021-ref.html
++== scoped-style-important-001.html scoped-style-important-001-ref.html
++== scoped-style-important-002.html scoped-style-important-002-ref.html
++== scoped-style-important-003.html scoped-style-important-003-ref.html
++== scoped-style-important-004.html scoped-style-important-004-ref.html
++== scoped-style-important-005.html scoped-style-important-005-ref.html
++== scoped-style-important-006.html scoped-style-important-006-ref.html
++== scoped-style-important-007.html scoped-style-important-007-ref.html
++== scoped-style-dynamic-001.html scoped-style-dynamic-001-ref.html
++== scoped-style-dynamic-002.html scoped-style-dynamic-002-ref.html
++== scoped-style-dynamic-003.html scoped-style-dynamic-003-ref.html
++== scoped-style-dynamic-004.html scoped-style-dynamic-004-ref.html
++== scoped-style-dynamic-005.html scoped-style-dynamic-005-ref.html
++== scoped-style-dynamic-006.html scoped-style-dynamic-006-ref.html
++== scoped-style-dynamic-007.html scoped-style-dynamic-007-ref.html
++== scoped-style-dynamic-008.html scoped-style-dynamic-008-ref.html
++== scoped-style-dynamic-009.html scoped-style-dynamic-009-ref.html
++== scoped-style-dynamic-010.html scoped-style-dynamic-010-ref.html
++== scoped-style-dynamic-011.html scoped-style-dynamic-011-ref.html
++== scoped-style-dynamic-012.svg scoped-style-dynamic-012-ref.svg
++== scoped-style-dynamic-013.svg scoped-style-dynamic-013-ref.svg
++== scoped-style-dynamic-014.svg scoped-style-dynamic-014-ref.svg
++== scoped-style-dynamic-015.svg scoped-style-dynamic-015-ref.svg
++== scoped-style-import.html scoped-style-import-ref.html
++== scoped-style-media.html scoped-style-media-ref.html
++== scoped-style-namespace.html scoped-style-namespace-ref.html
++== scoped-style-charset.html scoped-style-charset-ref.html
++== scoped-style-document.html scoped-style-document-ref.html
++HTTP(..) == scoped-style-font-face.html scoped-style-font-face-ref.html
++== scoped-style-keyframes.html scoped-style-keyframes-ref.html
++pref(layout.css.supports-rule.enabled,true) == scoped-style-supports.html scoped-style-supports-ref.html
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-001-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-001-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p style="color: green">Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-001.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-001.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,11 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p>
++    <style scoped>
++      p { color: green }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-002-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-002-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: blue">First</p>
++  <p style="color: green">Second</p>
++  <p style="color: blue">Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-002.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-002.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,14 @@
++<!DOCTYPE html>
++<body>
++  <style>
++    p { color: blue }
++  </style>
++  <p>First</p>
++  <p>
++    <style scoped>
++      p { color: green }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-003-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-003-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: blue">First</p>
++  <p style="color: green">Second</p>
++  <p style="color: blue">Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-003.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-003.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,14 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p>
++    <style scoped>
++      p { color: green }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++  <style>
++    p { color: blue }
++  </style>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-004-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-004-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: blue">First</p>
++  <p style="color: green">Second</p>
++  <p style="color: blue">Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-004.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-004.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,14 @@
++<!DOCTYPE html>
++<body>
++  <style>
++    body p { color: blue }
++  </style>
++  <p>First</p>
++  <p>
++    <style scoped>
++      p { color: green }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-005-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-005-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: blue">First</p>
++  <p style="color: green">Second</p>
++  <p style="color: blue">Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-005.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-005.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,14 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p>
++    <style scoped>
++      p { color: green }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++  <style>
++    body p { color: blue }
++  </style>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-006-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-006-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: blue">First</p>
++  <p style="color: green">Second</p>
++  <p style="color: blue">Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-006.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-006.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,14 @@
++<!DOCTYPE html>
++<body>
++  <style>
++    p { color: blue }
++  </style>
++  <p>First</p>
++  <p id=a>
++    <style scoped>
++      #a { color: green }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-007-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-007-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: blue">First</p>
++  <p style="color: green">Second</p>
++  <p style="color: blue">Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-007.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-007.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,14 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p id=a>
++    <style scoped>
++      #a { color: green }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++  <style>
++    p { color: blue }
++  </style>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-008-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-008-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p>Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-008.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-008.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,11 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p>
++    <style scoped>
++      body p { color: green }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-009-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-009-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p>Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-009.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-009.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,11 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p>
++    <style scoped>
++      p + p { color: red }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-010-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-010-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p style="color: green; text-decoration: underline">Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-010.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-010.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,17 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p>
++    <style scoped>
++      p { color: red }
++    </style>
++    <style scoped>
++      p { text-decoration: underline }
++    </style>
++    Second
++    <style scoped>
++      p { color: green }
++    </style>
++  </p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-011-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-011-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p><div style="color: green">Second</div></p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-011.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-011.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,13 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <div>
++    <style scoped>
++      p { color: green }
++    </style>
++    <p>
++      Second
++    </p>
++  </div>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-012-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-012-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,8 @@
++<!DOCTYPE html>
++<body>
++  <div>First</div>
++  <div style="color: green">
++    Second
++    <div style="text-decoration: underline">Third</div>
++  </div>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-012.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-012.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,16 @@
++<!DOCTYPE html>
++<body>
++  <div>First</div>
++  <div>
++    <style scoped>
++      div { color: green }
++    </style>
++    Second
++    <div>
++      <style scoped>
++        div { text-decoration: underline }
++      </style>
++      Third
++    </div>
++  </div>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-013-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-013-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,9 @@
++<!DOCTYPE html>
++<body>
++  <div>
++    <p>First</p>
++  </div>
++  <div>
++    <p style="color: green">Second</p>
++  </div>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-013.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-013.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,12 @@
++<!DOCTYPE html>
++<body>
++  <div>
++    <p>First</p>
++  </div>
++  <div>
++    <style scoped>
++      div p { color: green }
++    </style>
++    <p>Second</p>
++  </div>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-014-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-014-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,15 @@
++<!DOCTYPE html>
++<body>
++  <div>
++    <p>First</p>
++  </div>
++  <blockquote>
++    <div>
++      <div>
++        <div>
++          <p style="color: green">Second</p>
++        </div>
++      </div>
++    </div>
++  </blockquote>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-014.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-014.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,18 @@
++<!DOCTYPE html>
++<body>
++  <div>
++    <p>First</p>
++  </div>
++  <blockquote>
++    <style scoped>
++      blockquote p { color: green }
++    </style>
++    <div>
++      <div>
++        <div>
++          <p>Second</p>
++        </div>
++      </div>
++    </div>
++  </blockquote>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-015-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-015-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,8 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <div>
++    <p style="color: green">Second</p>
++  </div>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-015.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-015.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,11 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <div>
++    <style scoped>
++      p { color: red }
++    </style>
++    <p style="color: green">Second</p>
++  </div>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-016-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-016-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,8 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <div>
++    <p>Second</p>
++    <p style="color: green">Third</p>
++  </div>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-016.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-016.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,11 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <div>
++    <style scoped>
++      p + p { color: green }
++    </style>
++    <p>Second</p>
++    <p>Third</p>
++  </div>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-017-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-017-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,8 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <div style="text-decoration: underline">
++    <p>Second</p>
++    <p>Third</p>
++  </div>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-017.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-017.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,16 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <div>
++    <style scoped>
++      div { text-decoration: underline }
++    </style>
++    <p>
++      <style scoped>
++        div { color: red }
++      </style>
++      Second
++    </p>
++    <p>Third</p>
++  </div>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-018-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-018-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,8 @@
++<!DOCTYPE html>
++<body>
++  <div>
++    <div>
++      <p style="color: green">This should be green.</p>
++    </div>
++  </div>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-018.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-018.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,14 @@
++<!DOCTYPE html>
++<body>
++  <div>
++    <div>
++      <p>This should be green.</p>
++      <style scoped>
++        p { color: green }
++      </style>
++    </div>
++    <style scoped>
++      p { color: red }
++    </style>
++  </div>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-019-ref.svg
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-019-ref.svg	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,7 @@
++<svg xmlns="http://www.w3.org/2000/svg">
++  <rect width="50" height="50"/>
++  <g>
++    <rect x="60" width="50" height="50" fill="blue"/>
++  </g>
++  <rect x="120" width="50" height="50"/>
++</svg>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-019.svg
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-019.svg	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,10 @@
++<svg xmlns="http://www.w3.org/2000/svg">
++  <rect width="50" height="50"/>
++  <g>
++    <style scoped="">
++      rect { fill: blue }
++    </style>
++    <rect x="60" width="50" height="50"/>
++  </g>
++  <rect x="120" width="50" height="50"/>
++</svg>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-020-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-020-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,4 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: green">Hello</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-020.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-020.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,9 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: green">
++    <style scoped>
++      p { color: red }
++    </style>
++    Hello
++  </p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-021-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-021-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,4 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: green">Hello</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-021.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-021.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,7 @@
++<!DOCTYPE html>
++<body>
++  <style scoped>
++    p { color: red }
++  </style>
++  <p style="color: green">Hello</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-charset-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-charset-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p style="color: blue">Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-charset.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-charset.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,12 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p>
++    <style scoped>
++      @charset "UTF-16";
++      p { color: blue }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-document-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-document-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p style="color: blue">Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-document.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-document.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,13 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p>
++    <style scoped>
++      @-moz-document regexp("^.*scoped-style-document\\.html$") {
++        p { color: blue }
++      }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-001-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-001-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p style="color: green">Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-001.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-001.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,15 @@
++<!DOCTYPE html>
++<body onload="f()">
++  <p>First</p>
++  <p>Second</p>
++  <p>Third</p>
++  <script>
++    function f() {
++      var p = document.getElementsByTagName("p")[1];
++      var style = document.createElement("style");
++      style.setAttribute("scoped", "");
++      style.textContent = "p { color: green }";
++      p.appendChild(style);
++    }
++  </script>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-002-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-002-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p style="color: green; text-decoration: underline">Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-002.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-002.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,20 @@
++<!DOCTYPE html>
++<body onload="f()">
++  <p>First</p>
++  <p>
++    <style scoped>
++      p { text-decoration: underline }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++  <script>
++    function f() {
++      var p = document.getElementsByTagName("p")[1];
++      var style = document.createElement("style");
++      style.setAttribute("scoped", "");
++      style.textContent = "p { color: green }";
++      p.appendChild(style);
++    }
++  </script>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-003-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-003-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p style="color: green">Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-003.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-003.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,20 @@
++<!DOCTYPE html>
++<body onload="f()">
++  <p>First</p>
++  <p>
++    <style scoped>
++      p { color: green }
++    </style>
++    <style scoped>
++      p { text-decoration: underline }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++  <script>
++    function f() {
++      var style = document.getElementsByTagName("style")[1];
++      style.parentNode.removeChild(style);
++    }
++  </script>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-004-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-004-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p style="color: green; background-color: yellow">Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-004.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-004.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,20 @@
++<!DOCTYPE html>
++<body onload="f()">
++  <p>First</p>
++  <p>
++    <style scoped>
++      p { color: green }
++    </style>
++    <style scoped>
++      p { text-decoration: underline }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++  <script>
++    function f() {
++      var style = document.getElementsByTagName("style")[1];
++      style.textContent = "p { background-color: yellow }";
++    }
++  </script>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-005-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-005-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: green">First</p>
++  <p style="color: green">Second</p>
++  <p style="color: green">Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-005.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-005.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,17 @@
++<!DOCTYPE html>
++<body onload="f()">
++  <p>First</p>
++  <p>
++    <style scoped>
++      p { color: green }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++  <script>
++    function f() {
++      var style = document.getElementsByTagName("style")[0];
++      style.removeAttribute("scoped");
++    }
++  </script>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-006-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-006-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p style="color: green">Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-006.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-006.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,17 @@
++<!DOCTYPE html>
++<body onload="f()">
++  <p>First</p>
++  <p>
++    <style>
++      p { color: green }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++  <script>
++    function f() {
++      var style = document.getElementsByTagName("style")[0];
++      style.setAttribute("scoped", "");
++    }
++  </script>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-007-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-007-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <div></div>
++  <p>Second</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-007.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-007.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,16 @@
++<!DOCTYPE html>
++<body onload="f()">
++  <p>First</p>
++  <div>
++    <style scoped>
++      p { color: green }
++    </style>
++    <p>Second</p>
++  </div>
++  <script>
++    function f() {
++      var p = document.getElementsByTagName("p")[1];
++      document.body.appendChild(p);
++    }
++  </script>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-008-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-008-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,7 @@
++<!DOCTYPE html>
++<body>
++  <div>
++    <p style="color: green">First</p>
++  </div>
++  <p>Second</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-008.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-008.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,17 @@
++<!DOCTYPE html>
++<body onload="f()">
++  <p>First</p>
++  <div>
++    <style scoped>
++      p { color: green }
++    </style>
++  </div>
++  <p>Second</p>
++  <script>
++    function f() {
++      var p = document.getElementsByTagName("p")[0];
++      var div = document.getElementsByTagName("div")[0];
++      div.appendChild(p);
++    }
++  </script>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-009-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-009-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p style="color: green">Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-009.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-009.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,17 @@
++<!DOCTYPE html>
++<body onload="f()">
++  <p>First</p>
++  <p>
++    <style>
++      p { color: green }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++  <script>
++    function f() {
++      var style = document.getElementsByTagName("style")[0];
++      style.scoped = true;
++    }
++  </script>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-010-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-010-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: green">First</p>
++  <p style="color: green">Second</p>
++  <p style="color: green">Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-010.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-010.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,17 @@
++<!DOCTYPE html>
++<body onload="f()">
++  <p>First</p>
++  <p>
++    <style scoped>
++      p { color: green }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++  <script>
++    function f() {
++      var style = document.getElementsByTagName("style")[0];
++      style.scoped = false;
++    }
++  </script>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-011-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-011-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,5 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p style="color: green">Second</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-011.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-011.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,17 @@
++<!DOCTYPE html>
++<body onload="f()">
++  <p>
++    <style scoped>
++      p { color: green }
++    </style>
++    First
++  </p>
++  <p>Second</p>
++  <script>
++    function f() {
++      var style = document.getElementsByTagName("style")[0];
++      var p = document.getElementsByTagName("p")[1];
++      p.appendChild(style);
++    }
++  </script>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-012-ref.svg
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-012-ref.svg	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,7 @@
++<svg xmlns="http://www.w3.org/2000/svg">
++  <rect width="50" height="50" fill="blue"/>
++  <g>
++    <rect x="60" width="50" height="50" fill="blue"/>
++  </g>
++  <rect x="120" width="50" height="50" fill="blue"/>
++</svg>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-012.svg
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-012.svg	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,15 @@
++<svg xmlns="http://www.w3.org/2000/svg" onload="f()">
++  <rect width="50" height="50"/>
++  <g>
++    <style scoped="">
++      rect { fill: blue }
++    </style>
++    <rect x="60" width="50" height="50"/>
++  </g>
++  <rect x="120" width="50" height="50"/>
++  <script>
++    function f() {
++      document.getElementsByTagName("style")[0].removeAttribute("scoped");
++    }
++  </script>
++</svg>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-013-ref.svg
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-013-ref.svg	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,7 @@
++<svg xmlns="http://www.w3.org/2000/svg">
++  <rect width="50" height="50"/>
++  <g>
++    <rect x="60" width="50" height="50" fill="blue"/>
++  </g>
++  <rect x="120" width="50" height="50"/>
++</svg>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-013.svg
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-013.svg	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,15 @@
++<svg xmlns="http://www.w3.org/2000/svg" onload="f()">
++  <rect width="50" height="50"/>
++  <g>
++    <style>
++      rect { fill: blue }
++    </style>
++    <rect x="60" width="50" height="50"/>
++  </g>
++  <rect x="120" width="50" height="50"/>
++  <script>
++    function f() {
++      document.getElementsByTagName("style")[0].setAttribute("scoped", "");
++    }
++  </script>
++</svg>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-014-ref.svg
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-014-ref.svg	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,7 @@
++<svg xmlns="http://www.w3.org/2000/svg">
++  <rect width="50" height="50" fill="blue"/>
++  <g>
++    <rect x="60" width="50" height="50" fill="blue"/>
++  </g>
++  <rect x="120" width="50" height="50" fill="blue"/>
++</svg>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-014.svg
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-014.svg	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,15 @@
++<svg xmlns="http://www.w3.org/2000/svg" onload="f()">
++  <rect width="50" height="50"/>
++  <g>
++    <style scoped="">
++      rect { fill: blue }
++    </style>
++    <rect x="60" width="50" height="50"/>
++  </g>
++  <rect x="120" width="50" height="50"/>
++  <script>
++    function f() {
++      document.getElementsByTagName("style")[0].scoped = false;
++    }
++  </script>
++</svg>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-015-ref.svg
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-015-ref.svg	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,7 @@
++<svg xmlns="http://www.w3.org/2000/svg">
++  <rect width="50" height="50"/>
++  <g>
++    <rect x="60" width="50" height="50" fill="blue"/>
++  </g>
++  <rect x="120" width="50" height="50"/>
++</svg>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-dynamic-015.svg
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-dynamic-015.svg	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,15 @@
++<svg xmlns="http://www.w3.org/2000/svg" onload="f()">
++  <rect width="50" height="50"/>
++  <g>
++    <style>
++      rect { fill: blue }
++    </style>
++    <rect x="60" width="50" height="50"/>
++  </g>
++  <rect x="120" width="50" height="50"/>
++  <script>
++    function f() {
++      document.getElementsByTagName("style")[0].scoped = true;
++    }
++  </script>
++</svg>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-font-face-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-font-face-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,13 @@
++<!DOCTYPE html>
++<body>
++  <style>
++    @font-face {
++      font-family: Ahem;
++      url: src(../fonts/Ahem.ttf);
++    }
++    #a { font-family: Ahem }
++  </style>
++  <p id=a>First</p>
++  <p style="color: blue">Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-font-face.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-font-face.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,23 @@
++<!DOCTYPE html>
++<body>
++  <style>
++    @font-face {
++      font-family: Ahem;
++      url: src(../fonts/Ahem.ttf);
++    }
++    #a { font-family: Ahem }
++    #c { font-family: Ahem2 }
++  </style>
++  <p id=a>First</p>
++  <p>
++    <style scoped>
++      @font-face {
++        font-family: Ahem2;
++        url: src(../fonts/Ahem.ttf);
++      }
++      p { font-family: Ahem2; color: blue }
++    </style>
++    Second
++  </p>
++  <p id=c>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-import-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-import-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p style="color: blue">Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-import.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-import.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,11 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p>
++    <style scoped>
++      @import url(scoped-style-imported.css);
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-important-001-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-important-001-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: blue">First</p>
++  <p style="color: blue">Second</p>
++  <p style="color: blue">Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-important-001.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-important-001.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,14 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p>
++    <style scoped>
++      p { color: red }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++  <style>
++    p { color: blue !important }
++  </style>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-important-002-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-important-002-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p style="color: blue">Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-important-002.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-important-002.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,11 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p style="color: red">
++    <style scoped>
++      p { color: blue !important }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-important-003-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-important-003-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: green">First</p>
++  <p style="color: green">Second</p>
++  <p style="color: green">Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-important-003.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-important-003.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,14 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p>
++    <style scoped>
++      p { color: red !important }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++  <style>
++    p { color: green !important }
++  </style>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-important-004-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-important-004-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: green">First</p>
++  <p style="color: green">Second</p>
++  <p style="color: green">Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-important-004.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-important-004.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,14 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p>
++    <style scoped>
++      p { color: red !important }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++  <style scoped>
++    p { color: green !important }
++  </style>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-important-005-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-important-005-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,4 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: green">Hello</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-important-005.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-important-005.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,7 @@
++<!DOCTYPE html>
++<body>
++  <style scoped>
++    p { color: green !important }
++  </style>
++  <p style="color: red">Hello</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-important-006-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-important-006-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,4 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: green">Hello</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-important-006.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-important-006.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,9 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: red">
++    <style scoped>
++      p { color: green !important }
++    </style>
++    Hello
++  </p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-important-007-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-important-007-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,4 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: green">Hello</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-important-007.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-important-007.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,7 @@
++<!DOCTYPE html>
++<body>
++  <style scoped>
++    p { color: red !important }
++  </style>
++  <p style="color: green !important">Hello</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-imported.css
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-imported.css	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,1 @@
++p { color: blue }
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-keyframes-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-keyframes-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p style="color: green">First</p>
++  <p>Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-keyframes.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-keyframes.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,28 @@
++<!DOCTYPE html>
++<body>
++  <style>
++    @keyframes a {
++      from { color: green }
++      to { color: green }
++    }
++    p { animation-duration: 1s; animation-fill-mode: both }
++    #a { animation-name: a }
++    #c { animation-name: b }
++  </style>
++  <p id=a>First</p>
++  <p>
++    <style scoped>
++      @keyframes a {
++        from { color: blue }
++        to { color: blue }
++      }
++      @keyframes b {
++        from { color: red }
++        to { color: red }
++      }
++      p { animation-name: b }
++    </style>
++    Second
++  </p>
++  <p id=c>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-media-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-media-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p style="color: blue">Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-media.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-media.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,16 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p>
++    <style scoped>
++      @media not all {
++        p { text-decoration: underline }
++      }
++      @media all {
++        p { color: blue }
++      }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-namespace-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-namespace-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p style="color: blue">Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-namespace.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-namespace.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,12 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p>
++    <style scoped>
++      @namespace html url(http://www.w3.org/1999/xhtml);
++      html|p { color: blue }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-supports-ref.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-supports-ref.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,6 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p style="color: blue">Second</p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/reftests/scoped-style/scoped-style-supports.html
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/layout/reftests/scoped-style/scoped-style-supports.html	Wed Mar 20 12:39:53 2013 +0900
+@@ -0,0 +1,16 @@
++<!DOCTYPE html>
++<body>
++  <p>First</p>
++  <p>
++    <style scoped>
++      @supports (color: rainbow) {
++        p { text-decoration: underline }
++      }
++      @supports (color: blue) {
++        p { color: blue }
++      }
++    </style>
++    Second
++  </p>
++  <p>Third</p>
++</body>
+diff -r 63f07a9ed826 layout/style/Loader.cpp
+--- a/layout/style/Loader.cpp	Tue Mar 19 16:13:09 2013 -0700
++++ b/layout/style/Loader.cpp	Wed Mar 20 12:39:53 2013 +0900
+@@ -18,6 +18,7 @@
+ 
+ #include "mozilla/Util.h"
+ 
++#include "mozilla/dom/Element.h"
+ #include "mozilla/css/Loader.h"
+ #include "nsIRunnable.h"
+ #include "nsIUnicharStreamLoader.h"
+@@ -70,6 +71,8 @@
+ #include "mozilla/dom/EncodingUtils.h"
+ using mozilla::dom::EncodingUtils;
+ 
++using namespace mozilla::dom;
++
+ /**
+  * OVERALL ARCHITECTURE
+  *
+@@ -1206,6 +1209,7 @@
+                      const nsSubstring& aTitle,
+                      const nsSubstring& aMediaString,
+                      nsMediaList* aMediaList,
++                     Element* aScopeElement,
+                      bool isAlternate)
+ {
+   NS_PRECONDITION(aSheet, "Must have a sheet!");
+@@ -1232,6 +1236,7 @@
+ 
+   aSheet->SetTitle(aTitle);
+   aSheet->SetEnabled(! isAlternate);
++  aSheet->SetScopeElement(aScopeElement);
+   return NS_OK;
+ }
+ 
+@@ -1794,6 +1799,7 @@
+                         uint32_t aLineNumber,
+                         const nsAString& aTitle,
+                         const nsAString& aMedia,
++                        Element* aScopeElement,
+                         nsICSSLoaderObserver* aObserver,
+                         bool* aCompleted,
+                         bool* aIsAlternate)
+@@ -1826,7 +1832,8 @@
+ 
+   LOG(("  Sheet is alternate: %d", *aIsAlternate));
+ 
+-  rv = PrepareSheet(sheet, aTitle, aMedia, nullptr, *aIsAlternate);
++  rv = PrepareSheet(sheet, aTitle, aMedia, nullptr, aScopeElement,
++                    *aIsAlternate);
+   NS_ENSURE_SUCCESS(rv, rv);
+ 
+   rv = InsertSheetInDoc(sheet, aElement, mDocument);
+@@ -1899,7 +1906,7 @@
+ 
+   LOG(("  Sheet is alternate: %d", *aIsAlternate));
+ 
+-  rv = PrepareSheet(sheet, aTitle, aMedia, nullptr, *aIsAlternate);
++  rv = PrepareSheet(sheet, aTitle, aMedia, nullptr, nullptr, *aIsAlternate);
+   NS_ENSURE_SUCCESS(rv, rv);
+ 
+   rv = InsertSheetInDoc(sheet, aElement, mDocument);
+@@ -2057,7 +2064,7 @@
+                    false, empty, state, &isAlternate, getter_AddRefs(sheet));
+   NS_ENSURE_SUCCESS(rv, rv);
+ 
+-  rv = PrepareSheet(sheet, empty, empty, aMedia, isAlternate);
++  rv = PrepareSheet(sheet, empty, empty, aMedia, nullptr, isAlternate);
+   NS_ENSURE_SUCCESS(rv, rv);
+ 
+   rv = InsertChildSheet(sheet, aParentSheet, aParentRule);
+@@ -2168,7 +2175,7 @@
+                    empty, state, &isAlternate, getter_AddRefs(sheet));
+   NS_ENSURE_SUCCESS(rv, rv);
+ 
+-  rv = PrepareSheet(sheet, empty, empty, nullptr, isAlternate);
++  rv = PrepareSheet(sheet, empty, empty, nullptr, nullptr, isAlternate);
+   NS_ENSURE_SUCCESS(rv, rv);
+ 
+   if (state == eSheetComplete) {
+diff -r 63f07a9ed826 layout/style/Loader.h
+--- a/layout/style/Loader.h	Tue Mar 19 16:13:09 2013 -0700
++++ b/layout/style/Loader.h	Wed Mar 20 12:39:53 2013 +0900
+@@ -32,6 +32,12 @@
+ class nsCycleCollectionTraversalCallback;
+ 
+ namespace mozilla {
++namespace dom {
++class Element;
++}
++}
++
++namespace mozilla {
+ 
+ class URIPrincipalAndCORSModeHashKey : public nsURIHashKey
+ {
+@@ -160,6 +166,7 @@
+                            uint32_t aLineNumber,
+                            const nsAString& aTitle,
+                            const nsAString& aMedia,
++                           mozilla::dom::Element* aScopeElement,
+                            nsICSSLoaderObserver* aObserver,
+                            bool* aCompleted,
+                            bool* aIsAlternate);
+@@ -395,6 +402,7 @@
+                         const nsAString& aTitle,
+                         const nsAString& aMediaString,
+                         nsMediaList* aMediaList,
++                        mozilla::dom::Element* aScopeElement,
+                         bool isAlternate);
+ 
+   nsresult InsertSheetInDoc(nsCSSStyleSheet* aSheet,
+diff -r 63f07a9ed826 layout/style/nsCSSRuleProcessor.cpp
+--- a/layout/style/nsCSSRuleProcessor.cpp	Tue Mar 19 16:13:09 2013 -0700
++++ b/layout/style/nsCSSRuleProcessor.cpp	Wed Mar 20 12:39:53 2013 +0900
+@@ -1051,12 +1051,17 @@
+ //
+ 
+ nsCSSRuleProcessor::nsCSSRuleProcessor(const sheet_array_type& aSheets,
+-                                       uint8_t aSheetType)
++                                       uint8_t aSheetType,
++                                       Element* aScopeElement)
+   : mSheets(aSheets)
+   , mRuleCascades(nullptr)
+   , mLastPresContext(nullptr)
+   , mSheetType(aSheetType)
++  , mScopeElement(aScopeElement)
+ {
++  NS_ASSERTION(!!mScopeElement == (aSheetType == nsStyleSet::eScopedDocSheet),
++               "aScopeElement must be specified iff aSheetType is "
++               "eScopedDocSheet");
+   for (sheet_array_type::size_type i = mSheets.Length(); i-- != 0; ) {
+     mSheets[i]->AddRuleProcessor(this);
+   }
+@@ -2197,6 +2202,13 @@
+                  selector->mNext->mOperator != PRUnichar(0),
+                  "compound selector without combinator");
+ 
++    // If after the previous selector match we are now outside the
++    // current style scope, we don't need to match any further.
++    if (aTreeMatchContext.mForScopedStyle &&
++        !aTreeMatchContext.IsWithinStyleScopeForSelectorMatching()) {
++      return false;
++    }
++
+     // for adjacent sibling combinators, the content to test against the
+     // selector is the previous sibling *element*
+     Element* element = nullptr;
+@@ -2227,6 +2239,13 @@
+       // element parents.
+       if (content && content->IsElement()) {
+         element = content->AsElement();
++        if (aTreeMatchContext.mForScopedStyle) {
++          // We are moving up to the parent element; tell the
++          // TreeMatchContext, so that in case this element is the
++          // style scope element, selector matching stops before we
++          // traverse further up the tree.
++          aTreeMatchContext.PopStyleScopeForSelectorMatching(element);
++        }
+       }
+     }
+     if (!element) {
+@@ -2298,6 +2317,12 @@
+     // We won't match; nothing else to do here
+     return;
+   }
++  if (!data->mTreeMatchContext.SetStyleScopeForSelectorMatching(data->mElement,
++                                                                data->mScope)) {
++    // The selector is for a rule in a scoped style sheet, and the subject
++    // of the selector matching is not in its scope.
++    return;
++  }
+   if (SelectorMatches(data->mElement, aSelector, nodeContext,
+                       data->mTreeMatchContext)) {
+     nsCSSSelector *next = aSelector->mNext;
+@@ -2482,6 +2507,13 @@
+ {
+   AttributeRuleProcessorData *data = aData->data;
+ 
++  if (!data->mTreeMatchContext.SetStyleScopeForSelectorMatching(data->mElement,
++                                                                data->mScope)) {
++    // The selector is for a rule in a scoped style sheet, and the subject
++    // of the selector matching is not in its scope.
++    return;
++  }
++
+   nsRestyleHint possibleChange = RestyleHintForOp(aSelector->mOperator);
+ 
+   // If enumData->change already includes all the bits of possibleChange, don't
+@@ -3256,14 +3288,14 @@
+   return false;
+ }
+ 
+-// AncestorFilter out of line methods
++// TreeMatchContext and AncestorFilter out of line methods
+ void
+-AncestorFilter::Init(Element *aElement)
++TreeMatchContext::InitAncestors(Element *aElement)
+ {
+-  MOZ_ASSERT(!mFilter);
+-  MOZ_ASSERT(mHashes.IsEmpty());
+-
+-  mFilter = new Filter();
++  MOZ_ASSERT(!mAncestorFilter.mFilter);
++  MOZ_ASSERT(mAncestorFilter.mHashes.IsEmpty());
++
++  mAncestorFilter.mFilter = new AncestorFilter::Filter();
+ 
+   if (MOZ_LIKELY(aElement)) {
+     MOZ_ASSERT(aElement->IsInDoc(),
+@@ -3284,7 +3316,8 @@
+ 
+     // Now push them in reverse order.
+     for (uint32_t i = ancestors.Length(); i-- != 0; ) {
+-      PushAncestor(ancestors[i]);
++      mAncestorFilter.PushAncestor(ancestors[i]);
++      PushStyleScope(ancestors[i]);
+     }
+   }
+ }
+diff -r 63f07a9ed826 layout/style/nsCSSRuleProcessor.h
+--- a/layout/style/nsCSSRuleProcessor.h	Tue Mar 19 16:13:09 2013 -0700
++++ b/layout/style/nsCSSRuleProcessor.h	Wed Mar 20 12:39:53 2013 +0900
+@@ -43,7 +43,11 @@
+ public:
+   typedef nsTArray<nsRefPtr<nsCSSStyleSheet> > sheet_array_type;
+ 
+-  nsCSSRuleProcessor(const sheet_array_type& aSheets, uint8_t aSheetType);
++  // aScopeElement must be non-null iff aSheetType is
++  // nsStyleSet::eScopedDocSheet.
++  nsCSSRuleProcessor(const sheet_array_type& aSheets,
++                     uint8_t aSheetType,
++                     mozilla::dom::Element* aScopeElement);
+   virtual ~nsCSSRuleProcessor();
+ 
+   NS_DECL_ISUPPORTS
+@@ -124,6 +128,13 @@
+   bool AppendPageRules(nsPresContext* aPresContext,
+                        nsTArray<nsCSSPageRule*>& aArray);
+ 
++  /**
++   * Returns the scope element for the scoped style sheets this rule
++   * processor is for.  If this is not a rule processor for scoped style
++   * sheets, it returns null.
++   */
++  mozilla::dom::Element* GetScopeElement() const { return mScopeElement; }
++
+ #ifdef DEBUG
+   void AssertQuirksChangeOK() {
+     NS_ASSERTION(!mRuleCascades, "can't toggle quirks style sheet without "
+@@ -163,7 +174,11 @@
+ 
+   // The last pres context for which GetRuleCascades was called.
+   nsPresContext *mLastPresContext;
+-  
++
++  // The scope element for this rule processor's scoped style sheets.
++  // Only used if mSheetType == nsStyleSet::eScopedDocSheet.
++  nsRefPtr<mozilla::dom::Element> mScopeElement;
++
+   // type of stylesheet using this processor
+   uint8_t mSheetType;  // == nsStyleSet::sheetType
+ 
+diff -r 63f07a9ed826 layout/style/nsCSSStyleSheet.cpp
+--- a/layout/style/nsCSSStyleSheet.cpp	Tue Mar 19 16:13:09 2013 -0700
++++ b/layout/style/nsCSSStyleSheet.cpp	Wed Mar 20 12:39:53 2013 +0900
+@@ -11,6 +11,7 @@
+ #include "nsCRT.h"
+ #include "nsIAtom.h"
+ #include "nsCSSRuleProcessor.h"
++#include "mozilla/dom/Element.h"
+ #include "mozilla/css/NameSpaceRule.h"
+ #include "mozilla/css/GroupRule.h"
+ #include "mozilla/css/ImportRule.h"
+@@ -41,6 +42,7 @@
+ #include "mozilla/Likely.h"
+ 
+ using namespace mozilla;
++using namespace mozilla::dom;
+ 
+ 
+ // -------------------------------
+@@ -1033,6 +1035,7 @@
+     mOwningNode(nullptr),
+     mDisabled(false),
+     mDirty(false),
++    mScopeElement(nullptr),
+     mRuleProcessors(nullptr)
+ {
+ 
+@@ -1051,6 +1054,7 @@
+     mOwningNode(aOwningNodeToUse),
+     mDisabled(aCopy.mDisabled),
+     mDirty(aCopy.mDirty),
++    mScopeElement(nullptr),
+     mInner(aCopy.mInner),
+     mRuleProcessors(nullptr)
+ {
+@@ -1197,12 +1201,14 @@
+   // unlinked before it does.
+   tmp->DropRuleCollection();
+   tmp->UnlinkInner();
++  tmp->mScopeElement = nullptr;
+ NS_IMPL_CYCLE_COLLECTION_UNLINK_END
+ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN(nsCSSStyleSheet)
+   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mMedia)
+   // We do not traverse mNext; our parent will handle that.  See
+   // comments in Unlink for why.
+   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mRuleCollection)
++  NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mScopeElement)
+   tmp->TraverseInner(cb);
+ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
+ 
+diff -r 63f07a9ed826 layout/style/nsCSSStyleSheet.h
+--- a/layout/style/nsCSSStyleSheet.h	Tue Mar 19 16:13:09 2013 -0700
++++ b/layout/style/nsCSSStyleSheet.h	Wed Mar 20 12:39:53 2013 +0900
+@@ -10,6 +10,7 @@
+ #define nsCSSStyleSheet_h_
+ 
+ #include "mozilla/Attributes.h"
++#include "mozilla/dom/Element.h"
+ 
+ #include "nscore.h"
+ #include "nsCOMPtr.h"
+@@ -247,6 +248,12 @@
+   // Get this style sheet's CORS mode
+   mozilla::CORSMode GetCORSMode() const { return mInner->mCORSMode; }
+ 
++  mozilla::dom::Element* GetScopeElement() const { return mScopeElement; }
++  void SetScopeElement(mozilla::dom::Element* aScopeElement)
++  {
++    mScopeElement = aScopeElement;
++  }
++
+ private:
+   nsCSSStyleSheet(const nsCSSStyleSheet& aCopy,
+                   nsCSSStyleSheet* aParentToUse,
+@@ -297,6 +304,7 @@
+   nsIDOMNode*           mOwningNode; // weak ref
+   bool                  mDisabled;
+   bool                  mDirty; // has been modified 
++  nsRefPtr<mozilla::dom::Element> mScopeElement;
+ 
+   nsCSSStyleSheetInner* mInner;
+ 
+diff -r 63f07a9ed826 layout/style/nsRuleData.h
+--- a/layout/style/nsRuleData.h	Tue Mar 19 16:13:09 2013 -0700
++++ b/layout/style/nsRuleData.h	Wed Mar 20 12:39:53 2013 +0900
+@@ -25,7 +25,7 @@
+   const uint32_t mSIDs;
+   bool mCanStoreInRuleTree;
+   bool mIsImportantRule;
+-  uint8_t mLevel; // an nsStyleSet::sheetType
++  uint16_t mLevel; // an nsStyleSet::sheetType
+   nsPresContext* const mPresContext;
+   nsStyleContext* const mStyleContext;
+   const nsPostResolveFunc mPostResolveCallback;
+diff -r 63f07a9ed826 layout/style/nsRuleNode.h
+--- a/layout/style/nsRuleNode.h	Tue Mar 19 16:13:09 2013 -0700
++++ b/layout/style/nsRuleNode.h	Wed Mar 20 12:39:53 2013 +0900
+@@ -645,7 +645,7 @@
+   nsRuleNode* GetParent() const { return mParent; }
+   bool IsRoot() const { return mParent == nullptr; }
+ 
+-  // These PRUint8s are really nsStyleSet::sheetType values.
++  // These uint8_ts are really nsStyleSet::sheetType values.
+   uint8_t GetLevel() const {
+     NS_ASSERTION(!IsRoot(), "can't call on root");
+     return (mDependentBits & NS_RULE_NODE_LEVEL_MASK) >>
+diff -r 63f07a9ed826 layout/style/nsRuleProcessorData.h
+--- a/layout/style/nsRuleProcessorData.h	Tue Mar 19 16:13:09 2013 -0700
++++ b/layout/style/nsRuleProcessorData.h	Wed Mar 20 12:39:53 2013 +0900
+@@ -26,6 +26,7 @@
+ class nsIAtom;
+ class nsICSSPseudoComparator;
+ class nsAttrValue;
++struct TreeMatchContext;
+ 
+ /**
+  * An AncestorFilter is used to keep track of ancestors so that we can
+@@ -33,44 +34,12 @@
+  * element.
+  */
+ class NS_STACK_CLASS AncestorFilter {
++  friend struct TreeMatchContext;
+  public:
+-  /**
+-   * Initialize the filter.  If aElement is not null, it and all its
+-   * ancestors will be passed to PushAncestor, starting from the root
+-   * and going down the tree.
+-   */
+-  void Init(mozilla::dom::Element *aElement);
+-
+   /* Maintenance of our ancestor state */
+   void PushAncestor(mozilla::dom::Element *aElement);
+   void PopAncestor();
+ 
+-  /* Helper class for maintaining the ancestor state */
+-  class NS_STACK_CLASS AutoAncestorPusher {
+-  public:
+-    AutoAncestorPusher(bool aDoPush,
+-                       AncestorFilter &aFilter,
+-                       mozilla::dom::Element *aElement
+-                       MOZ_GUARD_OBJECT_NOTIFIER_PARAM)
+-      : mPushed(aDoPush && aElement), mFilter(aFilter)
+-    {
+-      MOZ_GUARD_OBJECT_NOTIFIER_INIT;
+-      if (mPushed) {
+-        mFilter.PushAncestor(aElement);
+-      }
+-    }
+-    ~AutoAncestorPusher() {
+-      if (mPushed) {
+-        mFilter.PopAncestor();
+-      }
+-    }
+-
+-  private:
+-    bool mPushed;
+-    AncestorFilter &mFilter;
+-    MOZ_DECL_USE_GUARD_OBJECT_NOTIFIER
+-  };
+-
+   /* Check whether we might have an ancestor matching one of the given
+      atom hashes.  |hashes| must have length hashListLength */
+   template<size_t hashListLength>
+@@ -164,6 +133,114 @@
+     return mHaveSpecifiedScope;
+   }
+ 
++  /**
++   * Initialize the ancestor filter and list of style scopes.  If aElement is
++   * not null, it and all its ancestors will be passed to
++   * mAncestorFilter.PushAncestor and PushStyleScope, starting from the root and
++   * going down the tree.
++   */
++  void InitAncestors(mozilla::dom::Element *aElement);
++
++  void PushStyleScope(mozilla::dom::Element* aElement)
++  {
++    NS_PRECONDITION(aElement, "aElement must not be null");
++    if (aElement->IsScopedStyleRoot()) {
++      mStyleScopes.AppendElement(aElement);
++    }
++  }
++
++  void PopStyleScope(mozilla::dom::Element* aElement)
++  {
++    NS_PRECONDITION(aElement, "aElement must not be null");
++    if (mStyleScopes.SafeLastElement(nullptr) == aElement) {
++      mStyleScopes.TruncateLength(mStyleScopes.Length() - 1);
++    }
++  }
++ 
++  bool PopStyleScopeForSelectorMatching(mozilla::dom::Element* aElement)
++  {
++    NS_ASSERTION(mForScopedStyle, "only call PopScopeForSelectorMatching when "
++                                  "mForScopedStyle is true");
++
++    if (!mCurrentStyleScope) {
++      return false;
++    }
++    if (mCurrentStyleScope == aElement) {
++      mCurrentStyleScope = nullptr;
++    }
++    return true;
++  }
++
++  bool SetStyleScopeForSelectorMatching(mozilla::dom::Element* aSubject,
++                                        mozilla::dom::Element* aScope)
++  {
++    mForScopedStyle = !!aScope;
++    if (!aScope) {
++      // This is not for a scoped style sheet; return true, as we want
++      // selector matching to proceed.
++      mCurrentStyleScope = nullptr;
++      return true;
++    }
++    if (aScope == aSubject) {
++      // Although the subject is the same element as the scope, as soon
++      // as we continue with selector matching up the tree we don't want
++      // to match any more elements.  So we return true to indicate that
++      // we want to do the initial selector matching, but set
++      // mCurrentStyleScope to null so that no ancestor elements will match.
++      mCurrentStyleScope = nullptr;
++      return true;
++    }
++    if (mStyleScopes.Contains(aScope)) {
++      // mStyleScopes contains all of the scope elements that are ancestors of
++      // aSubject, so if aScope is in mStyleScopes, then we do want selector
++      // matching to proceed.
++      mCurrentStyleScope = aScope;
++      return true;
++    }
++    // Otherwise, we're not in the scope, and we don't want to proceed
++    // with selector matching.
++    mCurrentStyleScope = nullptr;
++    return false;
++  }
++
++  bool IsWithinStyleScopeForSelectorMatching() const
++  {
++    NS_ASSERTION(mForScopedStyle, "only call IsWithinScopeForSelectorMatching "
++                                  "when mForScopedStyle is true");
++    return mCurrentStyleScope;
++  }
++
++  /* Helper class for maintaining the ancestor state */
++  class NS_STACK_CLASS AutoAncestorPusher {
++  public:
++    AutoAncestorPusher(bool aDoPush,
++                       TreeMatchContext &aTreeMatchContext,
++                       mozilla::dom::Element *aElement
++                       MOZ_GUARD_OBJECT_NOTIFIER_PARAM)
++      : mPushed(aDoPush && aElement),
++        mTreeMatchContext(aTreeMatchContext),
++        mElement(aElement)
++    {
++      MOZ_GUARD_OBJECT_NOTIFIER_INIT;
++      if (mPushed) {
++        mTreeMatchContext.mAncestorFilter.PushAncestor(aElement);
++        mTreeMatchContext.PushStyleScope(aElement);
++      }
++    }
++    ~AutoAncestorPusher() {
++      if (mPushed) {
++        mTreeMatchContext.mAncestorFilter.PopAncestor();
++        mTreeMatchContext.PopStyleScope(mElement);
++      }
++    }
++
++  private:
++    bool mPushed;
++    TreeMatchContext& mTreeMatchContext;
++    mozilla::dom::Element* mElement;
++    MOZ_DECL_USE_GUARD_OBJECT_NOTIFIER
++  };
++
+   // Is this matching operation for the creation of a style context?
+   // (If it is, we need to set slow selector bits on nodes indicating
+   // that certain restyling needs to happen.)
+@@ -213,11 +290,22 @@
+   // Whether this document is using PB mode
+   bool mUsingPrivateBrowsing;
+ 
++  // Whether this TreeMatchContext is being used with an nsCSSRuleProcessor
++  // for an HTML5 scoped style sheet.
++  bool mForScopedStyle;
++
+   enum MatchVisited {
+     eNeverMatchVisited,
+     eMatchVisitedDefault
+   };
+ 
++  // List of ancestor elements that define a style scope (due to having a
++  // <style scoped> child).
++  nsAutoTArray<mozilla::dom::Element*, 1> mStyleScopes;
++
++  // The current style scope element for selector matching.
++  mozilla::dom::Element* mCurrentStyleScope;
++
+   // Constructor to use when creating a tree match context for styling
+   TreeMatchContext(bool aForStyling,
+                    nsRuleWalker::VisitedHandlingType aVisitedHandling,
+@@ -232,6 +320,8 @@
+     , mIsHTMLDocument(aDocument->IsHTML())
+     , mCompatMode(aDocument->GetCompatibilityMode())
+     , mUsingPrivateBrowsing(false)
++    , mForScopedStyle(false)
++    , mCurrentStyleScope(nullptr)
+   {
+     if (aMatchVisited != eNeverMatchVisited) {
+       nsCOMPtr<nsISupports> container = mDocument->GetContainer();
+@@ -250,13 +340,15 @@
+   RuleProcessorData(nsPresContext* aPresContext,
+                     nsRuleWalker* aRuleWalker)
+     : mPresContext(aPresContext),
+-      mRuleWalker(aRuleWalker)
++      mRuleWalker(aRuleWalker),
++      mScope(nullptr)
+   {
+     NS_PRECONDITION(mPresContext, "Must have prescontext");
+   }
+ 
+   nsPresContext* const mPresContext;
+   nsRuleWalker* const mRuleWalker; // Used to add rules to our results.
++  mozilla::dom::Element* mScope;
+ };
+ 
+ struct NS_STACK_CLASS ElementDependentRuleProcessorData :
+diff -r 63f07a9ed826 layout/style/nsStyleSet.cpp
+--- a/layout/style/nsStyleSet.cpp	Tue Mar 19 16:13:09 2013 -0700
++++ b/layout/style/nsStyleSet.cpp	Wed Mar 20 12:39:53 2013 +0900
+@@ -21,6 +21,7 @@
+ #include "nsCSSAnonBoxes.h"
+ #include "nsCSSPseudoElements.h"
+ #include "nsCSSRuleProcessor.h"
++#include "nsDataHashtable.h"
+ #include "nsIContent.h"
+ #include "nsRuleData.h"
+ #include "nsRuleProcessorData.h"
+@@ -100,6 +101,7 @@
+   nsStyleSet::eAgentSheet,
+   nsStyleSet::eUserSheet,
+   nsStyleSet::eDocSheet,
++  nsStyleSet::eScopedDocSheet,
+   nsStyleSet::eOverrideSheet
+ };
+ 
+@@ -208,11 +210,101 @@
+   mQuirkStyleSheet = aQuirkStyleSheet;
+ }
+ 
++typedef nsDataHashtable<nsPtrHashKey<nsINode>, uint32_t> ScopeDepthCache;
++
++// Returns the depth of a style scope element, with 1 being the depth of
++// a style scope element that has no ancestor style scope elements.  The
++// depth does not count intervening non-scope elements.
++static uint32_t
++GetScopeDepth(nsINode* aScopeElement, ScopeDepthCache& aCache)
++{
++  nsINode* parent = aScopeElement->GetParent();
++  if (!parent || !parent->IsElementInStyleScope()) {
++    return 1;
++  }
++
++  uint32_t depth = aCache.Get(aScopeElement);
++  if (!depth) {
++    for (nsINode* n = parent; n; n = n->GetParent()) {
++      if (n->IsScopedStyleRoot()) {
++        depth = GetScopeDepth(n, aCache) + 1;
++        aCache.Put(aScopeElement, depth);
++        break;
++      }
++    }
++  }
++  return depth;
++}
++
++struct ScopedSheetOrder
++{
++  nsCSSStyleSheet* mSheet;
++  uint32_t mDepth;
++  uint32_t mOrder;
++
++  bool operator==(const ScopedSheetOrder& aRHS) const
++  {
++    return mDepth == aRHS.mDepth &&
++           mOrder == aRHS.mOrder;
++  }
++
++  bool operator<(const ScopedSheetOrder& aRHS) const
++  {
++    if (mDepth != aRHS.mDepth) {
++      return mDepth < aRHS.mDepth;
++    }
++    return mOrder < aRHS.mOrder;
++  }
++};
++
++// Sorts aSheets such that style sheets for ancestor scopes come
++// before those for descendant scopes, and with sheets for a single
++// scope in document order.
++static void
++SortStyleSheetsByScope(nsTArray<nsCSSStyleSheet*>& aSheets)
++{
++  uint32_t n = aSheets.Length();
++  if (n == 1) {
++    return;
++  }
++
++  ScopeDepthCache cache;
++  cache.Init();
++
++  nsTArray<ScopedSheetOrder> sheets;
++  sheets.SetLength(n);
++
++  // For each sheet, record the depth of its scope element and its original
++  // document order.
++  for (uint32_t i = 0; i < n; i++) {
++    sheets[i].mSheet = aSheets[i];
++    sheets[i].mDepth = GetScopeDepth(aSheets[i]->GetScopeElement(), cache);
++    sheets[i].mOrder = i;
++  }
++
++  // Sort by depth first, then document order.
++  sheets.Sort();
++
++  for (uint32_t i = 0; i < n; i++) {
++    aSheets[i] = sheets[i].mSheet;
++  }
++}
++
+ nsresult
+ nsStyleSet::GatherRuleProcessors(sheetType aType)
+ {
+   mRuleProcessors[aType] = nullptr;
++  if (aType == eScopedDocSheet) {
++    for (int i = 0; i < mScopedDocSheetRuleProcessors.Length(); i++) {
++      nsIStyleRuleProcessor* processor = mScopedDocSheetRuleProcessors[i].get();
++      Element* scope =
++        static_cast<nsCSSRuleProcessor*>(processor)->GetScopeElement();
++      scope->ClearIsScopedStyleRoot();
++    }
++    mScopedDocSheetRuleProcessors.Clear();
++  }
+   if (mAuthorStyleDisabled && (aType == eDocSheet || 
++                               aType == eScopedDocSheet ||
+                                aType == ePresHintSheet ||
+                                aType == eStyleAttrSheet)) {
+     //don't regather if this level is disabled
+@@ -232,13 +324,56 @@
+     mRuleProcessors[aType] = PresContext()->TransitionManager();
+     return NS_OK;
+   }
++  if (aType == eScopedDocSheet) {
++    // Create a rule processor for each scope.
++    uint32_t count = mSheets[eScopedDocSheet].Count();
++    if (count) {
++      // Gather the scoped style sheets into an array as
++      // nsCSSStyleSheets, and mark all of their scope elements
++      // as scoped style roots.
++      nsTArray<nsCSSStyleSheet*> sheets(count);
++      for (int32_t i = 0; i < count; i++) {
++        nsRefPtr<nsCSSStyleSheet> sheet =
++          do_QueryObject(mSheets[eScopedDocSheet].ObjectAt(i));
++        sheets.AppendElement(sheet);
++
++        Element* scope = sheet->GetScopeElement();
++        scope->SetIsScopedStyleRoot();
++      }
++
++      // Sort the scoped style sheets so that those for the same scope are
++      // adjacent and that ancestor scopes come before descendent scopes.
++      SortStyleSheetsByScope(sheets);
++
++      uint32_t start = 0, end;
++      do {
++        // Find the range of style sheets with the same scope.
++        Element* scope = sheets[start]->GetScopeElement();
++        end = start + 1;
++        while (end < count && sheets[end]->GetScopeElement() == scope) {
++          end++;
++        }
++
++        scope->SetIsScopedStyleRoot();
++
++        // Create a rule processor for the scope.
++        nsTArray< nsRefPtr<nsCSSStyleSheet> > sheetsForScope;
++        sheetsForScope.AppendElements(sheets.Elements() + start, end - start);
++        mScopedDocSheetRuleProcessors.AppendElement
++          (new nsCSSRuleProcessor(sheetsForScope, uint8_t(aType), scope));
++
++        start = end;
++      } while (start < count);
++    }
++    return NS_OK;
++  }
+   if (mSheets[aType].Count()) {
+     switch (aType) {
+       case eAgentSheet:
+       case eUserSheet:
+       case eDocSheet:
+       case eOverrideSheet: {
+-        // levels containing CSS stylesheets
++        // levels containing CSS stylesheets (apart from eScopedDocSheet)
+         nsCOMArray<nsIStyleSheet>& sheets = mSheets[aType];
+         nsTArray<nsRefPtr<nsCSSStyleSheet> > cssSheets(sheets.Count());
+         for (int32_t i = 0, i_end = sheets.Count(); i < i_end; ++i) {
+@@ -246,8 +381,8 @@
+           NS_ASSERTION(cssSheet, "not a CSS sheet");
+           cssSheets.AppendElement(cssSheet);
+         }
+-        mRuleProcessors[aType] = new nsCSSRuleProcessor(cssSheets, 
+-                                                        uint8_t(aType));
++        mRuleProcessors[aType] =
++          new nsCSSRuleProcessor(cssSheets, uint8_t(aType), nullptr);
+       } break;
+ 
+       default:
+@@ -261,6 +396,15 @@
+   return NS_OK;
+ }
+ 
++static bool
++IsScopedStyleSheet(nsIStyleSheet* aSheet)
++{
++  nsRefPtr<nsCSSStyleSheet> cssSheet = do_QueryObject(aSheet);
++  NS_ASSERTION(cssSheet, "expected aSheet to be an nsCSSStyleSheet");
++
++  return cssSheet->GetScopeElement();
++}
++
+ nsresult
+ nsStyleSet::AppendStyleSheet(sheetType aType, nsIStyleSheet *aSheet)
+ {
+@@ -376,18 +520,21 @@
+   NS_ASSERTION(aSheet->IsApplicable(),
+                "Inapplicable sheet being placed in style set");
+ 
+-  nsCOMArray<nsIStyleSheet>& docSheets = mSheets[eDocSheet];
++  sheetType type = IsScopedStyleSheet(aSheet) ?
++                     eScopedDocSheet :
++                     eDocSheet;
++  nsCOMArray<nsIStyleSheet>& sheets = mSheets[type];
+ 
+-  docSheets.RemoveObject(aSheet);
++  sheets.RemoveObject(aSheet);
+   nsStyleSheetService *sheetService = nsStyleSheetService::GetInstance();
+ 
+   // lowest index first
+   int32_t newDocIndex = aDocument->GetIndexOfStyleSheet(aSheet);
+ 
+-  int32_t count = docSheets.Count();
++  int32_t count = sheets.Count();
+   int32_t index;
+   for (index = 0; index < count; index++) {
+-    nsIStyleSheet* sheet = docSheets.ObjectAt(index);
++    nsIStyleSheet* sheet = sheets.ObjectAt(index);
+     int32_t sheetDocIndex = aDocument->GetIndexOfStyleSheet(sheet);
+     if (sheetDocIndex > newDocIndex)
+       break;
+@@ -402,15 +549,23 @@
+         sheet == aDocument->FirstAdditionalAuthorSheet()))
+         break;
+   }
+-  if (!docSheets.InsertObjectAt(aSheet, index))
++  if (!sheets.InsertObjectAt(aSheet, index))
+     return NS_ERROR_OUT_OF_MEMORY;
+   if (!mBatching)
+-    return GatherRuleProcessors(eDocSheet);
++    return GatherRuleProcessors(type);
+ 
+-  mDirty |= 1 << eDocSheet;
++  mDirty |= 1 << type;
+   return NS_OK;
+ }
+ 
++nsresult
++nsStyleSet::RemoveDocStyleSheet(nsIStyleSheet *aSheet)
++{
++  nsRefPtr<nsCSSStyleSheet> cssSheet = do_QueryObject(aSheet);
++  bool isScoped = cssSheet && cssSheet->GetScopeElement();
++  return RemoveStyleSheet(isScoped ? eScopedDocSheet : eDocSheet, aSheet);
++}
++
+ // Batching
+ void
+ nsStyleSet::BeginUpdate()
+@@ -743,7 +898,7 @@
+ // Enumerate the rules in a way that cares about the order of the rules.
+ void
+ nsStyleSet::FileRules(nsIStyleRuleProcessor::EnumFunc aCollectorFunc, 
+-                      RuleProcessorData* aData, nsIContent* aContent,
++                      RuleProcessorData* aData, Element* aElement,
+                       nsRuleWalker* aRuleWalker)
+ {
+   SAMPLE_LABEL("nsStyleSet", "FileRules");
+@@ -775,7 +930,7 @@
+ 
+   aRuleWalker->SetLevel(eUserSheet, false, true);
+   bool skipUserStyles =
+-    aContent && aContent->IsInNativeAnonymousSubtree();
++    aElement && aElement->IsInNativeAnonymousSubtree();
+   if (!skipUserStyles && mRuleProcessors[eUserSheet]) // NOTE: different
+     (*aCollectorFunc)(mRuleProcessors[eUserSheet], aData);
+   nsRuleNode* lastUserRN = aRuleWalker->CurrentNode();
+@@ -788,21 +943,42 @@
+   
+   aRuleWalker->SetLevel(eDocSheet, false, true);
+   bool cutOffInheritance = false;
+-  if (mBindingManager && aContent) {
++  if (mBindingManager && aElement) {
+     // We can supply additional document-level sheets that should be walked.
+     mBindingManager->WalkRules(aCollectorFunc,
+                                static_cast<ElementDependentRuleProcessorData*>(aData),
+                                &cutOffInheritance);
+   }
++  if (!skipUserStyles && !cutOffInheritance && // NOTE: different
++      mRuleProcessors[eDocSheet])
++    (*aCollectorFunc)(mRuleProcessors[eDocSheet], aData);
++  nsRuleNode* lastDocRN = aRuleWalker->CurrentNode();
++  bool haveImportantDocRules = !aRuleWalker->GetCheckForImportantRules();
++  nsTArray<nsRuleNode*> lastScopedRNs;
++  nsTArray<bool> haveImportantScopedRules;
++  bool haveAnyImportantScopedRules = false;
+   if (!skipUserStyles && !cutOffInheritance &&
+-      mRuleProcessors[eDocSheet]) // NOTE: different
+-    (*aCollectorFunc)(mRuleProcessors[eDocSheet], aData);
+-  aRuleWalker->SetLevel(eStyleAttrSheet, false,
+-                        aRuleWalker->GetCheckForImportantRules());
++      aElement && aElement->IsElementInStyleScope()) {
++    lastScopedRNs.SetLength(mScopedDocSheetRuleProcessors.Length());
++    haveImportantScopedRules.SetLength(mScopedDocSheetRuleProcessors.Length());
++    for (int32_t i = 0; i < mScopedDocSheetRuleProcessors.Length(); i++) {
++      aRuleWalker->SetLevel(eScopedDocSheet, false, true);
++      nsCSSRuleProcessor* processor =
++        static_cast<nsCSSRuleProcessor*>(mScopedDocSheetRuleProcessors[i].get());
++      aData->mScope = processor->GetScopeElement();
++      (*aCollectorFunc)(mScopedDocSheetRuleProcessors[i], aData);
++      lastScopedRNs[i] = aRuleWalker->CurrentNode();
++      haveImportantScopedRules[i] = !aRuleWalker->GetCheckForImportantRules();
++      haveAnyImportantScopedRules = haveAnyImportantScopedRules || haveImportantScopedRules[i];
++    }
++    aData->mScope = nullptr;
++  }
++  nsRuleNode* lastScopedRN = aRuleWalker->CurrentNode();
++  aRuleWalker->SetLevel(eStyleAttrSheet, false, true);
+   if (mRuleProcessors[eStyleAttrSheet])
+     (*aCollectorFunc)(mRuleProcessors[eStyleAttrSheet], aData);
+-  nsRuleNode* lastDocRN = aRuleWalker->CurrentNode();
+-  bool haveImportantDocRules = !aRuleWalker->GetCheckForImportantRules();
++  nsRuleNode* lastStyleAttrRN = aRuleWalker->CurrentNode();
++  bool haveImportantStyleAttrRules = !aRuleWalker->GetCheckForImportantRules();
+ 
+   aRuleWalker->SetLevel(eOverrideSheet, false, true);
+   if (mRuleProcessors[eOverrideSheet])
+@@ -814,6 +990,27 @@
+   aRuleWalker->SetLevel(eAnimationSheet, false, false);
+   (*aCollectorFunc)(mRuleProcessors[eAnimationSheet], aData);
+ 
++  if (haveAnyImportantScopedRules) {
++    for (uint32_t i = lastScopedRNs.Length(); i-- != 0; ) {
++      aRuleWalker->SetLevel(eScopedDocSheet, true, false);
++      nsRuleNode* startRN = lastScopedRNs[i];
++      nsRuleNode* endRN = i == 0 ? lastDocRN : lastScopedRNs[i - 1];
++      if (haveImportantScopedRules[i]) {
++        AddImportantRules(startRN, endRN, aRuleWalker);  // scoped
++      }
++#ifdef DEBUG
++      else {
++        AssertNoImportantRules(startRN, endRN);
++      }
++#endif
++    }
++  }
++#ifdef DEBUG
++  else {
++    AssertNoImportantRules(lastScopedRN, lastDocRN);
++  }
++#endif
++
+   if (haveImportantDocRules) {
+     aRuleWalker->SetLevel(eDocSheet, true, false);
+     AddImportantRules(lastDocRN, lastPresHintRN, aRuleWalker);  // doc
+@@ -824,13 +1021,23 @@
+   }
+ #endif
+ 
+-  if (haveImportantOverrideRules) {
+-    aRuleWalker->SetLevel(eOverrideSheet, true, false);
+-    AddImportantRules(lastOvrRN, lastDocRN, aRuleWalker);  // override
++  if (haveImportantStyleAttrRules) {
++    aRuleWalker->SetLevel(eStyleAttrSheet, true, false);
++    AddImportantRules(lastStyleAttrRN, lastScopedRN, aRuleWalker);  // style attr
+   }
+ #ifdef DEBUG
+   else {
+-    AssertNoImportantRules(lastOvrRN, lastDocRN);
++    AssertNoImportantRules(lastStyleAttrRN, lastScopedRN);
++  }
++#endif
++
++  if (haveImportantOverrideRules) {
++    aRuleWalker->SetLevel(eOverrideSheet, true, false);
++    AddImportantRules(lastOvrRN, lastStyleAttrRN, aRuleWalker);  // override
++  }
++#ifdef DEBUG
++  else {
++    AssertNoImportantRules(lastOvrRN, lastStyleAttrRN);
+   }
+ #endif
+ 
+@@ -899,9 +1106,14 @@
+       mBindingManager->WalkRules(aFunc, aData, &cutOffInheritance);
+     }
+   }
+-  if (!skipUserStyles && !cutOffInheritance &&
+-      mRuleProcessors[eDocSheet]) // NOTE: different
+-    (*aFunc)(mRuleProcessors[eDocSheet], aData);
++  if (!skipUserStyles && !cutOffInheritance) {
++    if (mRuleProcessors[eDocSheet]) // NOTE: different
++      (*aFunc)(mRuleProcessors[eDocSheet], aData);
++    if (aData->mElement->IsElementInStyleScope()) {
++      for (int32_t i = 0; i < mScopedDocSheetRuleProcessors.Length(); i++)
++        (*aFunc)(mScopedDocSheetRuleProcessors[i], aData);
++    }
++  }
+   if (mRuleProcessors[eStyleAttrSheet])
+     (*aFunc)(mRuleProcessors[eStyleAttrSheet], aData);
+   if (mRuleProcessors[eOverrideSheet])
+@@ -1259,6 +1471,8 @@
+   NS_ENSURE_FALSE(mInShutdown, false);
+ 
+   for (uint32_t i = 0; i < ArrayLength(gCSSSheetTypes); ++i) {
++    if (gCSSSheetTypes[i] == eScopedDocSheet)
++      continue;
+     nsCSSRuleProcessor *ruleProc = static_cast<nsCSSRuleProcessor*>
+                                     (mRuleProcessors[gCSSSheetTypes[i]].get());
+     if (ruleProc && !ruleProc->AppendFontFaceRules(aPresContext, aArray))
+@@ -1274,6 +1488,8 @@
+   NS_ENSURE_FALSE(mInShutdown, false);
+ 
+   for (uint32_t i = 0; i < ArrayLength(gCSSSheetTypes); ++i) {
++    if (gCSSSheetTypes[i] == eScopedDocSheet)
++      continue;
+     nsCSSRuleProcessor *ruleProc = static_cast<nsCSSRuleProcessor*>
+                                     (mRuleProcessors[gCSSSheetTypes[i]].get());
+     if (ruleProc && !ruleProc->AppendKeyframesRules(aPresContext, aArray))
+@@ -1289,6 +1505,8 @@
+   NS_ENSURE_FALSE(mInShutdown, false);
+ 
+   for (uint32_t i = 0; i < NS_ARRAY_LENGTH(gCSSSheetTypes); ++i) {
++    if (gCSSSheetTypes[i] == eScopedDocSheet)
++      continue;
+     nsCSSRuleProcessor* ruleProc = static_cast<nsCSSRuleProcessor*>
+                                     (mRuleProcessors[gCSSSheetTypes[i]].get());
+     if (ruleProc && !ruleProc->AppendPageRules(aPresContext, aArray))
+diff -r 63f07a9ed826 layout/style/nsStyleSet.h
+--- a/layout/style/nsStyleSet.h	Tue Mar 19 16:13:09 2013 -0700
++++ b/layout/style/nsStyleSet.h	Wed Mar 20 12:39:53 2013 +0900
+@@ -233,6 +233,7 @@
+     eUserSheet, // CSS
+     ePresHintSheet,
+     eDocSheet, // CSS
++    eScopedDocSheet,
+     eStyleAttrSheet,
+     eOverrideSheet, // CSS
+     eAnimationSheet,
+@@ -253,7 +254,7 @@
+   nsresult InsertStyleSheetBefore(sheetType aType, nsIStyleSheet *aNewSheet,
+                                   nsIStyleSheet *aReferenceSheet);
+ 
+-  // Enable/Disable entire author style level (Doc & PresHint levels)
++  // Enable/Disable entire author style level (Doc, ScopedDoc & PresHint levels)
+   bool GetAuthorStyleDisabled();
+   nsresult SetAuthorStyleDisabled(bool aStyleDisabled);
+ 
+@@ -265,6 +266,7 @@
+     return mSheets[aType].ObjectAt(aIndex);
+   }
+ 
++  nsresult RemoveDocStyleSheet(nsIStyleSheet* aSheet);
+   nsresult AddDocStyleSheet(nsIStyleSheet* aSheet, nsIDocument* aDocument);
+ 
+   void     BeginUpdate();
+@@ -342,11 +344,11 @@
+   
+   // Enumerate the rules in a way that cares about the order of the
+   // rules.
+-  // aContent is the node the rules are for.  It might be null.  aData
++  // aElement is the element the rules are for.  It might be null.  aData
+   // is the closure to pass to aCollectorFunc.  If aContent is not null,
+   // aData must be a RuleProcessorData*
+   void FileRules(nsIStyleRuleProcessor::EnumFunc aCollectorFunc,
+-                 RuleProcessorData* aData, nsIContent* aContent,
++                 RuleProcessorData* aData, mozilla::dom::Element* aElement,
+                  nsRuleWalker* aRuleWalker);
+ 
+   // Enumerate all the rules in a way that doesn't care about the order
+@@ -372,8 +374,13 @@
+   // sheet last.
+   nsCOMArray<nsIStyleSheet> mSheets[eSheetTypeCount];
+ 
++  // mRuleProcessors[eScopedDocSheet] is always null; rule processors
++  // for scoped style sheets are stored in mScopedDocSheetRuleProcessors.
+   nsCOMPtr<nsIStyleRuleProcessor> mRuleProcessors[eSheetTypeCount];
+ 
++  // Rule processors for HTML5 scoped style sheets, one per scope.
++  nsTArray<nsCOMPtr<nsIStyleRuleProcessor> > mScopedDocSheetRuleProcessors;
++
+   // cached instance for enabling/disabling
+   nsCOMPtr<nsIStyleSheet> mQuirkStyleSheet;
+ 
+@@ -388,7 +395,7 @@
+   unsigned mInShutdown : 1;
+   unsigned mAuthorStyleDisabled: 1;
+   unsigned mInReconstruct : 1;
+-  unsigned mDirty : 8;  // one dirty bit is used per sheet type
++  unsigned mDirty : 9;  // one dirty bit is used per sheet type
+ 
+   uint32_t mUnusedRuleNodeCount; // used to batch rule node GC
+   nsTArray<nsStyleContext*> mRoots; // style contexts with no parent
