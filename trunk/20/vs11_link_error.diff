@@ -1,0 +1,837 @@
+# HG changeset patch
+# Parent 7ebf6ee5268920b54ac759eafea3135644c93c94
+# User hua.andy <hua.andy@gmail.com>
+"vc11 link error patch, by ayakawa"
+
+
+diff --git a/accessible/build/Makefile.in b/accessible/build/Makefile.in
+--- a/accessible/build/Makefile.in
++++ b/accessible/build/Makefile.in
+@@ -40,8 +40,11 @@ SHARED_LIBRARY_LIBS += \
+ endif
+ 
+ ifdef MOZ_XUL
+ SHARED_LIBRARY_LIBS += ../src/xul/$(LIB_PREFIX)accessibility_xul_s.$(LIB_SUFFIX)
+ endif
+ 
+ include $(topsrcdir)/config/rules.mk
+ 
++# for Linker HEAP OVERFLOW error...
++CFLAGS		+= -GL-
++CXXFLAGS	+= -GL-
+diff --git a/accessible/src/Makefile.in b/accessible/src/Makefile.in
+--- a/accessible/src/Makefile.in
++++ b/accessible/src/Makefile.in
+@@ -46,8 +46,12 @@ DIRS += \
+   xpcom \
+   $(null)
+ 
+ ifdef MOZ_XUL
+ DIRS +=   xul
+ endif
+ 
+ include $(topsrcdir)/config/rules.mk
++
++# for Linker HEAP OVERFLOW error...
++CFLAGS		+= -GL-
++CXXFLAGS	+= -GL-
+diff --git a/accessible/src/atk/Makefile.in b/accessible/src/atk/Makefile.in
+--- a/accessible/src/atk/Makefile.in
++++ b/accessible/src/atk/Makefile.in
+@@ -68,8 +68,12 @@ LOCAL_INCLUDES += \
+   -I$(srcdir)/../xpcom \
+   -I$(srcdir)/../xul \
+   -I$(topsrcdir)/other-licenses/atk-1.0 \
+   $(NULL)
+ 
+ ifneq ($(A11Y_LOG),0)
+   DEFINES += -DA11Y_LOG
+ endif
++
++# for Linker HEAP OVERFLOW error...
++CFLAGS		+= -GL-
++CXXFLAGS	+= -GL-
+diff --git a/accessible/src/base/Makefile.in b/accessible/src/base/Makefile.in
+--- a/accessible/src/base/Makefile.in
++++ b/accessible/src/base/Makefile.in
+@@ -107,8 +107,12 @@ LOCAL_INCLUDES += \
+   $(NULL)
+ endif
+ endif
+ endif
+ 
+ ifneq ($(A11Y_LOG),0)
+   DEFINES += -DA11Y_LOG
+ endif
++
++# for Linker HEAP OVERFLOW error...
++CFLAGS		+= -GL-
++CXXFLAGS	+= -GL-
+diff --git a/accessible/src/generic/Makefile.in b/accessible/src/generic/Makefile.in
+--- a/accessible/src/generic/Makefile.in
++++ b/accessible/src/generic/Makefile.in
+@@ -73,8 +73,12 @@ LOCAL_INCLUDES += \
+   $(NULL)
+ endif
+ endif
+ endif
+ 
+ ifneq ($(A11Y_LOG),0)
+   DEFINES += -DA11Y_LOG
+ endif
++
++# for Linker HEAP OVERFLOW error...
++CFLAGS		+= -GL-
++CXXFLAGS	+= -GL-
+diff --git a/accessible/src/html/Makefile.in b/accessible/src/html/Makefile.in
+--- a/accessible/src/html/Makefile.in
++++ b/accessible/src/html/Makefile.in
+@@ -64,8 +64,12 @@ LOCAL_INCLUDES += \
+   $(NULL)
+ endif
+ endif
+ endif
+ 
+ ifneq ($(A11Y_LOG),0)
+   DEFINES += -DA11Y_LOG
+ endif
++
++# for Linker HEAP OVERFLOW error...
++CFLAGS		+= -GL-
++CXXFLAGS	+= -GL-
+diff --git a/accessible/src/windows/ia2/Makefile.in b/accessible/src/windows/ia2/Makefile.in
+--- a/accessible/src/windows/ia2/Makefile.in
++++ b/accessible/src/windows/ia2/Makefile.in
+@@ -53,8 +53,12 @@ LOCAL_INCLUDES += \
+   -I$(srcdir)/../../msaa \
+   -I$(srcdir)/../../xpcom \
+   -I$(srcdir)/../../xul \
+   $(NULL)
+ 
+ ifdef A11Y_LOG
+   DEFINES += -DA11Y_LOG
+ endif
++
++# for Linker HEAP OVERFLOW error...
++CFLAGS		+= -GL-
++CXXFLAGS	+= -GL-
+diff --git a/accessible/src/windows/uia/Makefile.in b/accessible/src/windows/uia/Makefile.in
+--- a/accessible/src/windows/uia/Makefile.in
++++ b/accessible/src/windows/uia/Makefile.in
+@@ -33,8 +33,12 @@ LOCAL_INCLUDES += \
+   -I$(srcdir)/../../msaa \
+   -I$(srcdir)/../../xpcom \
+   -I$(srcdir)/../../xul \
+   $(NULL)
+ 
+ ifdef A11Y_LOG
+   DEFINES += -DA11Y_LOG
+ endif
++
++# for Linker HEAP OVERFLOW error...
++CFLAGS		+= -GL-
++CXXFLAGS	+= -GL-
+diff --git a/accessible/src/xpcom/Makefile.in b/accessible/src/xpcom/Makefile.in
+--- a/accessible/src/xpcom/Makefile.in
++++ b/accessible/src/xpcom/Makefile.in
+@@ -51,8 +51,12 @@ LOCAL_INCLUDES += \
+   $(NULL)
+ endif
+ endif
+ endif
+ 
+ ifneq ($(A11Y_LOG),0)
+   DEFINES += -DA11Y_LOG
+ endif
++
++# for Linker HEAP OVERFLOW error...
++CFLAGS		+= -GL-
++CXXFLAGS	+= -GL-
+diff --git a/accessible/src/xul/Makefile.in b/accessible/src/xul/Makefile.in
+--- a/accessible/src/xul/Makefile.in
++++ b/accessible/src/xul/Makefile.in
+@@ -67,8 +67,12 @@ LOCAL_INCLUDES += \
+   $(NULL)
+ endif
+ endif
+ endif
+ 
+ ifneq ($(A11Y_LOG),0)
+   DEFINES += -DA11Y_LOG
+ endif
++
++# for Linker HEAP OVERFLOW error...
++CFLAGS		+= -GL-
++CXXFLAGS	+= -GL-
+diff --git a/content/mathml/content/src/Makefile.in b/content/mathml/content/src/Makefile.in
+--- a/content/mathml/content/src/Makefile.in
++++ b/content/mathml/content/src/Makefile.in
+@@ -34,8 +34,12 @@ EXPORTS = \
+ 
+ include $(topsrcdir)/config/rules.mk
+ 
+ INCLUDES += 	\
+ 		-I$(srcdir)/../../../base/src \
+ 		$(NULL)
+ 
+ DEFINES += -D_IMPL_NS_LAYOUT
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/content/smil/Makefile.in b/content/smil/Makefile.in
+--- a/content/smil/Makefile.in
++++ b/content/smil/Makefile.in
+@@ -83,8 +83,12 @@ INCLUDES += 	\
+ 		-I$(srcdir)/../base/src \
+ 		-I$(srcdir)/../../layout/style \
+ 		-I$(srcdir)/../events/src \
+ 		$(NULL)
+ 
+ include $(topsrcdir)/config/rules.mk
+ 
+ DEFINES += -D_IMPL_NS_LAYOUT
++
++# for Linker HEAP OVERFLOW error...
++CFLAGS		+= -GL-
++CXXFLAGS	+= -GL-
+diff --git a/content/svg/content/Makefile.in b/content/svg/content/Makefile.in
+--- a/content/svg/content/Makefile.in
++++ b/content/svg/content/Makefile.in
+@@ -12,8 +12,11 @@ VPATH		= @srcdir@
+ include $(DEPTH)/config/autoconf.mk
+ 
+ PARALLEL_DIRS		= src
+ 
+ TEST_DIRS += test
+ 
+ include $(topsrcdir)/config/rules.mk
+ 
++# for Linker HEAP OVERFLOW error...
++CFLAGS		+= -GL-
++CXXFLAGS	+= -GL-
+diff --git a/content/svg/content/src/Makefile.in b/content/svg/content/src/Makefile.in
+--- a/content/svg/content/src/Makefile.in
++++ b/content/svg/content/src/Makefile.in
+@@ -204,16 +204,22 @@ INCLUDES += 	\
+ 		-I$(srcdir)/../../../events/src \
+ 		-I$(srcdir)/../../../html/content/src \
+ 		-I$(topsrcdir)/content/xbl/src \
+ 		-I$(srcdir)/../../../smil \
+ 		$(NULL)
+ 
+ DEFINES += -D_IMPL_NS_LAYOUT
+ 
++ifeq (1700,$(_MSC_VER))
++# for Linker HEAP OVERFLOW error...
++CFLAGS		+= -GL-
++CXXFLAGS	+= -GL-
++endif
++
+ ifdef _MSC_VER
+ ifneq (,$(filter -DTT_MEMUTIL,$(MOZ_OPTIMIZE_FLAGS)))
+ nsSVGFilters.$(OBJ_SUFFIX): COMPILE_CXXFLAGS += -GL- -openmp
+ endif
+ endif
+ 
+ ifdef MOZ_THUNDERBIRD
+ ifeq (WINNT_1,$(OS_ARCH)_$(MOZ_PROFILE_GENERATE)$(MOZ_PROFILE_USE))
+diff --git a/content/svg/document/src/Makefile.in b/content/svg/document/src/Makefile.in
+--- a/content/svg/document/src/Makefile.in
++++ b/content/svg/document/src/Makefile.in
+@@ -30,8 +30,12 @@ INCLUDES	+= \
+ 		-I$(srcdir)/../../../html/document/src \
+ 		-I$(srcdir)/../../../../layout/style \
+ 		-I$(srcdir)/../../../base/src \
+ 		-I$(srcdir)/../../../events/src \
+ 		-I$(topsrcdir)/xpcom/ds \
+ 		$(NULL)
+ 
+ DEFINES += -D_IMPL_NS_LAYOUT
++
++# for Linker HEAP OVERFLOW error...
++CFLAGS		+= -GL-
++CXXFLAGS	+= -GL-
+diff --git a/content/xslt/src/base/Makefile.in b/content/xslt/src/base/Makefile.in
+--- a/content/xslt/src/base/Makefile.in
++++ b/content/xslt/src/base/Makefile.in
+@@ -27,8 +27,12 @@ include $(topsrcdir)/config/rules.mk
+ 
+ INCLUDES += \
+ 	-I$(srcdir)/../../public \
+ 	-I$(srcdir) \
+ 	-I$(srcdir)/../xml \
+ 	-I$(srcdir)/../xpath \
+ 	-I$(srcdir)/../xslt \
+ 	$(NULL)
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/content/xslt/src/xml/Makefile.in b/content/xslt/src/xml/Makefile.in
+--- a/content/xslt/src/xml/Makefile.in
++++ b/content/xslt/src/xml/Makefile.in
+@@ -26,8 +26,12 @@ include $(topsrcdir)/config/rules.mk
+ 
+ INCLUDES += \
+ 	-I$(srcdir)/../base \
+ 	-I$(srcdir) \
+ 	-I$(srcdir)/../xpath \
+ 	-I$(srcdir)/../xslt \
+ 	-I$(srcdir)/../../../base/src \
+ 	$(NULL)
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/content/xslt/src/xpath/Makefile.in b/content/xslt/src/xpath/Makefile.in
+--- a/content/xslt/src/xpath/Makefile.in
++++ b/content/xslt/src/xpath/Makefile.in
+@@ -62,8 +62,12 @@ include $(topsrcdir)/config/rules.mk
+ INCLUDES += \
+ 	-I$(srcdir)/../base \
+ 	-I$(srcdir)/../xml \
+ 	-I$(srcdir) \
+ 	-I$(srcdir)/../xslt \
+ 	$(NULL)
+ 
+ DEFINES += -D_IMPL_NS_LAYOUT
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/content/xslt/src/xslt/Makefile.in b/content/xslt/src/xslt/Makefile.in
+--- a/content/xslt/src/xslt/Makefile.in
++++ b/content/xslt/src/xslt/Makefile.in
+@@ -65,8 +65,12 @@ INCLUDES += \
+ 	-I$(srcdir) \
+ 	-I$(srcdir)/../base \
+ 	-I$(srcdir)/../xml \
+ 	-I$(srcdir)/../xpath \
+ 	-I$(srcdir)/../../../base/src \
+ 	$(NULL)
+ 
+ DEFINES += -D_IMPL_NS_LAYOUT
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/embedding/browser/build/Makefile.in b/embedding/browser/build/Makefile.in
+--- a/embedding/browser/build/Makefile.in
++++ b/embedding/browser/build/Makefile.in
+@@ -29,8 +29,12 @@ SHARED_LIBRARY_LIBS= \
+ 
+ include $(topsrcdir)/config/rules.mk
+ 
+ INCLUDES	+= \
+ 		-I$(srcdir)			\
+ 		-I$(srcdir)/../webBrowser		\
+ 		-I$(srcdir)/../setup		\
+ 		$(NULL)
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/embedding/browser/webBrowser/Makefile.in b/embedding/browser/webBrowser/Makefile.in
+--- a/embedding/browser/webBrowser/Makefile.in
++++ b/embedding/browser/webBrowser/Makefile.in
+@@ -61,8 +61,12 @@ SDK_XPIDLSRCS += nsIWebBrowserPrint.idl
+ XPIDLSRCS     += nsIPrintingPrompt.idl nsIPrintingPromptService.idl
+ endif
+ 
+ # we don't want the shared lib, but we want to force the creation of a
+ # static lib.
+ FORCE_STATIC_LIB = 1
+ 
+ include $(topsrcdir)/config/rules.mk
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/embedding/components/appstartup/src/Makefile.in b/embedding/components/appstartup/src/Makefile.in
+--- a/embedding/components/appstartup/src/Makefile.in
++++ b/embedding/components/appstartup/src/Makefile.in
+@@ -23,8 +23,11 @@ EXPORTS =	\
+ 		$(NULL)
+ 
+ # we don't want the shared lib, but we want to force the creation of a
+ # static lib.
+ FORCE_STATIC_LIB = 1
+ 
+ include $(topsrcdir)/config/rules.mk
+ 
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/embedding/components/build/Makefile.in b/embedding/components/build/Makefile.in
+--- a/embedding/components/build/Makefile.in
++++ b/embedding/components/build/Makefile.in
+@@ -56,8 +56,12 @@ ifeq ($(MOZ_WIDGET_TOOLKIT),windows)
+ LOCAL_INCLUDES += -I$(srcdir)/../printingui/src/win 
+ endif
+ 
+ ifeq (cocoa,$(MOZ_WIDGET_TOOLKIT))
+ LOCAL_INCLUDES += -I$(srcdir)/../printingui/src/mac
+ endif
+ 
+ include $(topsrcdir)/config/rules.mk
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/embedding/components/commandhandler/src/Makefile.in b/embedding/components/commandhandler/src/Makefile.in
+--- a/embedding/components/commandhandler/src/Makefile.in
++++ b/embedding/components/commandhandler/src/Makefile.in
+@@ -25,8 +25,11 @@ CPPSRCS		= \
+ 
+ 
+ # we don't want the shared lib, but we want to force the creation of a
+ # static lib.
+ FORCE_STATIC_LIB = 1
+ 
+ include $(topsrcdir)/config/rules.mk
+ 
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/embedding/components/find/src/Makefile.in b/embedding/components/find/src/Makefile.in
+--- a/embedding/components/find/src/Makefile.in
++++ b/embedding/components/find/src/Makefile.in
+@@ -20,8 +20,11 @@ CPPSRCS		= nsWebBrowserFind.cpp \
+                   $(NULL)
+ 
+ # we don't want the shared lib, but we want to force the creation of a
+ # static lib.
+ FORCE_STATIC_LIB = 1
+ 
+ include $(topsrcdir)/config/rules.mk
+ 
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/embedding/components/printingui/src/win/Makefile.in b/embedding/components/printingui/src/win/Makefile.in
+--- a/embedding/components/printingui/src/win/Makefile.in
++++ b/embedding/components/printingui/src/win/Makefile.in
+@@ -24,8 +24,11 @@ CPPSRCS		= \
+       $(NULL)
+ 
+ # we don't want the shared lib, but we want to force the creation of a
+ # static lib.
+ FORCE_STATIC_LIB = 1
+ 
+ include $(topsrcdir)/config/rules.mk
+ 
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/embedding/components/webbrowserpersist/src/Makefile.in b/embedding/components/webbrowserpersist/src/Makefile.in
+--- a/embedding/components/webbrowserpersist/src/Makefile.in
++++ b/embedding/components/webbrowserpersist/src/Makefile.in
+@@ -19,8 +19,11 @@ CPPSRCS		= nsWebBrowserPersist.cpp \
+                   $(NULL)
+ 
+ # we don't want the shared lib, but we want to force the creation of a
+ # static lib.
+ FORCE_STATIC_LIB = 1
+ 
+ include $(topsrcdir)/config/rules.mk
+ 
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/embedding/components/windowwatcher/src/Makefile.in b/embedding/components/windowwatcher/src/Makefile.in
+--- a/embedding/components/windowwatcher/src/Makefile.in
++++ b/embedding/components/windowwatcher/src/Makefile.in
+@@ -27,8 +27,12 @@ endif
+ # we don't want the shared lib, but we want to force the creation of a
+ # static lib.
+ FORCE_STATIC_LIB = 1
+ 
+ # For nsJSUtils
+ LOCAL_INCLUDES += -I$(topsrcdir)/dom/base \
+ 
+ include $(topsrcdir)/config/rules.mk
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/layout/mathml/Makefile.in b/layout/mathml/Makefile.in
+--- a/layout/mathml/Makefile.in
++++ b/layout/mathml/Makefile.in
+@@ -90,8 +90,12 @@ math_properties = mathfont.properties
+ 	test -d $(@D) || $(NSINSTALL) -D $(@D)
+ 	rm -f $@
+ 	$(PYTHON) $(MOZILLA_DIR)/config/Preprocessor.py --marker=% $(DEFINES) $(ACDEFINES) $< > $@
+ 
+ libs:: $(DIST)/bin/res/fonts/$(math_properties)
+ install:: $(DESTDIR)$(mozappdir)/res/fonts/$(math_properties)
+ 
+ DEFINES += -D_IMPL_NS_LAYOUT
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/layout/svg/Makefile.in b/layout/svg/Makefile.in
+--- a/layout/svg/Makefile.in
++++ b/layout/svg/Makefile.in
+@@ -83,16 +83,22 @@ libs::
+ 	$(INSTALL) $(srcdir)/svg.css $(DIST)/bin/res
+ 
+ install::
+ 	$(SYSINSTALL) $(IFLAGS1) $(srcdir)/svg.css $(DESTDIR)$(mozappdir)/res
+ 
+ 
+ DEFINES += -D_IMPL_NS_LAYOUT
+ 
++ifeq (1700,$(_MSC_VER))
++# for Linker HEAP OVERFLOW error...
++CFLAGS		+= -GL-
++CXXFLAGS	+= -GL-
++endif
++
+ ifdef _MSC_VER
+ ifneq (,$(filter -DTT_MEMUTIL,$(MOZ_OPTIMIZE_FLAGS)))
+ nsSVGMaskFrame.$(OBJ_SUFFIX): COMPILE_CXXFLAGS += -GL- -openmp
+ endif
+ endif
+ 
+ ifdef MOZ_THUNDERBIRD
+ ifeq (WINNT_1,$(OS_ARCH)_$(MOZ_PROFILE_GENERATE)$(MOZ_PROFILE_USE))
+diff --git a/media/libcubeb/src/Makefile.in b/media/libcubeb/src/Makefile.in
+--- a/media/libcubeb/src/Makefile.in
++++ b/media/libcubeb/src/Makefile.in
+@@ -56,8 +56,12 @@ CSRCS		= \
+ endif
+ 
+ include $(topsrcdir)/config/rules.mk
+ 
+ CFLAGS += \
+ 	$(MOZ_ALSA_CFLAGS) \
+ 	$(MOZ_PULSEAUDIO_CFLAGS) \
+ 	$(NULL)
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/media/libnestegg/src/Makefile.in b/media/libnestegg/src/Makefile.in
+--- a/media/libnestegg/src/Makefile.in
++++ b/media/libnestegg/src/Makefile.in
+@@ -17,8 +17,12 @@ VISIBILITY_FLAGS =
+ endif
+ 
+ CSRCS		= \
+ 		nestegg.c \
+ 		halloc.c \
+ 		$(NULL)
+ 		
+ include $(topsrcdir)/config/rules.mk
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/media/libogg/src/Makefile.in b/media/libogg/src/Makefile.in
+--- a/media/libogg/src/Makefile.in
++++ b/media/libogg/src/Makefile.in
+@@ -17,8 +17,12 @@ VISIBILITY_FLAGS =
+ endif
+ 
+ CSRCS		= \
+ 		ogg_bitwise.c \
+ 		ogg_framing.c \
+ 		$(NULL)
+ 
+ include $(topsrcdir)/config/rules.mk
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/media/libopus/Makefile.in b/media/libopus/Makefile.in
+--- a/media/libopus/Makefile.in
++++ b/media/libopus/Makefile.in
+@@ -79,8 +79,12 @@ VPATH += $(srcdir)/silk/fixed
+ CSRCS += $(notdir $(SILK_SOURCES_FIXED))
+ else
+ LOCAL_INCLUDES += -I$(srcdir)/silk/float
+ VPATH += $(srcdir)/silk/float
+ CSRCS += $(notdir $(SILK_SOURCES_FLOAT))
+ endif
+ 
+ include $(topsrcdir)/config/rules.mk
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/media/libsoundtouch/src/Makefile.in b/media/libsoundtouch/src/Makefile.in
+--- a/media/libsoundtouch/src/Makefile.in
++++ b/media/libsoundtouch/src/Makefile.in
+@@ -51,8 +51,11 @@ mmx_optimized.$(OBJ_SUFFIX): CXXFLAGS+=-
+ sse_optimized.$(OBJ_SUFFIX): CXXFLAGS+=-msse2
+ endif
+ ifdef SOLARIS_SUNPRO_CXX
+ mmx_optimized.$(OBJ_SUFFIX): OS_CXXFLAGS += -xarch=sse2 -xO4
+ sse_optimized.$(OBJ_SUFFIX): OS_CXXFLAGS += -xarch=sse2 -xO4
+ endif
+ endif
+ 
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/media/libspeex_resampler/src/Makefile.in b/media/libspeex_resampler/src/Makefile.in
+--- a/media/libspeex_resampler/src/Makefile.in
++++ b/media/libspeex_resampler/src/Makefile.in
+@@ -35,8 +35,12 @@ CSRCS = \
+ 
+ EXPORTS_speex = \
+     speex_config_types.h \
+     speex_resampler.h \
+     speex_types.h \
+     $(NULL)
+ 
+ include $(topsrcdir)/config/rules.mk
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/media/libsydneyaudio/src/Makefile.in b/media/libsydneyaudio/src/Makefile.in
+--- a/media/libsydneyaudio/src/Makefile.in
++++ b/media/libsydneyaudio/src/Makefile.in
+@@ -74,8 +74,12 @@ ifeq ($(OS_ARCH),WINNT)
+ OS_LIBS += winmm.lib
+ endif
+ 
+ include $(topsrcdir)/config/rules.mk
+ 
+ LOCAL_INCLUDES += -I$(srcdir)/../include
+ 
+ CFLAGS += $(MOZ_ALSA_CFLAGS)
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/media/libtheora/lib/Makefile.in b/media/libtheora/lib/Makefile.in
+--- a/media/libtheora/lib/Makefile.in
++++ b/media/libtheora/lib/Makefile.in
+@@ -122,8 +122,12 @@ armopts-gnu.S: armopts.s
+ 	$(PERL) $(srcdir)/arm/arm2gnu.pl < $< > $@
+ 
+ endif
+ endif
+ 
+ include $(topsrcdir)/config/rules.mk
+ 
+ LOCAL_INCLUDES = -I$(srcdir)
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/media/libtremor/lib/Makefile.in b/media/libtremor/lib/Makefile.in
+--- a/media/libtremor/lib/Makefile.in
++++ b/media/libtremor/lib/Makefile.in
+@@ -33,8 +33,12 @@ ifeq ($(OS_ARCH),AIX)
+ DEFINES += -Dalloca=__alloca
+ endif
+ 
+ ifeq (arm_1_, $(TARGET_CPU)_$(GNU_CC)_$(MOZ_THUMB2))
+ DEFINES += -D_ARM_ASSEM_
+ endif
+ 
+ include $(topsrcdir)/config/rules.mk
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/media/libvorbis/Makefile.in b/media/libvorbis/Makefile.in
+--- a/media/libvorbis/Makefile.in
++++ b/media/libvorbis/Makefile.in
+@@ -12,8 +12,12 @@ include $(DEPTH)/config/autoconf.mk
+ MODULE		= vorbis
+ 
+ DIRS		= \
+ 		include \
+ 		lib \
+ 		$(NULL)
+ 
+ include $(topsrcdir)/config/rules.mk
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/media/mtransport/build/Makefile.in b/media/mtransport/build/Makefile.in
+--- a/media/mtransport/build/Makefile.in
++++ b/media/mtransport/build/Makefile.in
+@@ -58,8 +58,12 @@ DEFINES += \
+   -DWIN32 \
+   -DNOMINMAX \
+   $(NULL)
+ else ifeq (Linux,$(OS_TARGET))
+ DEFINES += -DLINUX
+ endif
+ 
+ include $(topsrcdir)/config/rules.mk
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/media/mtransport/standalone/Makefile.in b/media/mtransport/standalone/Makefile.in
+--- a/media/mtransport/standalone/Makefile.in
++++ b/media/mtransport/standalone/Makefile.in
+@@ -53,8 +53,12 @@ DEFINES += \
+   $(NULL)
+ else ifeq (Linux,$(OS_TARGET))
+ DEFINES += -DLINUX
+ endif
+ 
+ include $(srcdir)/../objs.mk
+ 
+ include $(topsrcdir)/config/rules.mk
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/media/mtransport/third_party/Makefile.in b/media/mtransport/third_party/Makefile.in
+--- a/media/mtransport/third_party/Makefile.in
++++ b/media/mtransport/third_party/Makefile.in
+@@ -46,8 +46,12 @@ include $(DEPTH)/config/autoconf.mk
+ PARALLEL_DIRS = \
+   nrappkit \
+   nICEr \
+   $(NULL)
+ 
+ NO_SUBMAKEFILES_RULE = 1
+ 
+ include $(topsrcdir)/config/rules.mk
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/media/webrtc/trunk/tools/gyp/pylib/gyp/generator/mozmake.py b/media/webrtc/trunk/tools/gyp/pylib/gyp/generator/mozmake.py
+--- a/media/webrtc/trunk/tools/gyp/pylib/gyp/generator/mozmake.py
++++ b/media/webrtc/trunk/tools/gyp/pylib/gyp/generator/mozmake.py
+@@ -51,18 +51,18 @@ ifndef COMMON_MK_INCLUDED
+ COMMON_MK_INCLUDED := 1
+ 
+ ifdef MOZ_DEBUG
+ CFLAGS += $(CPPFLAGS_Debug) $(CFLAGS_Debug)
+ CXXFLAGS += $(CPPFLAGS_Debug) $(CXXFLAGS_Debug)
+ DEFINES += $(DEFINES_Debug)
+ LOCAL_INCLUDES += $(INCLUDES_Debug)
+ else # non-MOZ_DEBUG
+-CFLAGS += $(CPPFLAGS_Release) $(CFLAGS_Release)
+-CXXFLAGS += $(CPPFLAGS_Release) $(CXXFLAGS_Release)
++CFLAGS += $(CPPFLAGS_Release) $(CFLAGS_Release) -GL-
++CXXFLAGS += $(CPPFLAGS_Release) $(CXXFLAGS_Release) -GL-
+ DEFINES += $(DEFINES_Release)
+ LOCAL_INCLUDES += $(INCLUDES_Release)
+ endif
+ 
+ ifeq (WINNT,$(OS_TARGET))
+ # These get set via VC project file settings for normal GYP builds.
+ DEFINES += -DUNICODE -D_UNICODE
+ LOCAL_INCLUDES += -I"$(MOZ_DIRECTX_SDK_PATH)/include"
+diff --git a/parser/htmlparser/src/Makefile.in b/parser/htmlparser/src/Makefile.in
+--- a/parser/htmlparser/src/Makefile.in
++++ b/parser/htmlparser/src/Makefile.in
+@@ -39,8 +39,12 @@ CPPSRCS = \
+ 		nsParserModule.cpp  \
+ 		nsParserNode.cpp    \
+ 		nsScanner.cpp       \
+ 		nsToken.cpp         \
+ 		nsParserMsgUtils.cpp\
+ 		$(NULL)
+ 
+ include $(topsrcdir)/config/rules.mk
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/rdf/base/src/Makefile.in b/rdf/base/src/Makefile.in
+--- a/rdf/base/src/Makefile.in
++++ b/rdf/base/src/Makefile.in
+@@ -32,8 +32,11 @@ CPPSRCS		= \
+ 		rdfutil.cpp \
+ 		$(NULL)
+ 
+ # we don't want the shared lib, but we want to force the creation of a static lib.
+ FORCE_STATIC_LIB = 1
+ 
+ include $(topsrcdir)/config/rules.mk
+ 
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/rdf/build/Makefile.in b/rdf/build/Makefile.in
+--- a/rdf/build/Makefile.in
++++ b/rdf/build/Makefile.in
+@@ -35,8 +35,11 @@ EXPORTS		= nsRDFCID.h
+ include $(topsrcdir)/config/rules.mk
+ 
+ LOCAL_INCLUDES	= \
+ 		-I$(srcdir)/../base/src \
+ 		-I$(srcdir)/../content/src \
+ 		-I$(srcdir)/../datasource/src \
+ 		$(NULL)
+ 
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/rdf/datasource/src/Makefile.in b/rdf/datasource/src/Makefile.in
+--- a/rdf/datasource/src/Makefile.in
++++ b/rdf/datasource/src/Makefile.in
+@@ -24,8 +24,11 @@ CPPSRCS		= \
+ FORCE_STATIC_LIB = 1
+ 
+ include $(topsrcdir)/config/rules.mk
+ 
+ # XXX This is a dependency on rdfutil.h: it'll go away once that becomes
+ # a first-class XPCOM interface.
+ INCLUDES	+= -I$(srcdir)/../../base/src
+ 
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/rdf/util/src/Makefile.in b/rdf/util/src/Makefile.in
+--- a/rdf/util/src/Makefile.in
++++ b/rdf/util/src/Makefile.in
+@@ -27,8 +27,11 @@ DIST_INSTALL = 1
+ 
+ CPPSRCS		= $(RDF_UTIL_SRC_LCPPSRCS)
+ 
+ # we don't want the shared lib, but we want to force the creation of a static lib.
+ FORCE_STATIC_LIB = 1
+ 
+ include $(topsrcdir)/config/rules.mk
+ 
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/storage/build/Makefile.in b/storage/build/Makefile.in
+--- a/storage/build/Makefile.in
++++ b/storage/build/Makefile.in
+@@ -28,8 +28,11 @@ LOCAL_INCLUDES = \
+ 	-I$(srcdir)/../src
+ 
+ SHARED_LIBRARY_LIBS = \
+ 	../src/$(LIB_PREFIX)storage_s.$(LIB_SUFFIX) \
+ 	$(NULL)
+ 
+ include $(topsrcdir)/config/rules.mk
+ 
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
+diff --git a/storage/src/Makefile.in b/storage/src/Makefile.in
+--- a/storage/src/Makefile.in
++++ b/storage/src/Makefile.in
+@@ -74,8 +74,12 @@ LOCAL_INCLUDES = \
+   -I$(topsrcdir)/dom/base \
+   $(NULL)
+ 
+ # This is the default value.  If we ever change it when compiling sqlite, we
+ # will need to change it here as well.
+ DEFINES += -DSQLITE_MAX_LIKE_PATTERN_LENGTH=50000
+ 
+ include $(topsrcdir)/config/rules.mk
++
++# for Linker Out of Memory...
++CXXFLAGS += -GL-
++CFLAGS += -GL-
