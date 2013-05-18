@@ -1,0 +1,23 @@
+diff --git a/browser/app/nsBrowserApp.cpp b/browser/app/nsBrowserApp.cpp
+--- a/browser/app/nsBrowserApp.cpp
++++ b/browser/app/nsBrowserApp.cpp
+@@ -474,16 +474,19 @@ int main(int argc, char* argv[])
+ 
+   int gotCounters;
+ #if defined(XP_UNIX)
+   struct rusage initialRUsage;
+   gotCounters = !getrusage(RUSAGE_SELF, &initialRUsage);
+ #elif defined(XP_WIN)
+   IO_COUNTERS ioCounters;
+   gotCounters = GetProcessIoCounters(GetCurrentProcess(), &ioCounters);
++#ifdef TT_MEMUTIL
++  SetPluginPathW(NULL);
++#endif
+ #endif
+ 
+   nsIFile *xreDirectory;
+ 
+   nsresult rv = InitXPCOMGlue(argv[0], &xreDirectory);
+   if (NS_FAILED(rv)) {
+     return 255;
+   }
