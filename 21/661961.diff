@@ -1,0 +1,108 @@
+# HG changeset patch
+# Parent a865bbcdc06dd4ec4c200bdea6334b04d60f7b40
+# User Tom Schuster <evilpies@gmail.com>
+
+diff --git a/dom/locales/en-US/chrome/plugins.properties b/dom/locales/en-US/chrome/plugins.properties
+--- a/dom/locales/en-US/chrome/plugins.properties
++++ b/dom/locales/en-US/chrome/plugins.properties
+@@ -1,20 +1,21 @@
+ # This Source Code Form is subject to the terms of the Mozilla Public
+ # License, v. 2.0. If a copy of the MPL was not distributed with this
+ # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ 
+ # LOCALIZATION NOTE (plugins.properties):
+ #    Those strings are inserted into an HTML page, so you all HTML characters
+ #    have to be escaped in a way that they show up correctly in HTML!
+ 
+-title_label=About Plugins
++title_label=Plugin Information
+ enabledplugins_label=Enabled plugins
+ nopluginsareenabled_label=No enabled plugins found
+ findmore_label=Find more information about browser plugins at
+ findpluginupdates_label=Find updates for installed plugins at
+ installhelp_label=Help for installing plugins is available from
+ file_label=File:
++path_label=Path:
+ version_label=Version:
+ state_label=State:
+ mimetype_label=MIME Type
+ description_label=Description
+ suffixes_label=Suffixes
+diff --git a/toolkit/content/plugins.html b/toolkit/content/plugins.html
+--- a/toolkit/content/plugins.html
++++ b/toolkit/content/plugins.html
+@@ -114,19 +114,19 @@
+     fragment.appendChild(document.createElement("hr"));
+ 
+     var stateNames = {};
+     ["STATE_SOFTBLOCKED",
+      "STATE_BLOCKED",
+      "STATE_OUTDATED",
+      "STATE_VULNERABLE_UPDATE_AVAILABLE",
+      "STATE_VULNERABLE_NO_UPDATE"].forEach(function(label) {
+-      stateNames[Ci.nsIBlocklistService[label]] = label;  
++      stateNames[Ci.nsIBlocklistService[label]] = label;
+     });
+-    
++
+     for (var i = 0; i < aPlugins.length; i++) {
+       var plugin = aPlugins[i];
+       if (plugin) {
+         // "Shockwave Flash"
+         var plugname = document.createElement("h2");
+         plugname.setAttribute("class", "plugname");
+         plugname.appendChild(document.createTextNode(plugin.name));
+         fragment.appendChild(plugname);
+@@ -138,16 +138,25 @@
+         var fileDd = document.createElement("dd");
+         var file = document.createElement("span");
+         file.setAttribute("class", "label");
+         file.appendChild(document.createTextNode(pluginsbundle.GetStringFromName("file_label") + " "));
+         fileDd.appendChild(file);
+         fileDd.appendChild(document.createTextNode(plugin.pluginLibraries));
+         dl.appendChild(fileDd);
+ 
++        // "Path: /usr/lib/mozilla/plugins/libtotem-cone-plugin.so"
++        var pathDd = document.createElement("dd");
++        var path = document.createElement("span");
++        path.setAttribute("class", "label");
++        path.appendChild(document.createTextNode(pluginsbundle.GetStringFromName("path_label") + " "));
++        pathDd.appendChild(path);
++        pathDd.appendChild(document.createTextNode(plugin.pluginFullpath));
++        dl.appendChild(pathDd);
++
+         // "Version: "
+         var versionDd = document.createElement("dd");
+         var version = document.createElement("span");
+         version.setAttribute("class", "label");
+         version.appendChild(document.createTextNode(pluginsbundle.GetStringFromName("version_label") + " "));
+         versionDd.appendChild(version);
+         versionDd.appendChild(document.createTextNode(plugin.version));
+         dl.appendChild(versionDd);
+diff --git a/toolkit/mozapps/extensions/PluginProvider.jsm b/toolkit/mozapps/extensions/PluginProvider.jsm
+--- a/toolkit/mozapps/extensions/PluginProvider.jsm
++++ b/toolkit/mozapps/extensions/PluginProvider.jsm
+@@ -348,16 +348,23 @@ function PluginWrapper(aId, aName, aDesc
+ 
+   this.__defineGetter__("pluginLibraries", function() {
+     let libs = [];
+     for (let tag of aTags)
+       libs.push(tag.filename);
+     return libs;
+   });
+ 
++  this.__defineGetter__("pluginFullpath", function() {
++    let paths = [];
++    for (let tag of aTags)
++      paths.push(tag.fullpath);
++    return paths;
++  })
++
+   this.__defineGetter__("pluginMimeTypes", function() {
+     let types = [];
+     for (let tag of aTags)
+       for (let type of tag.getMimeTypes({}))
+         types.push(type);
+     return types;
+   });
+ 
