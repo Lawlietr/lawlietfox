@@ -1,0 +1,46 @@
+# HG changeset patch
+# User ABE Hiroki (hATrayflood) <h.rayflood@gmail.com>
+# Date 1356877178 -32400
+# Node ID 9816efe625e6bafc81fef010f23c14efe102130e
+# Parent 7a2f7a45819a608718d783f970bfe5ab9d2ba929
+Bug 775939 - fix gyp Makefile include error on msvc (change topsrcdir, srcdir and VPATH to absolute path)
+
+diff --git a/media/webrtc/trunk/tools/gyp/pylib/gyp/generator/mozmake.py b/media/webrtc/trunk/tools/gyp/pylib/gyp/generator/mozmake.py
+--- a/media/webrtc/trunk/tools/gyp/pylib/gyp/generator/mozmake.py
++++ b/media/webrtc/trunk/tools/gyp/pylib/gyp/generator/mozmake.py
+@@ -374,14 +374,10 @@ class MakefileGenerator(object):
+     else:
+       # Maybe nothing?
+       return False
+-    if self.flavor == 'win':
+-      top = self.relative_topsrcdir
+-    else:
+-      top = self.topsrcdir
+-    WriteMakefile(output_file, data, build_file, depth, top,
++    WriteMakefile(output_file, data, build_file, depth, self.topsrcdir,
+                   # we set srcdir up one directory, since the subdir
+                   # doesn't actually exist in the source directory
+-                  swapslashes(os.path.normpath(os.path.join(top, self.relative_srcdir, os.path.split(rel_path)[0]))),
++                  swapslashes(os.path.normpath(os.path.join(self.topsrcdir, self.relative_srcdir, os.path.split(rel_path)[0]))),
+                   self.relative_srcdir,
+                   self.common_mk_path)
+     return True
+@@ -437,16 +433,10 @@ def GenerateOutput(target_list, target_d
+   topdata = {'DIRS': generator.dirs}
+   if generator.parallel_dirs:
+     topdata['PARALLEL_DIRS'] = generator.parallel_dirs
+-  if flavor == 'win':
+-    top = relative_topsrcdir
+-    src = srcdir
+-  else:
+-    top = topsrcdir
+-    src = abs_srcdir
+   WriteMakefile(makefile_path, topdata, params['build_files'][0],
+                 depth,
+-                swapslashes(top),
+-                swapslashes(src),
++                swapslashes(topsrcdir),
++                swapslashes(abs_srcdir),
+                 swapslashes(relative_srcdir),
+                 common_mk_path)
+   scriptname = "$(topsrcdir)/media/webrtc/trunk/tools/gyp/pylib/gyp/generator/mozmake.py"
