@@ -1,0 +1,48 @@
+# HG changeset patch
+# Parent c92b37b7c43b10b904bbc1944f976d4b0d5531f0
+# User Xavier Fung <xavier114fch@gmail.com>
+Fix WebRTC to build on VS2013
+
+diff --git a/media/webrtc/trunk/webrtc/modules/audio_conference_mixer/source/audio_conference_mixer_impl.cc b/media/webrtc/trunk/webrtc/modules/audio_conference_mixer/source/audio_conference_mixer_impl.cc
+--- a/media/webrtc/trunk/webrtc/modules/audio_conference_mixer/source/audio_conference_mixer_impl.cc
++++ b/media/webrtc/trunk/webrtc/modules/audio_conference_mixer/source/audio_conference_mixer_impl.cc
+@@ -11,16 +11,17 @@
+ #include "audio_conference_mixer_defines.h"
+ #include "audio_conference_mixer_impl.h"
+ #include "audio_frame_manipulator.h"
+ #include "audio_processing.h"
+ #include "critical_section_wrapper.h"
+ #include "map_wrapper.h"
+ #include "modules/utility/interface/audio_frame_operations.h"
+ #include "trace.h"
++#include <algorithm> 
+ 
+ namespace webrtc {
+ namespace {
+ 
+ // Mix |frame| into |mixed_frame|, with saturation protection and upmixing.
+ // These effects are applied to |frame| itself prior to mixing. Assumes that
+ // |mixed_frame| always has at least as many channels as |frame|. Supports
+ // stereo at most.
+diff --git a/media/webrtc/trunk/webrtc/modules/pacing/paced_sender.cc b/media/webrtc/trunk/webrtc/modules/pacing/paced_sender.cc
+--- a/media/webrtc/trunk/webrtc/modules/pacing/paced_sender.cc
++++ b/media/webrtc/trunk/webrtc/modules/pacing/paced_sender.cc
+@@ -9,16 +9,18 @@
+  */
+ 
+ #include "webrtc/modules/pacing/include/paced_sender.h"
+ 
+ #include <assert.h>
+ 
+ #include "webrtc/system_wrappers/interface/critical_section_wrapper.h"
+ 
++#include <algorithm>
++
+ namespace {
+ // Multiplicative factor that is applied to the target bitrate to calculate the
+ // number of bytes that can be transmitted per interval.
+ // Increasing this factor will result in lower delays in cases of bitrate
+ // overshoots from the encoder.
+ const float kBytesPerIntervalMargin = 1.5f;
+ 
+ // Time limit in milliseconds between packet bursts.
