@@ -1,0 +1,50 @@
+# HG changeset patch
+# Parent 6976f98c58e0b26d10a014774555400cc66b131c
+# User hua.andy <hua.andy@gmail.com>
+"css pgo"
+
+
+diff --git a/layout/style/nsCSSParser.cpp b/layout/style/nsCSSParser.cpp
+--- a/layout/style/nsCSSParser.cpp
++++ b/layout/style/nsCSSParser.cpp
+@@ -1145,20 +1145,16 @@ CSSParserImpl::ParseRule(const nsAString
+       OUTPUT_ERROR();
+     }
+   }
+ 
+   ReleaseScanner();
+   return rv;
+ }
+ 
+-// See Bug 723197
+-#ifdef _MSC_VER
+-#pragma optimize( "", off )
+-#endif
+ nsresult
+ CSSParserImpl::ParseProperty(const nsCSSProperty aPropID,
+                              const nsAString& aPropValue,
+                              nsIURI* aSheetURI,
+                              nsIURI* aBaseURI,
+                              nsIPrincipal* aSheetPrincipal,
+                              css::Declaration* aDeclaration,
+                              bool* aChanged,
+@@ -1223,19 +1219,16 @@ CSSParserImpl::ParseProperty(const nsCSS
+     CLEAR_ERROR();
+   }
+ 
+   mTempData.AssertInitialState();
+ 
+   ReleaseScanner();
+   return NS_OK;
+ }
+-#ifdef _MSC_VER
+-#pragma optimize( "", on )
+-#endif
+ 
+ nsresult
+ CSSParserImpl::ParseMediaList(const nsSubstring& aBuffer,
+                               nsIURI* aURI, // for error reporting
+                               uint32_t aLineNumber, // for error reporting
+                               nsMediaList* aMediaList,
+                               bool aHTMLMode)
+ {
