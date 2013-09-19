@@ -1,0 +1,61 @@
+. $topsrcdir/browser/config/mozconfig
+
+ac_add_options --enable-application=browser
+ac_add_options --with-branding=browser/branding/unofficial
+export MOZ_OPTIMIZE_LDFLAGS="-opt:ref,icf -LARGEADDRESSAWARE c:/libportable/vs_build/Release/portable32.lib"
+mk_add_options MOZ_OPTIMIZE_LDFLAGS="-opt:ref,icf -LARGEADDRESSAWARE c:/libportable/vs_build/Release/portable32.lib"
+#ac_add_options --with-app-name=lawlietfox
+
+ac_add_options --disable-auto-deps
+ac_add_options --disable-tests
+ac_add_options --disable-ipdl-tests
+ac_add_options --enable-installer
+ac_add_options --enable-extensions=default
+ac_add_options --enable-strip
+ac_add_options --enable-install-strip
+ac_add_options --disable-updater
+ac_add_options --disable-update-channel
+ac_add_options --disable-update-packaging
+ac_add_options --disable-crashreporter
+ac_add_options --enable-jemalloc
+ac_add_options --enable-shared-js
+#ac_add_options --enable-debugger-info-modules=yes
+#ac_add_options --enable-debugger-info-modules
+ac_add_options --disable-debug-symbols
+ac_add_options --disable-debug
+ac_add_options --disable-maintenance-service
+ac_add_options --disable-parental-controls
+ac_add_options --disable-windows-mobile-components
+ac_add_options --disable-logging
+ac_add_options --disable-necko-wifi
+ac_add_options --disable-activex
+ac_add_options --disable-activex-scripting
+ac_add_options --enable-crypto
+ac_add_options --enable-image-decoders=icon,png,gif,jpeg,bmp
+#ac_add_options --disable-webrtc
+ac_add_options --disable-services-healthreport
+ac_add_options --disable-telemetry-reporting 
+ac_add_options --disable-pdfjs
+ac_add_options --disable-accessibility
+ac_add_options --disable-gamepad
+
+#ac_add_options --enable-optimize="-O2 -GL -arch:SSE2"
+#ac_add_options --enable-optimize="-O2 -GL -fp:precise -arch:SSE2 -DTT_MEMUTIL -FI tmemutil.h"
+ac_add_options --enable-optimize="-O2 -GL -arch:SSE2 -DTT_MEMUTIL -FI portable.h"
+
+# for auto pgo build
+mk_add_options MOZ_MAKE_FLAGS="-j4"
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/ff-pgo
+#mk_add_options PROFILE_GEN_SCRIPT='$(PYTHON) $(MOZ_OBJDIR)/_profile/pgo/profileserver.py'
+#mk_add_options PROFILE_GEN_SCRIPT='python E:/SystemTools/win32_Firefox/stopmsg.py'
+#mk_add_options PROFILE_GEN_SCRIPT='cscript c:/PgoMsg.vbs'
+mk_add_options PROFILE_GEN_SCRIPT='cscript E:/SystemTools/win32_Firefox/PgoMsg.vbs'
+
+# windows version
+ac_add_options --with-windows-version=601
+
+# crt dir
+WIN32_REDIST_DIR=$VCINSTALLDIR/redist/x86/Microsoft.VC100.CRT
+#
+# crt dir vc11
+#WIN32_REDIST_DIR=$VCINSTALLDIR/redist/x86/Microsoft.VC110.CRT
