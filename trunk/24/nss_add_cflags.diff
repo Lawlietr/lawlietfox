@@ -1,0 +1,31 @@
+# HG changeset patch
+# Parent ff6533db45fee9b1aef70702b19bd9b8f23291ed
+# User hua.andy <hua.andy@gmail.com>
+"nss3 add cflags"
+
+
+diff --git a/security/nss/coreconf/WIN32.mk b/security/nss/coreconf/WIN32.mk
+--- a/security/nss/coreconf/WIN32.mk
++++ b/security/nss/coreconf/WIN32.mk
+@@ -120,19 +120,19 @@ else # !NS_USE_GCC
+     endif
+     endif
+     ifdef USE_DYNAMICBASE
+ 	OS_DLLFLAGS += -DYNAMICBASE
+     endif
+     ifdef BUILD_OPT
+ 	OS_CFLAGS  += -MD
+ 	ifeq (11,$(ALLOW_OPT_CODE_SIZE)$(OPT_CODE_SIZE))
+-		OPTIMIZER += -O1
++		OPTIMIZER += -O1 -GL
+ 	else
+-		OPTIMIZER += -O2
++		OPTIMIZER += -O2 -GL
+ 	endif
+ 	DEFINES    += -UDEBUG -U_DEBUG -DNDEBUG
+ 	DLLFLAGS   += -OUT:"$@"
+ 	ifdef MOZ_DEBUG_SYMBOLS
+ 		ifdef MOZ_DEBUG_FLAGS
+ 			OPTIMIZER += $(MOZ_DEBUG_FLAGS) -Fd$(OBJDIR)/
+ 		else
+ 			OPTIMIZER += -Zi -Fd$(OBJDIR)/
