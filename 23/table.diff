@@ -1,0 +1,233 @@
+# HG changeset patch
+# Parent 7499e60e458b47ecee1fb5a164136c1335a97382
+# User hua.andy <hua.andy@gmail.com>
+"add window name to global atom table"
+
+
+diff --git a/dom/plugins/base/nsPluginNativeWindowWin.cpp b/dom/plugins/base/nsPluginNativeWindowWin.cpp
+--- a/dom/plugins/base/nsPluginNativeWindowWin.cpp
++++ b/dom/plugins/base/nsPluginNativeWindowWin.cpp
+@@ -31,17 +31,28 @@ using namespace mozilla;
+ 
+ #define nsMajorVersion(v)       (((int32_t)(v) >> 16) & 0xffff)
+ #define nsMinorVersion(v)       ((int32_t)(v) & 0xffff)
+ #define versionOK(suppliedV, requiredV)                   \
+   (nsMajorVersion(suppliedV) == nsMajorVersion(requiredV) \
+    && nsMinorVersion(suppliedV) >= nsMinorVersion(requiredV))
+ 
+ 
+-#define NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION TEXT("MozillaPluginWindowPropertyAssociation")
++class CAtom_MozillaPluginWindowPropertyAssociation {
++public:
++  CAtom_MozillaPluginWindowPropertyAssociation() {
++    atom = ::GlobalAddAtomW(L"MozillaPluginWindowPropertyAssociation");
++  }
++  ~CAtom_MozillaPluginWindowPropertyAssociation() {
++    ::GlobalDeleteAtom(atom);
++  }
++  ATOM atom;
++};
++static CAtom_MozillaPluginWindowPropertyAssociation gaMpwpa;
++#define NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION ((LPCWSTR)(DWORD)gaMpwpa.atom)
+ #define NS_PLUGIN_CUSTOM_MSG_ID TEXT("MozFlashUserRelay")
+ #define WM_USER_FLASH WM_USER+1
+ static UINT sWM_FLASHBOUNCEMSG = 0;
+ 
+ typedef nsTWeakRef<class nsPluginNativeWindowWin> PluginWindowWeakRef;
+ 
+ /**
+  *  PLEvent handling code
+@@ -188,17 +199,17 @@ NS_IMETHODIMP nsDelayedPopupsEnabledEven
+ 
+ static LRESULT CALLBACK PluginWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+ 
+ /**
+  *   New plugin window procedure
+  */
+ static LRESULT CALLBACK PluginWndProcInternal(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+ {
+-  nsPluginNativeWindowWin * win = (nsPluginNativeWindowWin *)::GetProp(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
++  nsPluginNativeWindowWin * win = (nsPluginNativeWindowWin *)::GetPropW(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
+   if (!win)
+     return TRUE;
+ 
+   // The DispatchEvent(NS_PLUGIN_ACTIVATE) below can trigger a reentrant focus
+   // event which might destroy us.  Hold a strong ref on the plugin instance
+   // to prevent that, bug 374229.
+   nsRefPtr<nsNPAPIPluginInstance> inst;
+   win->GetPluginInstance(inst);
+@@ -390,17 +401,17 @@ static User32SetWindowLongA sUser32SetWi
+ static User32SetWindowLongW sUser32SetWindowLongWHookStub = NULL;
+ #endif
+ static inline bool
+ SetWindowLongHookCheck(HWND hWnd,
+                        int nIndex,
+                        LONG_PTR newLong)
+ {
+   nsPluginNativeWindowWin * win =
+-    (nsPluginNativeWindowWin *)GetProp(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
++    (nsPluginNativeWindowWin *)GetPropW(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
+   if (!win || (win && win->mPluginType != nsPluginType_Flash) ||
+       (nIndex == GWLP_WNDPROC &&
+        newLong == reinterpret_cast<LONG_PTR>(PluginWndProc)))
+     return true;
+   return false;
+ }
+ 
+ #ifdef _WIN64
+@@ -418,17 +429,17 @@ SetWindowLongAHook(HWND hWnd,
+   if (SetWindowLongHookCheck(hWnd, nIndex, newLong))
+       return sUser32SetWindowLongAHookStub(hWnd, nIndex, newLong);
+ 
+   // Set flash's new subclass to get the result. 
+   LONG_PTR proc = sUser32SetWindowLongAHookStub(hWnd, nIndex, newLong);
+ 
+   // We already checked this in SetWindowLongHookCheck
+   nsPluginNativeWindowWin * win =
+-    (nsPluginNativeWindowWin *)GetProp(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
++    (nsPluginNativeWindowWin *)GetPropW(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
+ 
+   // Hook our subclass back up, just like we do on setwindow.
+   win->SetPrevWindowProc(
+     reinterpret_cast<WNDPROC>(sUser32SetWindowLongWHookStub(hWnd, nIndex,
+       reinterpret_cast<LONG_PTR>(PluginWndProc))));
+   return proc;
+ }
+ 
+@@ -447,17 +458,17 @@ SetWindowLongWHook(HWND hWnd,
+   if (SetWindowLongHookCheck(hWnd, nIndex, newLong))
+       return sUser32SetWindowLongWHookStub(hWnd, nIndex, newLong);
+ 
+   // Set flash's new subclass to get the result. 
+   LONG_PTR proc = sUser32SetWindowLongWHookStub(hWnd, nIndex, newLong);
+ 
+   // We already checked this in SetWindowLongHookCheck
+   nsPluginNativeWindowWin * win =
+-    (nsPluginNativeWindowWin *)GetProp(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
++    (nsPluginNativeWindowWin *)GetPropW(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
+ 
+   // Hook our subclass back up, just like we do on setwindow.   
+   win->SetPrevWindowProc(
+     reinterpret_cast<WNDPROC>(sUser32SetWindowLongWHookStub(hWnd, nIndex,
+       reinterpret_cast<LONG_PTR>(PluginWndProc))));
+   return proc;
+ }
+ 
+@@ -690,34 +701,34 @@ nsresult nsPluginNativeWindowWin::Subcla
+   else
+     style |= WS_CLIPCHILDREN;
+   SetWindowLongPtr(hWnd, GWL_STYLE, style);
+ 
+   mPluginWinProc = (WNDPROC)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)PluginWndProc);
+   if (!mPluginWinProc)
+     return NS_ERROR_FAILURE;
+ 
+-  DebugOnly<nsPluginNativeWindowWin *> win = (nsPluginNativeWindowWin *)::GetProp(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
++  DebugOnly<nsPluginNativeWindowWin *> win = (nsPluginNativeWindowWin *)::GetPropW(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
+   NS_ASSERTION(!win || (win == this), "plugin window already has property and this is not us");
+   
+-  if (!::SetProp(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION, (HANDLE)this))
++  if (!::SetPropW(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION, (HANDLE)this))
+     return NS_ERROR_FAILURE;
+ 
+   return NS_OK;
+ }
+ 
+ nsresult nsPluginNativeWindowWin::UndoSubclassAndAssociateWindow()
+ {
+   // release plugin instance
+   SetPluginInstance(nullptr);
+ 
+   // remove window property
+   HWND hWnd = (HWND)window;
+   if (IsWindow(hWnd))
+-    ::RemoveProp(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
++    ::RemovePropW(hWnd, NS_PLUGIN_WINDOW_PROPERTY_ASSOCIATION);
+ 
+   // restore the original win proc
+   // but only do this if this were us last time
+   if (mPluginWinProc) {
+     WNDPROC currentWndProc = (WNDPROC)::GetWindowLongPtr(hWnd, GWLP_WNDPROC);
+     if (currentWndProc == PluginWndProc)
+       SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)mPluginWinProc);
+     mPluginWinProc = NULL;
+diff --git a/widget/windows/WinUtils.cpp b/widget/windows/WinUtils.cpp
+--- a/widget/windows/WinUtils.cpp
++++ b/widget/windows/WinUtils.cpp
+@@ -210,26 +210,36 @@ WinUtils::GetTopLevelHWND(HWND aWnd,
+       upWnd = ::GetWindow(curWnd, GW_OWNER);
+     }
+     curWnd = upWnd;
+   }
+ 
+   return topWnd;
+ }
+ 
++class CAtom_NSWindowPropName {
++public:
++  CAtom_NSWindowPropName() {
++    PRUnichar sPropName[40] = L"";
++    _snwprintf(sPropName, 39, L"MozillansIWidgetPtr%p",
++               ::GetCurrentProcessId());
++    sPropName[39] = '\0';
++    atom = ::GlobalAddAtomW(sPropName);
++  }
++  ~CAtom_NSWindowPropName() {
++    ::GlobalDeleteAtom(atom);
++  }
++  ATOM atom;
++};
++
+ static PRUnichar*
+ GetNSWindowPropName()
+ {
+-  static PRUnichar sPropName[40] = L"";
+-  if (!*sPropName) {
+-    _snwprintf(sPropName, 39, L"MozillansIWidgetPtr%p",
+-               ::GetCurrentProcessId());
+-    sPropName[39] = '\0';
+-  }
+-  return sPropName;
++  static CAtom_NSWindowPropName gaNswpn;
++  return (PRUnichar*)(UINT_PTR)gaNswpn.atom;
+ }
+ 
+ /* static */
+ bool
+ WinUtils::SetNSWindowPtr(HWND aWnd, nsWindow* aWindow)
+ {
+   if (!aWindow) {
+     ::RemovePropW(aWnd, GetNSWindowPropName());
+diff --git a/widget/windows/nsWindow.cpp b/widget/windows/nsWindow.cpp
+--- a/widget/windows/nsWindow.cpp
++++ b/widget/windows/nsWindow.cpp
+@@ -1959,17 +1959,28 @@ nsWindow::ResetLayout()
+ 
+   // Invalidate and update
+   Invalidate();
+ }
+ 
+ // Internally track the caption status via a window property. Required
+ // due to our internal handling of WM_NCACTIVATE when custom client
+ // margins are set.
+-static const PRUnichar kManageWindowInfoProperty[] = L"ManageWindowInfoProperty";
++class CAtom_ManageWindowInfoProperty {
++public:
++  CAtom_ManageWindowInfoProperty() {
++    atom = ::GlobalAddAtomW(L"ManageWindowInfoProperty");
++  }
++  ~CAtom_ManageWindowInfoProperty() {
++    ::GlobalDeleteAtom(atom);
++  }
++  ATOM atom;
++};
++static CAtom_ManageWindowInfoProperty gaMwip;
++#define kManageWindowInfoProperty ((LPCWSTR)(UINT_PTR)gaMwip.atom)
+ typedef BOOL (WINAPI *GetWindowInfoPtr)(HWND hwnd, PWINDOWINFO pwi);
+ static GetWindowInfoPtr sGetWindowInfoPtrStub = NULL;
+ 
+ BOOL WINAPI
+ GetWindowInfoHook(HWND hWnd, PWINDOWINFO pwi)
+ {
+   if (!sGetWindowInfoPtrStub) {
+     NS_ASSERTION(FALSE, "Something is horribly wrong in GetWindowInfoHook!");
