@@ -1,0 +1,72 @@
+# HG changeset patch
+# Parent fda4c59f7166ff7c679cc12eb80b19a6cd23c697
+# User hua.andy <hua.andy@gmail.com>
+"pgo build crash fixed ..."
+
+
+diff --git a/dom/bindings/Makefile.in b/dom/bindings/Makefile.in
+--- a/dom/bindings/Makefile.in
++++ b/dom/bindings/Makefile.in
+@@ -203,8 +203,13 @@ distclean::
+ 	-$(RM) \
+         $(binding_header_files) \
+         $(binding_cpp_files) \
+         $(all_webidl_files) \
+         $(globalgen_targets) \
+         ParserResults.pkl
+ 
+ .PHONY: webidl-export
++
++ifeq (WINNT_1,$(OS_ARCH)_$(MOZ_PROFILE_GENERATE)$(MOZ_PROFILE_USE))
++# avoid the fatal error C1001 of compiler when applying PGO to Thunderbird
++COMPILE_CXXFLAGS += -GL-
++endif
+diff --git a/layout/media/Makefile.in b/layout/media/Makefile.in
+--- a/layout/media/Makefile.in
++++ b/layout/media/Makefile.in
+@@ -96,16 +96,22 @@ SHARED_LIBRARY_LIBS 	+= \
+ endif
+ 
+ ifndef MOZ_NATIVE_JPEG
+ SHARED_LIBRARY_LIBS 	+= \
+ 	$(DEPTH)/media/libjpeg/$(LIB_PREFIX)mozjpeg.$(LIB_SUFFIX) \
+ 	$(NULL)
+ endif
+ 
++ifdef MOZ_WEBP
++SHARED_LIBRARY_LIBS += \
++  $(DEPTH)/media/libwebp/src/$(LIB_PREFIX)mozwebp.$(LIB_SUFFIX) \
++  $(NULL)
++endif
++
+ SHARED_LIBRARY_LIBS 	+= \
+ 	$(DEPTH)/gfx/angle/$(LIB_PREFIX)angle.$(LIB_SUFFIX) \
+ 	$(DEPTH)/parser/expat/lib/$(LIB_PREFIX)mozexpat_s.$(LIB_SUFFIX) \
+ 	$(NULL)
+ 
+ SHARED_LIBRARY_LIBS 	+= \
+ 	$(DEPTH)/gfx/2d/$(LIB_PREFIX)gfx2d.$(LIB_SUFFIX) \
+ 	$(NULL)
+diff --git a/gfx/gl/GLContextSkia.cpp b/gfx/gl/GLContextSkia.cpp
+--- a/gfx/gl/GLContextSkia.cpp
++++ b/gfx/gl/GLContextSkia.cpp
+@@ -27,6 +27,9 @@
+ }
+ 
+ // Core GL functions required by Ganesh
++#ifdef _MSC_VER
++#pragma optimize("t", off)
++#endif
+ 
+ GrGLvoid glActiveTexture_mozilla(GrGLenum texture)
+ {
+@@ -283,6 +286,9 @@
+     return sGLContext->fGetShaderiv(shader, pname, params);
+ }
+ 
++#ifdef _MSC_VER
++#pragma optimize("", on)
++#endif
+ const GLubyte* glGetString_mozilla(GrGLenum name)
+ {
+     // GLContext only exposes a OpenGL 2.0 style API, so we have to intercept a bunch
