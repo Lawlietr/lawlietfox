@@ -1,0 +1,103 @@
+# HG changeset patch
+# User xunxun1982@gmail.com
+# Date 1375852044 -28800
+#      Wed Aug 07 13:07:24 2013 +0800
+# Node ID 1e49c453226fa68dfa013b4ee8cf34583aa6012e
+# Parent  1a6f250fe3a0a2e03b85ac29e6314b48fff5af40
+Make builders use -fp:fast safely on MSVC2010+
+
+diff -r 1a6f250fe3a0 -r 1e49c453226f db/sqlite3/src/Makefile.in
+--- a/db/sqlite3/src/Makefile.in	Wed Aug 07 12:43:21 2013 +0800
++++ b/db/sqlite3/src/Makefile.in	Wed Aug 07 13:07:24 2013 +0800
+@@ -136,3 +136,8 @@
+        $(srcdir)/sqlite.def | sed -e '1,/^EXPORTS$$/ d' -e 's,sqlite3,_\0,' \
+        -e 's,\ DATA.*$$,,' >> $(DEF_FILE)
+ endif
++
++ifdef _MSC_VER
++CFLAGS += -fp:precise
++CXXFLAGS += -fp:precise
++endif
+diff -r 1a6f250fe3a0 -r 1e49c453226f ipc/app/Makefile.in
+--- a/ipc/app/Makefile.in	Wed Aug 07 12:43:21 2013 +0800
++++ b/ipc/app/Makefile.in	Wed Aug 07 13:07:24 2013 +0800
+@@ -90,3 +90,8 @@
+ 	$(NSINSTALL) $(PROGRAM) $(DIST)/bin/$(PROGRAM).app/Contents/MacOS
+ 	$(RM) $(DIST)/bin/$(PROGRAM)
+ endif #}
++
++ifdef _MSC_VER
++CFLAGS += -fp:precise
++CXXFLAGS += -fp:precise
++endif
+diff -r 1a6f250fe3a0 -r 1e49c453226f js/src/Makefile.in
+--- a/js/src/Makefile.in	Wed Aug 07 12:43:21 2013 +0800
++++ b/js/src/Makefile.in	Wed Aug 07 13:07:24 2013 +0800
+@@ -401,6 +401,7 @@
+ ifdef _MSC_VER
+ # XXX We should add this to CXXFLAGS, too?
+ CFLAGS += -fp:precise
++CXXFLAGS += -fp:precise
+ 
+ ifeq ($(CPU_ARCH),x86)
+ # Workaround compiler bug on PGO (Bug 721284)
+diff -r 1a6f250fe3a0 -r 1e49c453226f memory/build/Makefile.in
+--- a/memory/build/Makefile.in	Wed Aug 07 12:43:21 2013 +0800
++++ b/memory/build/Makefile.in	Wed Aug 07 13:07:24 2013 +0800
+@@ -48,3 +48,8 @@
+ endif
+ 
+ include $(topsrcdir)/config/rules.mk
++
++ifdef _MSC_VER
++CFLAGS += -fp:precise
++CXXFLAGS += -fp:precise
++endif
+diff -r 1a6f250fe3a0 -r 1e49c453226f memory/jemalloc/Makefile.in
+--- a/memory/jemalloc/Makefile.in	Wed Aug 07 12:43:21 2013 +0800
++++ b/memory/jemalloc/Makefile.in	Wed Aug 07 13:07:24 2013 +0800
+@@ -47,3 +47,8 @@
+ endif
+ 
+ DEFINES += -Dabort=moz_abort
++
++ifdef _MSC_VER
++CFLAGS += -fp:precise
++CXXFLAGS += -fp:precise
++endif
+diff -r 1a6f250fe3a0 -r 1e49c453226f memory/mozalloc/Makefile.in
+--- a/memory/mozalloc/Makefile.in	Wed Aug 07 12:43:21 2013 +0800
++++ b/memory/mozalloc/Makefile.in	Wed Aug 07 13:07:24 2013 +0800
+@@ -38,3 +38,8 @@
+ LOCAL_INCLUDES += -I$(DEPTH)/xpcom
+ 
+ include $(topsrcdir)/config/rules.mk
++
++ifdef _MSC_VER
++CFLAGS += -fp:precise
++CXXFLAGS += -fp:precise
++endif
+diff -r 1a6f250fe3a0 -r 1e49c453226f memory/mozjemalloc/Makefile.in
+--- a/memory/mozjemalloc/Makefile.in	Wed Aug 07 12:43:21 2013 +0800
++++ b/memory/mozjemalloc/Makefile.in	Wed Aug 07 13:07:24 2013 +0800
+@@ -46,3 +46,8 @@
+ DEFINES += -DMOZ_JEMALLOC_IMPL
+ 
+ include $(topsrcdir)/config/rules.mk
++
++ifdef _MSC_VER
++CFLAGS += -fp:precise
++CXXFLAGS += -fp:precise
++endif
+diff -r 1a6f250fe3a0 -r 1e49c453226f nsprpub/pr/src/misc/Makefile.in
+--- a/nsprpub/pr/src/misc/Makefile.in	Wed Aug 07 12:43:21 2013 +0800
++++ b/nsprpub/pr/src/misc/Makefile.in	Wed Aug 07 13:07:24 2013 +0800
+@@ -77,4 +77,7 @@
+ 
+ export:: $(TARGETS)
+ 
+-
++ifdef _MSC_VER
++CFLAGS += -fp:precise
++CXXFLAGS += -fp:precise
++endif
