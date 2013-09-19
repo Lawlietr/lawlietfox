@@ -1,0 +1,78 @@
+# HG changeset patch
+# Parent e2b7b9d315818e6203e3a04d6cbaf558404ff2b5
+# User hua.andy <hua.andy@gmail.com>
+"add compiler parameters"
+
+
+diff --git a/browser/app/Makefile.in b/browser/app/Makefile.in
+--- a/browser/app/Makefile.in
++++ b/browser/app/Makefile.in
+@@ -117,17 +117,17 @@ ifeq ($(OS_ARCH),WINNT) #{
+ # As we use the CRT heap, the default size is too large and wastes VM.
+ #
+ # The default heap size is 1MB on Win32.
+ # The heap will grow if need be.
+ #
+ # Set it to 256k.  See bug 127069.
+ #
+ ifndef GNU_CC #{
+-LDFLAGS += /HEAP:0x40000
++LDFLAGS += -HEAP:0x40000
+ endif #}
+ endif #}
+ 
+ ifneq (,$(filter-out OS2 WINNT,$(OS_ARCH)))
+ 
+ libs:: 
+ 	cp -p $(MOZ_APP_NAME)$(BIN_SUFFIX) $(DIST)/bin/$(MOZ_APP_NAME)-bin$(BIN_SUFFIX)
+ 
+@@ -204,8 +204,14 @@ libs::
+ ifeq (cocoa,$(MOZ_WIDGET_TOOLKIT)) #{
+ 	rsync -a --copy-unsafe-links $(LIBXUL_DIST)/XUL.framework $(dist_dest)/Contents/Frameworks
+ else
+ 	$(NSINSTALL) -D $(DIST)/bin/xulrunner
+ 	(cd $(LIBXUL_SDK)/bin && tar $(TAR_CREATE_FLAGS) - .) | (cd $(DIST)/bin/xulrunner && tar -xf -)
+ endif #} cocoa
+ endif #} SKIP_COPY_XULRUNNER
+ endif #} LIBXUL_SDK
++
++ifdef _MSC_VER
++CFLAGS   += -GA
++CXXFLAGS += -GA
++LDFLAGS += -ALIGN:0x4000
++endif
+diff --git a/ipc/app/Makefile.in b/ipc/app/Makefile.in
+--- a/ipc/app/Makefile.in
++++ b/ipc/app/Makefile.in
+@@ -74,24 +74,30 @@ EXTRA_DEPS += $(PROGRAM).manifest
+ # As we use the CRT heap, the default size is too large and wastes VM.
+ #
+ # The default heap size is 1MB on Win32.
+ # The heap will grow if need be.
+ #
+ # Set it to 256k.  See bug 127069.
+ #
+ ifndef GNU_CC #{
+-LDFLAGS += /HEAP:0x40000
++LDFLAGS += -HEAP:0x40000
+ endif #}
+ endif #}
+ 
+ ifeq (cocoa,$(MOZ_WIDGET_TOOLKIT)) #{
+ 
+ libs::
+ 	$(NSINSTALL) -D $(DIST)/bin/$(PROGRAM).app
+ 	rsync -a -C --exclude "*.in" $(srcdir)/macbuild/Contents $(DIST)/bin/$(PROGRAM).app 
+ 	sed -e "s/%PROGRAM%/$(PROGRAM)/" $(srcdir)/macbuild/Contents/Info.plist.in > $(DIST)/bin/$(PROGRAM).app/Contents/Info.plist
+ 	sed -e "s/%APP_NAME%/$(MOZ_APP_DISPLAYNAME)/" $(srcdir)/macbuild/Contents/Resources/English.lproj/InfoPlist.strings.in | \
+ 	  iconv -f UTF-8 -t UTF-16 > $(DIST)/bin/$(PROGRAM).app/Contents/Resources/English.lproj/InfoPlist.strings
+ 	$(NSINSTALL) -D $(DIST)/bin/$(PROGRAM).app/Contents/MacOS
+ 	$(NSINSTALL) $(PROGRAM) $(DIST)/bin/$(PROGRAM).app/Contents/MacOS
+ 	$(RM) $(DIST)/bin/$(PROGRAM)
+ endif #}
++
++ifdef _MSC_VER
++CFLAGS   += -GA
++CXXFLAGS += -GA
++LDFLAGS += -WS:AGGRESSIVE
++endif
