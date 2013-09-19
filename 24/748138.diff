@@ -1,0 +1,42 @@
+# pcxfirefox patch
+# User xunxun
+# Date 2013022303:00
+# Make libffi accept MOZ_OPTIMIZE_FLAGS
+
+diff -ruNa mozilla-release-origin/js/src/configure.in mozilla-release-new/js/src/configure.in
+--- mozilla-release-origin/js/src/configure.in	Sat Feb 16 05:14:54 2013
++++ mozilla-release-new/js/src/configure.in	Sat Feb 23 02:53:14 2013
+@@ -4508,10 +4508,10 @@
+     case "${target_cpu}" in
+     x86_64)
+       # Need target since MSYS tools into mozilla-build may be 32bit
+-      ac_configure_args="$ac_configure_args CC=\"$_topsrcdir/ctypes/libffi/msvcc.sh -m64\" --build=$build --host=$target"
++      ac_configure_args="$ac_configure_args CC=\"$_topsrcdir/ctypes/libffi/msvcc.sh -m64\" CFLAGS=\"$MOZ_OPTIMIZE_FLAGS -GL-\" CXXFLAGS=\"$MOZ_OPTIMIZE_FLAGS -GL-\"  --build=$build --host=$target"
+       ;;
+     *)
+-      ac_configure_args="$ac_configure_args CC=$_topsrcdir/ctypes/libffi/msvcc.sh"
++      ac_configure_args="$ac_configure_args CC=$_topsrcdir/ctypes/libffi/msvcc.sh CFLAGS=\"$MOZ_OPTIMIZE_FLAGS -GL-\" CXXFLAGS=\"$MOZ_OPTIMIZE_FLAGS -GL-\""
+       ;;
+     esac
+   fi
+diff -r e6a9572b48f7 js/src/configure.in
+--- a/js/src/configure.in	Thu May 10 21:25:37 2012 -0400
++++ b/js/src/configure.in	Fri May 11 08:13:29 2012 +0200
+@@ -5142,16 +5142,17 @@ if test "$JS_HAS_CTYPES" -a -z "$MOZ_NAT
+   # Run the libffi 'configure' script.
+   ac_configure_args="--disable-shared --enable-static --disable-raw-api"
+   if test "$MOZ_DEBUG"; then
+     ac_configure_args="$ac_configure_args --enable-debug"
+   fi
+   if test "$DSO_PIC_CFLAGS"; then
+     ac_configure_args="$ac_configure_args --with-pic"
+   fi
++  export CC=$CC
+   if test "$CROSS_COMPILE"; then
+     case "$target" in
+     *-android*|*-linuxandroid*)
+       export AS CC CXX CPP LD AR RANLIB STRIP CPPFLAGS CFLAGS LDFLAGS
+ 
+       ac_configure_args="$ac_configure_args --build=$build --host=$target HOST_CC=\"$HOST_CC\""
+       ;;
+     *)
