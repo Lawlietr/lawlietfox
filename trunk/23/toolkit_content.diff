@@ -1,0 +1,17 @@
+# HG changeset patch
+# Parent 9df9f6f940fa8e81714958ad7cdff42dafbf6efb
+# User hua.andy <hua.andy@gmail.com>
+"hostname.exe run error."
+
+diff --git a/toolkit/content/Makefile.in b/toolkit/content/Makefile.in
+--- a/toolkit/content/Makefile.in
++++ b/toolkit/content/Makefile.in
+@@ -43,7 +43,7 @@
+   DEFINES += -DSOURCE_REPO="$(source_repo)"
+ endif
+ 
+-BUILD_HOSTNAME = $(shell hostname -s || hostname)
++BUILD_HOSTNAME = $(shell hostname || hostname -s)
+ DEFINES += -DBUILD_HOSTNAME="$(BUILD_HOSTNAME)"
+ 
+ ifdef MOZ_TOOLKIT_SEARCH
