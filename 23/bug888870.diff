@@ -1,0 +1,196 @@
+# HG changeset patch
+# Parent 36669df9969b77c73789e8b2a007afcbba197b11
+# User hua.andy <hua.andy@gmail.com>
+"firefox bug888870"
+
+
+diff --git a/dom/plugins/ipc/hangui/plugin-hang-ui.exe.manifest b/dom/plugins/ipc/hangui/plugin-hang-ui.exe.manifest
+--- a/dom/plugins/ipc/hangui/plugin-hang-ui.exe.manifest
++++ b/dom/plugins/ipc/hangui/plugin-hang-ui.exe.manifest
+@@ -23,13 +23,15 @@
+     <ms_asmv3:security>
+       <ms_asmv3:requestedPrivileges>
+         <ms_asmv3:requestedExecutionLevel level="asInvoker" uiAccess="false" />
+       </ms_asmv3:requestedPrivileges>
+     </ms_asmv3:security>
+   </ms_asmv3:trustInfo>
+   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+     <application>
+-      <supportedOS Id="{e2011457-1546-43c5-a5fe-008deee3d3f0}" />
+-      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}" />
++      <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/>
++      <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}"/>
++      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/>
++      <supportedOS Id="{e2011457-1546-43c5-a5fe-008deee3d3f0}"/>
+     </application>
+   </compatibility>
+ </assembly>
+diff --git a/ipc/app/plugin-container.exe.manifest b/ipc/app/plugin-container.exe.manifest
+--- a/ipc/app/plugin-container.exe.manifest
++++ b/ipc/app/plugin-container.exe.manifest
+@@ -28,12 +28,15 @@
+   </ms_asmv3:trustInfo>
+   <ms_asmv3:application xmlns:ms_asmv3="urn:schemas-microsoft-com:asm.v3">
+     <ms_asmv3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">
+       <dpiAware>true</dpiAware>
+     </ms_asmv3:windowsSettings>
+   </ms_asmv3:application>
+   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+     <application>
+-      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}" />
++      <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/>
++      <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}"/>
++      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/>
++      <supportedOS Id="{e2011457-1546-43c5-a5fe-008deee3d3f0}"/>
+     </application>
+   </compatibility>
+ </assembly>
+diff --git a/toolkit/components/maintenanceservice/maintenanceservice.exe.manifest b/toolkit/components/maintenanceservice/maintenanceservice.exe.manifest
+--- a/toolkit/components/maintenanceservice/maintenanceservice.exe.manifest
++++ b/toolkit/components/maintenanceservice/maintenanceservice.exe.manifest
+@@ -11,15 +11,15 @@
+   <ms_asmv3:security>
+     <ms_asmv3:requestedPrivileges>
+       <ms_asmv3:requestedExecutionLevel level="requireAdministrator" uiAccess="false" />
+     </ms_asmv3:requestedPrivileges>
+   </ms_asmv3:security>
+ </ms_asmv3:trustInfo>
+   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+     <application>
+-      <!--The ID below indicates application support for Windows Vista --> 
+-      <supportedOS Id="{e2011457-1546-43c5-a5fe-008deee3d3f0}"/> 
+-      <!--The ID below indicates application support for Windows 7 --> 
+-      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/> 
++      <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/>
++      <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}"/>
++      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/>
++      <supportedOS Id="{e2011457-1546-43c5-a5fe-008deee3d3f0}"/>
+     </application>
+   </compatibility>
+ </assembly>
+diff --git a/toolkit/crashreporter/client/crashreporter.exe.manifest b/toolkit/crashreporter/client/crashreporter.exe.manifest
+--- a/toolkit/crashreporter/client/crashreporter.exe.manifest
++++ b/toolkit/crashreporter/client/crashreporter.exe.manifest
+@@ -23,12 +23,15 @@
+   <ms_asmv3:security>
+     <ms_asmv3:requestedPrivileges>
+       <ms_asmv3:requestedExecutionLevel level="asInvoker" uiAccess="false" />
+     </ms_asmv3:requestedPrivileges>
+   </ms_asmv3:security>
+ </ms_asmv3:trustInfo>
+   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+     <application>
+-      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}" />
++      <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/>
++      <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}"/>
++      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/>
++      <supportedOS Id="{e2011457-1546-43c5-a5fe-008deee3d3f0}"/>
+     </application>
+   </compatibility>
+ </assembly>
+diff --git a/toolkit/mozapps/update/updater/updater.exe.manifest b/toolkit/mozapps/update/updater/updater.exe.manifest
+--- a/toolkit/mozapps/update/updater/updater.exe.manifest
++++ b/toolkit/mozapps/update/updater/updater.exe.manifest
+@@ -23,15 +23,15 @@
+   <ms_asmv3:security>
+     <ms_asmv3:requestedPrivileges>
+       <ms_asmv3:requestedExecutionLevel level="asInvoker" uiAccess="false" />
+     </ms_asmv3:requestedPrivileges>
+   </ms_asmv3:security>
+ </ms_asmv3:trustInfo>
+   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+     <application>
+-      <!--The ID below indicates application support for Windows Vista --> 
+-      <supportedOS Id="{e2011457-1546-43c5-a5fe-008deee3d3f0}" /> 
+-      <!--The ID below indicates application support for Windows 7 --> 
+-      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}" /> 
++      <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/>
++      <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}"/>
++      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/>
++      <supportedOS Id="{e2011457-1546-43c5-a5fe-008deee3d3f0}"/>
+     </application>
+   </compatibility>
+ </assembly>
+diff --git a/webapprt/win/webapprt.exe.manifest b/webapprt/win/webapprt.exe.manifest
+--- a/webapprt/win/webapprt.exe.manifest
++++ b/webapprt/win/webapprt.exe.manifest
+@@ -28,12 +28,15 @@
+   <ms_asmv3:security>
+     <ms_asmv3:requestedPrivileges>
+       <ms_asmv3:requestedExecutionLevel level="asInvoker" uiAccess="false" />
+     </ms_asmv3:requestedPrivileges>
+   </ms_asmv3:security>
+ </ms_asmv3:trustInfo>
+   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+     <application>
+-      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}" />
++      <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/>
++      <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}"/>
++      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/>
++      <supportedOS Id="{e2011457-1546-43c5-a5fe-008deee3d3f0}"/>
+     </application>
+   </compatibility>
+ </assembly>
+diff --git a/widget/windows/WinUtils.h b/widget/windows/WinUtils.h
+--- a/widget/windows/WinUtils.h
++++ b/widget/windows/WinUtils.h
+@@ -40,17 +40,18 @@ class WinUtils {
+ public:
+   enum WinVersion {
+     WINXP_VERSION     = 0x501,
+     WIN2K3_VERSION    = 0x502,
+     VISTA_VERSION     = 0x600,
+     // WIN2K8_VERSION    = VISTA_VERSION,
+     WIN7_VERSION      = 0x601,
+     // WIN2K8R2_VERSION  = WIN7_VERSION
+-    WIN8_VERSION      = 0x602
++    WIN8_VERSION      = 0x602,
++    WIN8_1_VERSION    = 0x603
+   };
+   static WinVersion GetWindowsVersion();
+ 
+   // Retrieves the Service Pack version number.
+   // Returns true on success, false on failure.
+   static bool GetWindowsServicePackVersion(UINT& aOutMajor, UINT& aOutMinor);
+ 
+   /**
+diff --git a/xulrunner/app/xulrunner.exe.manifest b/xulrunner/app/xulrunner.exe.manifest
+--- a/xulrunner/app/xulrunner.exe.manifest
++++ b/xulrunner/app/xulrunner.exe.manifest
+@@ -23,12 +23,15 @@
+   <ms_asmv3:security>
+     <ms_asmv3:requestedPrivileges>
+       <ms_asmv3:requestedExecutionLevel level="asInvoker" uiAccess="false" />
+     </ms_asmv3:requestedPrivileges>
+   </ms_asmv3:security>
+ </ms_asmv3:trustInfo>
+   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+     <application>
+-      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}" />
++      <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/>
++      <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}"/>
++      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/>
++      <supportedOS Id="{e2011457-1546-43c5-a5fe-008deee3d3f0}"/>
+     </application>
+   </compatibility>
+ </assembly>
+diff --git a/xulrunner/stub/xulrunner-stub.exe.manifest b/xulrunner/stub/xulrunner-stub.exe.manifest
+--- a/xulrunner/stub/xulrunner-stub.exe.manifest
++++ b/xulrunner/stub/xulrunner-stub.exe.manifest
+@@ -23,12 +23,15 @@
+   <ms_asmv3:security>
+     <ms_asmv3:requestedPrivileges>
+       <ms_asmv3:requestedExecutionLevel level="asInvoker" uiAccess="false" />
+     </ms_asmv3:requestedPrivileges>
+   </ms_asmv3:security>
+ </ms_asmv3:trustInfo>
+   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+     <application>
+-      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}" />
++      <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/>
++      <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}"/>
++      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/>
++      <supportedOS Id="{e2011457-1546-43c5-a5fe-008deee3d3f0}"/>
+     </application>
+   </compatibility>
+ </assembly>
